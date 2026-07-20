@@ -9,15 +9,15 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Client-side mirror of the loadout-class roster and the local player's
- * selection, fed exclusively by {@link LoadoutSyncPacket}. Read by both the
- * class editor (OP) and the class-select screen (everyone).
+ * Client-side mirror of the preset roster and the local player's own
+ * personal loadout, fed exclusively by {@link LoadoutSyncPacket}. Read by
+ * the preset editor (OP) and the loadout screen (everyone).
  */
 public final class LoadoutClientData {
 
     private static List<LoadoutSyncPacket.Entry> classes = List.of();
-    @Nullable
-    private static UUID selectedId;
+    private static LoadoutSyncPacket.PersonalData personal =
+            new LoadoutSyncPacket.PersonalData(null, null, null, null, null);
     /** Incremented on every sync; lets screens detect updates cheaply. */
     private static int revision;
 
@@ -25,15 +25,15 @@ public final class LoadoutClientData {
         return revision;
     }
 
-    public static synchronized void applySync(List<LoadoutSyncPacket.Entry> newClasses, @Nullable UUID newSelectedId) {
+    public static synchronized void applySync(List<LoadoutSyncPacket.Entry> newClasses, LoadoutSyncPacket.PersonalData newPersonal) {
         classes = List.copyOf(newClasses);
-        selectedId = newSelectedId;
+        personal = newPersonal;
         revision++;
     }
 
     public static synchronized void clear() {
         classes = List.of();
-        selectedId = null;
+        personal = new LoadoutSyncPacket.PersonalData(null, null, null, null, null);
         revision++;
     }
 
@@ -51,9 +51,8 @@ public final class LoadoutClientData {
         return null;
     }
 
-    @Nullable
-    public static synchronized UUID getSelectedId() {
-        return selectedId;
+    public static synchronized LoadoutSyncPacket.PersonalData getPersonal() {
+        return personal;
     }
 
     /** True if the given item is known to the client's item registry (used for the "not installed" grey-out). */

@@ -7,6 +7,7 @@ import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 import uk.iwaservice.classloadout.client.ClientPacketHandler;
 import uk.iwaservice.classloadout.loadout.ClassDefinition;
+import uk.iwaservice.classloadout.loadout.PersonalLoadout;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -14,12 +15,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Full loadout-class roster pushed to every online player on login and
- * whenever the admin editor saves or deletes a class, plus the recipient's
- * own current selection (each player gets a packet built specifically for
- * them, so this field is never someone else's data).
+ * Pushed to a player on login and whenever the admin editor saves/deletes a
+ * preset, or the player's own loadout changes: the full preset roster (same
+ * for everyone) plus that one recipient's own personal loadout (never
+ * someone else's - each player gets a packet built specifically for them).
  */
-public record LoadoutSyncPacket(List<Entry> classes, @Nullable UUID selectedId) {
+public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal) {
 
     public record Entry(UUID id, String name,
                         @Nullable ResourceLocation icon,
@@ -35,6 +36,18 @@ public record LoadoutSyncPacket(List<Entry> classes, @Nullable UUID selectedId) 
         }
     }
 
+    public record PersonalData(@Nullable ResourceLocation main,
+                               @Nullable ResourceLocation sidearm,
+                               @Nullable ResourceLocation throwable,
+                               @Nullable ResourceLocation gadget,
+                               @Nullable ResourceLocation melee) {
+
+        public static PersonalData of(PersonalLoadout loadout) {
+            return new PersonalData(loadout.main(), loadout.sidearm(), loadout.throwable(),
+                    loadout.gadget(), loadout.melee());
+        }
+    }
+
     public static void encode(LoadoutSyncPacket msg, FriendlyByteBuf buf) {
         buf.writeVarInt(msg.classes.size());
         for (Entry e : msg.classes) {
@@ -47,10 +60,11 @@ public record LoadoutSyncPacket(List<Entry> classes, @Nullable UUID selectedId) 
             writeOptional(buf, e.gadget());
             writeOptional(buf, e.melee());
         }
-        buf.writeBoolean(msg.selectedId != null);
-        if (msg.selectedId != null) {
-            buf.writeUUID(msg.selectedId);
-        }
+        writeOptional(buf, msg.personal.main());
+        writeOptional(buf, msg.personal.sidearm());
+        writeOptional(buf, msg.personal.throwable());
+        writeOptional(buf, msg.personal.gadget());
+        writeOptional(buf, msg.personal.melee());
     }
 
     public static LoadoutSyncPacket decode(FriendlyByteBuf buf) {
@@ -67,8 +81,9 @@ public record LoadoutSyncPacket(List<Entry> classes, @Nullable UUID selectedId) 
             ResourceLocation melee = readOptional(buf);
             classes.add(new Entry(id, name, icon, main, sidearm, throwable, gadget, melee));
         }
-        UUID selectedId = buf.readBoolean() ? buf.readUUID() : null;
-        return new LoadoutSyncPacket(classes, selectedId);
+        PersonalData personal = new PersonalData(readOptional(buf), readOptional(buf), readOptional(buf),
+                readOptional(buf), readOptional(buf));
+        return new LoadoutSyncPacket(classes, personal);
     }
 
     private static void writeOptional(FriendlyByteBuf buf, @Nullable ResourceLocation loc) {

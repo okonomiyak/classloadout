@@ -8,7 +8,7 @@ import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
 public final class ClientPacketHandler {
 
     public static void handleLoadoutSync(LoadoutSyncPacket msg) {
-        LoadoutClientData.applySync(msg.classes(), msg.selectedId());
+        LoadoutClientData.applySync(msg.classes(), msg.personal());
     }
 
     /** Server already checked permission level before sending this; re-check defensively anyway. */

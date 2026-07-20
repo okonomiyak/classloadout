@@ -3,6 +3,7 @@ package uk.iwaservice.classloadout.loadout;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -17,17 +18,20 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Server-authoritative registry of loadout classes and each player's current
- * selection, persisted with the overworld. The only writers are the OP-only
+ * Server-authoritative registry of two things, persisted with the overworld:
+ * admin-defined preset classes, and each player's own personal loadout (the
+ * thing that actually gets equipped on respawn). The only writers are the
  * {@code /class} commands - there is no other mutation path (no config-file
- * editing, no C2S packets).
+ * editing, no C2S packets). Presets are OP-only; a player's own loadout is
+ * self-service (assigning a slot, or applying a preset as a starting point).
  */
 public class LoadoutManager extends SavedData {
     private static final String DATA_NAME = "classloadout_classes";
 
     /** Insertion order preserved so the editor/select screens list classes consistently. */
     private final Map<UUID, ClassDefinition> classes = new LinkedHashMap<>();
-    private final Map<UUID, UUID> selections = new java.util.HashMap<>();
+    /** Absent entry = player has never touched their loadout; present (even if all-empty) = they have. */
+    private final Map<UUID, PersonalLoadout> personalLoadouts = new java.util.HashMap<>();
 
     public static LoadoutManager get(MinecraftServer server) {
         return server.overworld().getDataStorage()
@@ -36,6 +40,8 @@ public class LoadoutManager extends SavedData {
 
     public LoadoutManager() {
     }
+
+    // --- presets (admin-managed) ---
 
     public List<ClassDefinition> list() {
         return new ArrayList<>(classes.values());
@@ -61,29 +67,40 @@ public class LoadoutManager extends SavedData {
         return removed;
     }
 
-    public void select(MinecraftServer server, ServerPlayer player, UUID classId) {
-        selections.put(player.getUUID(), classId);
+    // --- personal loadout (player self-service) ---
+
+    /** Null means the player has never touched their loadout - equip-on-respawn leaves their inventory alone. */
+    @Nullable
+    public PersonalLoadout getPersonalLoadout(UUID player) {
+        return personalLoadouts.get(player);
+    }
+
+    /** Sets a single slot in the player's own loadout; a null item clears that slot. */
+    public void setSlot(MinecraftServer server, ServerPlayer player, LoadoutSlot slot, @Nullable ResourceLocation item) {
+        PersonalLoadout current = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
+        personalLoadouts.put(player.getUUID(), current.withSlot(slot, item));
         setDirty();
         sendTo(server, player);
     }
 
-    public void clearSelection(MinecraftServer server, ServerPlayer player) {
-        if (selections.remove(player.getUUID()) != null) {
+    /** Copies a preset's five items into the player's own loadout as a starting point. Returns false if the preset doesn't exist. */
+    public boolean applyPreset(MinecraftServer server, ServerPlayer player, UUID classId) {
+        ClassDefinition def = classes.get(classId);
+        if (def == null) {
+            return false;
+        }
+        personalLoadouts.put(player.getUUID(), PersonalLoadout.fromClass(def));
+        setDirty();
+        sendTo(server, player);
+        return true;
+    }
+
+    /** Resets the player back to "never touched their loadout" (equip-on-respawn stops overwriting their hotbar). */
+    public void clearPersonalLoadout(MinecraftServer server, ServerPlayer player) {
+        if (personalLoadouts.remove(player.getUUID()) != null) {
             setDirty();
         }
         sendTo(server, player);
-    }
-
-    @Nullable
-    public UUID getSelectedId(UUID player) {
-        return selections.get(player);
-    }
-
-    /** The player's selected class, or null if they have none selected or it was since deleted. */
-    @Nullable
-    public ClassDefinition getSelectedDefinition(UUID player) {
-        UUID id = selections.get(player);
-        return id == null ? null : classes.get(id);
     }
 
     // --- sync ---
@@ -99,7 +116,8 @@ public class LoadoutManager extends SavedData {
         for (ClassDefinition def : classes.values()) {
             entries.add(LoadoutSyncPacket.Entry.of(def));
         }
-        NetworkHandler.sendLoadoutSync(player, new LoadoutSyncPacket(entries, selections.get(player.getUUID())));
+        PersonalLoadout personal = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
+        NetworkHandler.sendLoadoutSync(player, new LoadoutSyncPacket(entries, LoadoutSyncPacket.PersonalData.of(personal)));
     }
 
     // --- persistence ---
@@ -111,10 +129,10 @@ public class LoadoutManager extends SavedData {
             ClassDefinition def = ClassDefinition.load(classList.getCompound(i));
             manager.classes.put(def.id(), def);
         }
-        ListTag selectionList = tag.getList("Selections", Tag.TAG_COMPOUND);
-        for (int i = 0; i < selectionList.size(); i++) {
-            CompoundTag s = selectionList.getCompound(i);
-            manager.selections.put(s.getUUID("Player"), s.getUUID("Class"));
+        ListTag personalList = tag.getList("PersonalLoadouts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < personalList.size(); i++) {
+            CompoundTag p = personalList.getCompound(i);
+            manager.personalLoadouts.put(p.getUUID("Player"), PersonalLoadout.load(p.getCompound("Loadout")));
         }
         return manager;
     }
@@ -127,14 +145,14 @@ public class LoadoutManager extends SavedData {
         }
         tag.put("Classes", classList);
 
-        ListTag selectionList = new ListTag();
-        for (Map.Entry<UUID, UUID> e : selections.entrySet()) {
-            CompoundTag s = new CompoundTag();
-            s.putUUID("Player", e.getKey());
-            s.putUUID("Class", e.getValue());
-            selectionList.add(s);
+        ListTag personalList = new ListTag();
+        for (Map.Entry<UUID, PersonalLoadout> e : personalLoadouts.entrySet()) {
+            CompoundTag p = new CompoundTag();
+            p.putUUID("Player", e.getKey());
+            p.put("Loadout", e.getValue().save());
+            personalList.add(p);
         }
-        tag.put("Selections", selectionList);
+        tag.put("PersonalLoadouts", personalList);
         return tag;
     }
 }

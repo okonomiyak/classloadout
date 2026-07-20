@@ -9,8 +9,8 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 import uk.iwaservice.classloadout.command.ClassCommand;
-import uk.iwaservice.classloadout.loadout.ClassDefinition;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
+import uk.iwaservice.classloadout.loadout.PersonalLoadout;
 
 /** Forge-bus event handlers: command registration, respawn equip, login sync. */
 public final class ServerEvents {
@@ -28,22 +28,23 @@ public final class ServerEvents {
     }
 
     /**
-     * Overwrites hotbar slots 0-4 with the player's selected class's
+     * Overwrites hotbar slots 0-4 with the player's own loadout's
      * main/sidearm/throwable/gadget/melee items (in that fixed order),
-     * clearing any slot the class leaves unset. Overwriting rather than
-     * adding keeps the icon-row order deterministic and avoids duplicate
-     * gear if the keepInventory gamerule is on.
+     * clearing any slot they've left unset. Overwriting rather than adding
+     * keeps the icon-row order deterministic and avoids duplicate gear if
+     * the keepInventory gamerule is on. A player who has never touched
+     * their loadout (no assign/select/clear yet) is left alone entirely.
      */
     @SubscribeEvent
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
         if (event.isEndConquered() || !(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
-        ClassDefinition def = LoadoutManager.get(player.server).getSelectedDefinition(player.getUUID());
-        if (def == null) {
+        PersonalLoadout loadout = LoadoutManager.get(player.server).getPersonalLoadout(player.getUUID());
+        if (loadout == null) {
             return;
         }
-        ResourceLocation[] slots = {def.main(), def.sidearm(), def.throwable(), def.gadget(), def.melee()};
+        ResourceLocation[] slots = {loadout.main(), loadout.sidearm(), loadout.throwable(), loadout.gadget(), loadout.melee()};
         for (int i = 0; i < slots.length; i++) {
             Item item = slots[i] == null ? null : ForgeRegistries.ITEMS.getValue(slots[i]);
             player.getInventory().setItem(i, item == null ? ItemStack.EMPTY : new ItemStack(item));
