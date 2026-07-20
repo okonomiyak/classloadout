@@ -1,0 +1,73 @@
+plugins {
+    id 'java-library'
+    id 'idea'
+    id 'net.neoforged.moddev.legacyforge' version '2.0.141'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+legacyForge {
+    version = project.forge_version
+
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+
+    runs {
+        client {
+            client()
+            programArguments.addAll '--username', 'Dev1'
+        }
+
+        // Second client for two-player testing (separate game dir + username).
+        client2 {
+            client()
+            gameDirectory = file('run2')
+            programArguments.addAll '--username', 'Dev2'
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+            gameDirectory = file('run-server')
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+repositories {
+    // Dev-runtime-only test mods for the item picker (TACZ/SuperbWarfare namespaces).
+    maven {
+        name = 'CurseMaven'
+        url = 'https://cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
+    maven {
+        name = 'KotlinForForge'
+        url = 'https://thedarkcolour.github.io/KotlinForForge/'
+    }
+}
+
+dependencies {
+    // classloadout never compiles against TACZ/SuperbWarfare classes - it only matches
+    // ResourceLocation namespaces at runtime. These are dev-runtime-only conveniences so the
+    // item picker has real tacz:/superbwarfare: items to show while testing; not required to build.
+    modRuntimeOnly 'curse.maven:timeless-and-classics-zero-1028108:8141310'
+    modRuntimeOnly 'curse.maven:superb-warfare-1218165:8104849'
+    modRuntimeOnly 'thedarkcolour:kotlinforforge:4.12.0'
+    modRuntimeOnly 'curse.maven:geckolib-388172:8285794'
+    modRuntimeOnly 'curse.maven:curios-309927:6418456'
+}
