@@ -7,28 +7,25 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
+import uk.iwaservice.classloadout.client.LoadoutClientData;
+import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 
-import javax.annotation.Nullable;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
- * Generic item-grid picker used for icon/slot assignment. With no
- * restriction it lists the full {@link ItemCatalog} (used by the OP-only
- * preset editor, which is trusted with any item); when constructed with a
- * {@code restrictTo} set it shows only those items (used by the player-facing
- * loadout screen, restricted to that slot's OP-curated whitelist - an empty
- * set means nothing is assignable yet). No server round trip either way:
- * the item registry is already fully populated on the client after login.
- * Cell 0 is a fixed "none" entry that reports {@code minecraft:air}, the
- * sentinel the save/assign commands treat as "unset".
+ * OP-only screen for curating, per slot, the set of items players are
+ * allowed to self-assign via {@link LoadoutScreen}. Opened exclusively via
+ * {@link uk.iwaservice.classloadout.network.OpenWhitelistEditorPacket} that
+ * follows a successful {@code /class whitelist} command. Unlike
+ * {@link ItemPickerScreen}, clicking a cell here toggles membership rather
+ * than picking-and-closing, so the screen stays open for repeated edits.
  */
-public class ItemPickerScreen extends Screen {
+public class WhitelistEditorScreen extends Screen {
 
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
+    private static final int TAB_H = 20;
     private static final int SEARCH_H = 20;
     private static final int CELL = 20;
     private static final int COLS = 9;
@@ -39,11 +36,7 @@ public class ItemPickerScreen extends Screen {
     private static final int COLOR_OUTLINE = 0xFF454A66;
     private static final int COLOR_HOVER = 0x60FFFFFF;
 
-    private final Screen parent;
-    private final Consumer<ResourceLocation> onPick;
-    @Nullable
-    private final List<ResourceLocation> restrictTo;
-
+    private LoadoutSlot selectedSlot = LoadoutSlot.MAIN;
     private List<ResourceLocation> allItems = List.of();
     private List<ResourceLocation> shown = List.of();
     private EditBox search;
@@ -57,56 +50,77 @@ public class ItemPickerScreen extends Screen {
     private int gridHeight;
     private int scrollOffset;
     private int maxScroll;
+    private int dataRevision = -1;
 
-    /** Unrestricted: lists the full item catalog (OP preset editor). */
-    public ItemPickerScreen(Screen parent, Consumer<ResourceLocation> onPick) {
-        this(parent, onPick, null);
-    }
-
-    /** Restricted to {@code restrictTo} (player loadout screen, that slot's whitelist). */
-    public ItemPickerScreen(Screen parent, Consumer<ResourceLocation> onPick, @Nullable List<ResourceLocation> restrictTo) {
-        super(Component.translatable("classloadout.gui.item_picker_title"));
-        this.parent = parent;
-        this.onPick = onPick;
-        this.restrictTo = restrictTo;
+    public WhitelistEditorScreen() {
+        super(Component.translatable("classloadout.gui.whitelist_editor_title"));
     }
 
     @Override
     protected void init() {
-        panelWidth = PAD * 2 + COLS * CELL;
-        panelHeight = Math.min(280, this.height - 32);
+        panelWidth = Math.max(PAD * 2 + COLS * CELL, 260);
+        panelHeight = Math.min(300, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
+        dataRevision = LoadoutClientData.getRevision();
 
-        allItems = restrictTo != null ? restrictTo : ItemCatalog.all();
+        if (allItems.isEmpty()) {
+            allItems = ItemCatalog.all();
+        }
 
-        search = new EditBox(this.font, panelLeft + PAD, panelTop + HEADER_H + 4,
+        int tabWidth = (panelWidth - 2 * PAD) / LoadoutSlot.values().length;
+        int tabY = panelTop + HEADER_H + 4;
+        int x = panelLeft + PAD;
+        for (LoadoutSlot slot : LoadoutSlot.values()) {
+            LoadoutSlot captured = slot;
+            Button b = Button.builder(Component.translatable("classloadout.gui.slot_" + slot.key()),
+                            btn -> selectSlot(captured))
+                    .bounds(x, tabY, tabWidth, TAB_H).build();
+            b.active = slot != selectedSlot;
+            addRenderableWidget(b);
+            x += tabWidth;
+        }
+
+        String previousQuery = search != null ? search.getValue() : "";
+        search = new EditBox(this.font, panelLeft + PAD, tabY + TAB_H + 6,
                 panelWidth - 2 * PAD, SEARCH_H, Component.translatable("classloadout.gui.item_search"));
         search.setHint(Component.translatable("classloadout.gui.item_search"));
+        search.setValue(previousQuery);
         search.setResponder(s -> updateShown());
         addRenderableWidget(search);
-        setInitialFocus(search);
 
         gridLeft = panelLeft + PAD;
-        gridTop = panelTop + HEADER_H + 4 + SEARCH_H + 6;
+        gridTop = tabY + TAB_H + 6 + SEARCH_H + 6;
         gridHeight = panelTop + panelHeight - PAD - 24 - gridTop;
 
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.cancel"),
-                        b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
                 .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, panelWidth - 2 * PAD, 20).build());
 
         updateShown();
     }
 
+    @Override
+    public void tick() {
+        if (dataRevision != LoadoutClientData.getRevision()) {
+            this.init(this.minecraft, this.width, this.height);
+        }
+    }
+
+    private void selectSlot(LoadoutSlot slot) {
+        if (slot != selectedSlot) {
+            selectedSlot = slot;
+            this.init(this.minecraft, this.width, this.height);
+        }
+    }
+
     private void updateShown() {
         shown = ItemCatalog.search(allItems, search.getValue());
-        int rows = (shown.size() + 1 + COLS - 1) / COLS; // +1 for the "none" cell
+        int rows = (shown.size() + COLS - 1) / COLS;
         int contentHeight = rows * CELL;
         maxScroll = Math.max(0, contentHeight - gridHeight);
         scrollOffset = Math.min(scrollOffset, maxScroll);
     }
 
-    /** Cell index 0 is "none"; index n>0 maps to shown.get(n - 1). Returns -1 if out of range. */
     private int cellIndexAt(double mouseX, double mouseY) {
         if (mouseX < gridLeft || mouseX >= gridLeft + COLS * CELL || mouseY < gridTop || mouseY >= gridTop + gridHeight) {
             return -1;
@@ -114,19 +128,17 @@ public class ItemPickerScreen extends Screen {
         int col = (int) ((mouseX - gridLeft) / CELL);
         int row = (int) ((mouseY - gridTop + scrollOffset) / CELL);
         int index = row * COLS + col;
-        return index <= shown.size() ? index : -1;
+        return index < shown.size() ? index : -1;
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int index = cellIndexAt(mouseX, mouseY);
-        if (index == 0) {
-            onPick.accept(new ResourceLocation("minecraft", "air"));
-            minecraft.setScreen(parent);
-            return true;
-        } else if (index > 0) {
-            onPick.accept(shown.get(index - 1));
-            minecraft.setScreen(parent);
+        if (index >= 0) {
+            ResourceLocation item = shown.get(index);
+            boolean whitelisted = LoadoutClientData.getWhitelist(selectedSlot).contains(item);
+            String cmd = "class whitelist " + (whitelisted ? "remove " : "add ") + selectedSlot.key() + " " + item;
+            command(cmd);
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -140,6 +152,14 @@ public class ItemPickerScreen extends Screen {
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
     }
+
+    private void command(String cmd) {
+        if (minecraft != null && minecraft.player != null) {
+            minecraft.player.connection.sendCommand(cmd);
+        }
+    }
+
+    // --- rendering ---
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
@@ -155,19 +175,16 @@ public class ItemPickerScreen extends Screen {
         graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
         graphics.drawString(this.font, this.title, l + PAD, t + 8, 0xFFFFFF);
 
-        if (restrictTo != null && restrictTo.isEmpty()) {
-            graphics.drawString(this.font, Component.translatable("classloadout.gui.whitelist_empty"),
-                    l + PAD, gridTop + 4, 0xA0A8C0);
-        }
-
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        List<ResourceLocation> whitelist = LoadoutClientData.getWhitelist(selectedSlot);
 
         graphics.enableScissor(gridLeft, gridTop, gridLeft + COLS * CELL, gridTop + gridHeight);
         ItemStack hoveredStack = null;
         int hoveredX = 0;
         int hoveredY = 0;
-        int total = shown.size() + 1;
-        for (int index = 0; index < total; index++) {
+        boolean hoveredWhitelisted = false;
+        for (int index = 0; index < shown.size(); index++) {
             int col = index % COLS;
             int row = index / COLS;
             int x = gridLeft + col * CELL;
@@ -175,25 +192,32 @@ public class ItemPickerScreen extends Screen {
             if (y + CELL <= gridTop || y >= gridTop + gridHeight) {
                 continue;
             }
+            ResourceLocation loc = shown.get(index);
+            boolean whitelisted = whitelist.contains(loc);
             boolean hovered = mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL
                     && mouseY >= gridTop && mouseY < gridTop + gridHeight;
+            if (whitelisted) {
+                graphics.fill(x, y, x + CELL, y + CELL, 0x4055FF55);
+                graphics.renderOutline(x, y, CELL, CELL, 0xFF55FF55);
+            }
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
-            ItemStack stack = index == 0 ? new ItemStack(Items.BARRIER) : new ItemStack(ForgeRegistries.ITEMS.getValue(shown.get(index - 1)));
+            ItemStack stack = new ItemStack(ForgeRegistries.ITEMS.getValue(loc));
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
             if (hovered) {
                 hoveredStack = stack;
                 hoveredX = mouseX;
                 hoveredY = mouseY;
+                hoveredWhitelisted = whitelisted;
             }
         }
         graphics.disableScissor();
 
         if (hoveredStack != null) {
-            Component name = hoveredStack.getItem() == Items.BARRIER
-                    ? Component.translatable("classloadout.gui.item_none")
-                    : hoveredStack.getHoverName();
+            Component name = hoveredStack.getHoverName().copy().append(hoveredWhitelisted
+                    ? Component.translatable("classloadout.gui.whitelist_on")
+                    : Component.translatable("classloadout.gui.whitelist_off"));
             graphics.renderTooltip(this.font, name, hoveredX, hoveredY);
         }
 

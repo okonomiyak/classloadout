@@ -115,9 +115,8 @@ public class LoadoutScreen extends Screen {
 
     private Button slotButton(int x, int y, LoadoutSlot slot) {
         return Button.builder(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this,
-                        loc -> {
-                            command("class assign " + slot.key() + " " + loc);
-                        })))
+                        loc -> command("class assign " + slot.key() + " " + loc),
+                        LoadoutClientData.getWhitelist(slot))))
                 .bounds(x, y, SLOT, SLOT).build();
     }
 

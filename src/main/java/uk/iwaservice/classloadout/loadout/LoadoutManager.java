@@ -12,18 +12,24 @@ import uk.iwaservice.classloadout.network.NetworkHandler;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * Server-authoritative registry of two things, persisted with the overworld:
- * admin-defined preset classes, and each player's own personal loadout (the
- * thing that actually gets equipped on respawn). The only writers are the
+ * Server-authoritative registry of three things, persisted with the
+ * overworld: admin-defined preset classes, the OP-curated per-slot item
+ * whitelists, and each player's own personal loadout (the thing that
+ * actually gets equipped on respawn). The only writers are the
  * {@code /class} commands - there is no other mutation path (no config-file
- * editing, no C2S packets). Presets are OP-only; a player's own loadout is
- * self-service (assigning a slot, or applying a preset as a starting point).
+ * editing, no C2S packets). Presets and whitelists are OP-only; a player's
+ * own loadout is self-service (assigning a whitelisted item to a slot, or
+ * applying a preset as a starting point - presets are not themselves
+ * whitelist-restricted, since defining one already requires OP permission).
  */
 public class LoadoutManager extends SavedData {
     private static final String DATA_NAME = "classloadout_classes";
@@ -32,6 +38,8 @@ public class LoadoutManager extends SavedData {
     private final Map<UUID, ClassDefinition> classes = new LinkedHashMap<>();
     /** Absent entry = player has never touched their loadout; present (even if all-empty) = they have. */
     private final Map<UUID, PersonalLoadout> personalLoadouts = new java.util.HashMap<>();
+    /** Insertion order preserved for a stable whitelist-editor grid; empty (or absent) = nothing assignable yet. */
+    private final Map<LoadoutSlot, Set<ResourceLocation>> whitelists = new EnumMap<>(LoadoutSlot.class);
 
     public static LoadoutManager get(MinecraftServer server) {
         return server.overworld().getDataStorage()
@@ -67,6 +75,31 @@ public class LoadoutManager extends SavedData {
         return removed;
     }
 
+    // --- slot whitelists (OP-curated) ---
+
+    public Set<ResourceLocation> getWhitelist(LoadoutSlot slot) {
+        return whitelists.getOrDefault(slot, Set.of());
+    }
+
+    public boolean isWhitelisted(LoadoutSlot slot, ResourceLocation item) {
+        return getWhitelist(slot).contains(item);
+    }
+
+    public void addToWhitelist(MinecraftServer server, LoadoutSlot slot, ResourceLocation item) {
+        if (whitelists.computeIfAbsent(slot, s -> new LinkedHashSet<>()).add(item)) {
+            setDirty();
+            broadcastAll(server);
+        }
+    }
+
+    public void removeFromWhitelist(MinecraftServer server, LoadoutSlot slot, ResourceLocation item) {
+        Set<ResourceLocation> set = whitelists.get(slot);
+        if (set != null && set.remove(item)) {
+            setDirty();
+            broadcastAll(server);
+        }
+    }
+
     // --- personal loadout (player self-service) ---
 
     /** Null means the player has never touched their loadout - equip-on-respawn leaves their inventory alone. */
@@ -75,7 +108,13 @@ public class LoadoutManager extends SavedData {
         return personalLoadouts.get(player);
     }
 
-    /** Sets a single slot in the player's own loadout; a null item clears that slot. */
+    /**
+     * Sets a single slot in the player's own loadout; a null item clears
+     * that slot. The caller (the {@code /class assign} command) is
+     * responsible for checking {@link #isWhitelisted} before calling this -
+     * this method itself doesn't re-validate, so it stays usable for a
+     * possible future OP override path.
+     */
     public void setSlot(MinecraftServer server, ServerPlayer player, LoadoutSlot slot, @Nullable ResourceLocation item) {
         PersonalLoadout current = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
         personalLoadouts.put(player.getUUID(), current.withSlot(slot, item));
@@ -117,7 +156,14 @@ public class LoadoutManager extends SavedData {
             entries.add(LoadoutSyncPacket.Entry.of(def));
         }
         PersonalLoadout personal = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
-        NetworkHandler.sendLoadoutSync(player, new LoadoutSyncPacket(entries, LoadoutSyncPacket.PersonalData.of(personal)));
+
+        Map<LoadoutSlot, List<ResourceLocation>> whitelistsBySlot = new EnumMap<>(LoadoutSlot.class);
+        for (LoadoutSlot slot : LoadoutSlot.values()) {
+            whitelistsBySlot.put(slot, new ArrayList<>(getWhitelist(slot)));
+        }
+
+        NetworkHandler.sendLoadoutSync(player, new LoadoutSyncPacket(entries,
+                LoadoutSyncPacket.PersonalData.of(personal), LoadoutSyncPacket.Whitelists.of(whitelistsBySlot)));
     }
 
     // --- persistence ---
@@ -133,6 +179,20 @@ public class LoadoutManager extends SavedData {
         for (int i = 0; i < personalList.size(); i++) {
             CompoundTag p = personalList.getCompound(i);
             manager.personalLoadouts.put(p.getUUID("Player"), PersonalLoadout.load(p.getCompound("Loadout")));
+        }
+        ListTag whitelistList = tag.getList("Whitelists", Tag.TAG_COMPOUND);
+        for (int i = 0; i < whitelistList.size(); i++) {
+            CompoundTag w = whitelistList.getCompound(i);
+            LoadoutSlot slot = LoadoutSlot.byKey(w.getString("Slot"));
+            if (slot == null) {
+                continue;
+            }
+            Set<ResourceLocation> items = new LinkedHashSet<>();
+            ListTag itemList = w.getList("Items", Tag.TAG_STRING);
+            for (Tag t : itemList) {
+                items.add(new ResourceLocation(t.getAsString()));
+            }
+            manager.whitelists.put(slot, items);
         }
         return manager;
     }
@@ -153,6 +213,19 @@ public class LoadoutManager extends SavedData {
             personalList.add(p);
         }
         tag.put("PersonalLoadouts", personalList);
+
+        ListTag whitelistList = new ListTag();
+        for (Map.Entry<LoadoutSlot, Set<ResourceLocation>> e : whitelists.entrySet()) {
+            CompoundTag w = new CompoundTag();
+            w.putString("Slot", e.getKey().key());
+            ListTag itemList = new ListTag();
+            for (ResourceLocation loc : e.getValue()) {
+                itemList.add(net.minecraft.nbt.StringTag.valueOf(loc.toString()));
+            }
+            w.put("Items", itemList);
+            whitelistList.add(w);
+        }
+        tag.put("Whitelists", whitelistList);
         return tag;
     }
 }

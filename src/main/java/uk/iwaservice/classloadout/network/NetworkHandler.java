@@ -34,6 +34,11 @@ public final class NetworkHandler {
                 .decoder(OpenClassEditorPacket::decode)
                 .consumerMainThread(OpenClassEditorPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(OpenWhitelistEditorPacket.class, 2, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenWhitelistEditorPacket::encode)
+                .decoder(OpenWhitelistEditorPacket::decode)
+                .consumerMainThread(OpenWhitelistEditorPacket::handle)
+                .add();
     }
 
     public static void sendLoadoutSync(ServerPlayer player, LoadoutSyncPacket packet) {
@@ -42,6 +47,10 @@ public final class NetworkHandler {
 
     public static void sendOpenClassEditor(ServerPlayer player) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenClassEditorPacket());
+    }
+
+    public static void sendOpenWhitelistEditor(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenWhitelistEditorPacket());
     }
 
     private NetworkHandler() {}

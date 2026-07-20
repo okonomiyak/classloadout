@@ -28,11 +28,15 @@ import java.util.UUID;
  * exclusively through here (no C2S packets), so the permission checks below
  * are the single line of defense.
  *
- * <p>Two independent things live under here: OP-managed <b>presets</b>
- * (editor/save/delete) and each player's own self-service <b>personal
+ * <p>Three independent things live under here: OP-managed <b>presets</b>
+ * (editor/save/delete), OP-curated per-slot <b>whitelists</b> (whitelist
+ * .../add/remove), and each player's own self-service <b>personal
  * loadout</b> (assign/select/clear) - the personal loadout, not any preset,
  * is what actually gets equipped on respawn. {@code select} applies a
  * preset's five items into the player's own loadout as a starting point.
+ * {@code assign} is checked against that slot's whitelist server-side -
+ * the item picker only ever offers whitelisted items, but this is the
+ * actual enforcement boundary (a hand-typed command can't bypass it).
  */
 public final class ClassCommand {
 
@@ -58,6 +62,17 @@ public final class ClassCommand {
                 .then(Commands.literal("delete")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("id", UuidArgument.uuid()).executes(ctx -> delete(ctx))))
+                .then(Commands.literal("whitelist")
+                        .requires(src -> src.hasPermission(2))
+                        .executes(ctx -> whitelistEditor(ctx))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> whitelistAdd(ctx)))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> whitelistRemove(ctx))))))
                 .then(Commands.literal("assign")
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -106,16 +121,56 @@ public final class ClassCommand {
         return 1;
     }
 
-    /** Player self-service: assigns (or, with minecraft:air, clears) one slot of their own loadout. */
+    /** Opens the OP-only whitelist editor client-side; permission already enforced by the command node. */
+    private static int whitelistEditor(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NetworkHandler.sendOpenWhitelistEditor(ctx.getSource().getPlayerOrException());
+        return 1;
+    }
+
+    @Nullable
+    private static LoadoutSlot parseSlot(CommandContext<CommandSourceStack> ctx) {
+        return LoadoutSlot.byKey(StringArgumentType.getString(ctx, "slot"));
+    }
+
+    private static int whitelistAdd(CommandContext<CommandSourceStack> ctx) {
+        LoadoutSlot slot = parseSlot(ctx);
+        if (slot == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
+        }
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).addToWhitelist(ctx.getSource().getServer(), slot, item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.whitelist_added", item.toString()), true);
+        return 1;
+    }
+
+    private static int whitelistRemove(CommandContext<CommandSourceStack> ctx) {
+        LoadoutSlot slot = parseSlot(ctx);
+        if (slot == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
+        }
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).removeFromWhitelist(ctx.getSource().getServer(), slot, item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.whitelist_removed", item.toString()), true);
+        return 1;
+    }
+
+    /**
+     * Player self-service: assigns (or, with minecraft:air, clears) one slot
+     * of their own loadout. The item must be on that slot's OP-curated
+     * whitelist - this is the actual enforcement, not just the GUI filter.
+     */
     private static int assign(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
-        String slotKey = StringArgumentType.getString(ctx, "slot");
-        LoadoutSlot slot = LoadoutSlot.byKey(slotKey);
+        LoadoutSlot slot = parseSlot(ctx);
         if (slot == null) {
-            return fail(ctx, "classloadout.msg.unknown_slot", slotKey);
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
         }
         ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
-        LoadoutManager.get(ctx.getSource().getServer()).setSlot(ctx.getSource().getServer(), player, slot, item);
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        if (item != null && !manager.isWhitelisted(slot, item)) {
+            return fail(ctx, "classloadout.msg.not_whitelisted", item.toString());
+        }
+        manager.setSlot(ctx.getSource().getServer(), player, slot, item);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.slot_set",
                 Component.translatable("classloadout.gui.slot_" + slot.key())), false);
         return 1;

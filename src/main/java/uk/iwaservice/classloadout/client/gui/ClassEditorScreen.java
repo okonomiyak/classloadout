@@ -87,6 +87,10 @@ public class ClassEditorScreen extends Screen {
         panelTop = (this.height - panelHeight) / 2;
         dataRevision = LoadoutClientData.getRevision();
 
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_button"),
+                        b -> minecraft.setScreen(new WhitelistEditorScreen()))
+                .bounds(panelLeft + panelWidth - PAD - 90, panelTop + 2, 90, 20).build());
+
         buildLeftColumn();
         if (editing) {
             buildRightColumn();
