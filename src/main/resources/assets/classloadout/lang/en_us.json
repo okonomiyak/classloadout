@@ -38,5 +38,8 @@
   "classloadout.gui.slot_melee": "Melee",
   "classloadout.gui.item_picker_title": "Select Item",
   "classloadout.gui.item_search": "Search...",
-  "classloadout.gui.item_none": "None"
+  "classloadout.gui.item_none": "None",
+  "classloadout.msg.pack_limit_reached": "You already have the maximum number of active resupply packs.",
+  "block.classloadout.health_pack": "Health Pack",
+  "block.classloadout.ammo_pack": "Ammo Pack"
 }

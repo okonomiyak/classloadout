@@ -15,13 +15,14 @@ import java.util.Set;
 /**
  * The full pool of items an OP can browse when curating a slot whitelist or
  * editing a preset: every registered item in the {@code tacz},
- * {@code superbwarfare} and {@code minecraft} namespaces. Shared by
+ * {@code superbwarfare}, {@code minecraft} and {@code classloadout}
+ * (the mod's own resupply pack items) namespaces. Shared by
  * {@link ItemPickerScreen} and {@link WhitelistEditorScreen} so both grids
  * list and search the exact same candidates.
  */
 final class ItemCatalog {
 
-    private static final Set<String> ALLOWED_NAMESPACES = Set.of("tacz", "superbwarfare", "minecraft");
+    private static final Set<String> ALLOWED_NAMESPACES = Set.of("tacz", "superbwarfare", "minecraft", "classloadout");
 
     static List<ResourceLocation> all() {
         List<ResourceLocation> list = new ArrayList<>();

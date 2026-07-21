@@ -2,8 +2,10 @@
 
 # Class Loadout (classloadout)
 
-Minecraft 1.20.1 / Forge 47.x 向けの独立Mod。分隊/パーティー系Modへの依存も、TACZ/SuperbWarfareへの依存も一切ない。
+Minecraft 1.20.1 / Forge 47.x 向けの独立Mod。分隊/パーティー系Modへの依存は一切ない。
 プレイヤーは死亡画面から、5つのスロット(メイン武器/サイドアーム/投擲物/ガジェット/近接武器)それぞれに好きなアイテムを自分で割り当てて「マイロードアウト」を作る——ただし割り当てられるのは**OPがそのスロット用にホワイトリスト登録したアイテムのみ**。管理者はさらにGUIエディタで「プリセット」を定義でき、プレイヤーはそれを自分のロードアウトへの出発点として適用し、その後もスロット単位で自由に手を加えられる。リスポーンのたびに、その時点のマイロードアウトがホットバー0〜4番へ自動装備される。
+
+ガジェットスロットには「補給パック」も割り当てられる: 設置すると範囲内のプレイヤーを時間経過で回復/弾薬補充し、やがて自然消滅するブロック。弾薬補給はTACZ/SuperbWarfareが導入されていれば連携する(詳細は[設計メモ](#設計メモ)参照)。
 
 ## ライセンス
 
@@ -34,13 +36,33 @@ GNU General Public License v3.0 (GPL-3.0-only)。全文は [`LICENSE`](LICENSE) 
 - **ホワイトリストエディタ**(`/class whitelist`、OP限定。プリセットエディタからもボタンで直接遷移可): 上部に5つのスロットタブ。スロットを選んでグリッド内のアイテムをクリックするとそのスロットのホワイトリストにON/OFFトグル(登録済みは緑枠で表示)。ここで設定した内容が、プレイヤー向けロードアウト画面のアイテム選択グリッドに直接反映される。
 - **リスポーン時の自動装備**: 自分のロードアウトの5アイテムを**ホットバー0〜4番**へ(メイン/サイド/投擲/ガジェット/近接の順で)毎回上書き設置する。一度でもロードアウトに触れた(assign/select/clearのいずれか)プレイヤーはリスポーンのたびに無条件で反映されるため`keepInventory`有効時の重複も起きない。一度も触れていないプレイヤーはそのまま放置される。アイテムが見つからない場合(該当Mod未導入など)はクラッシュせず黙ってそのスロットを空にする。
 
+## 補給パック
+
+`classloadout:health_pack`と`classloadout:ammo_pack`の2種類のブロック。他のアイテムと同じく、OPが`gadget`スロット用にホワイトリスト登録して初めてプレイヤーが割り当て・設置できる。
+
+- 右クリックで設置(通常のブロックアイテムと同じ)。`resupplyIntervalSeconds`秒ごとに、`resupplyRadius`ブロック以内の全プレイヤーを回復(回復パック)または弾薬補給(弾薬パック)する。`packLifetimeSeconds`秒で何もドロップせず自然消滅。
+- 1人が同時に設置できるのは`maxActivePacksPerPlayer`個まで(回復・弾薬合算)。超える設置は拒否される。
+- `friendlyOnlyDestroy`(既定true): 設置した本人以外は破壊できない(classloadoutに分隊/チーム概念は無いため、「味方」=「設置者本人」)。
+- **弾薬補給**: TACZは「dummy ammo」方式(`IGun.useDummyAmmo()`)の銃のみ補充対象(インベントリの弾薬箱アイテムを消費する方式の銃は今回は非対応)。SuperbWarfareは持っている武器の種類を問わず5種類の弾薬プール(handgun/rifle/shotgun/sniper/heavy)全てを補充する。どちらも非導入なら弾薬パックは何もしない(クラッシュしない)。
+
+## 設定 (`world/serverconfig/classloadout-server.toml`)
+
+- `resupply.resupplyRadius`(既定4) — パック周囲の効果範囲(ブロック)
+- `resupply.resupplyIntervalSeconds`(既定2) — 回復/弾薬補給の間隔(秒)
+- `resupply.resupplyHealthPerTick`(既定1) — 回復パック1回あたりの回復量(ハーフハート単位)
+- `resupply.resupplyAmmoPerTick`(既定10) — 弾薬パック1回あたりの補充量(武器Modごとの単位は[補給パック](#補給パック)参照)
+- `resupply.packLifetimeSeconds`(既定60) — 設置から自然消滅までの秒数
+- `resupply.maxActivePacksPerPlayer`(既定1) — 1人が同時設置できる上限(回復+弾薬合算)
+- `resupply.friendlyOnlyDestroy`(既定true) — 設置者本人以外は破壊不可
+
 ## 設計メモ
 
 - **独立した3つの概念、2つのOPツール、1つのプレイヤー画面**: プレイヤー自身のロードアウト(セルフサービス、装備の実体は常にこちら)、OP管理のプリセット(「出発点として読み込む」ための便利ライブラリ、制限なし)、OPが管理するスロット別ホワイトリスト(プレイヤーが自主割り当てできる範囲)。プリセット自体が装備されることはなく、適用は常にプレイヤー自身のロードアウトへのコピーで、ホワイトリストのチェックも受けない(作成できる時点でOP権限を持っているため)。
 - **サーバー側での実効的な検証(GUIのフィルタだけではない)**: `/class assign`はサーバー側でそのスロットのホワイトリストと再照合してから受け付けるため、手打ちコマンドでもアイテム選択グリッドの制限を回避できない。
 - **サーバー権威・C2Sパケットなし**: プリセット・ホワイトリスト・プレイヤーごとのロードアウトはオーバーワールドに永続化される`SavedData`。`assign`/`select`/`clear`/`save`/`delete`/`whitelist add`/`whitelist remove`の全操作は`/class`コマンド経由でサーバー側検証されるため、なりすませるクライアント→サーバーパケットが存在しない。アイテム一覧もサーバー往復不要: ログイン後クライアントのアイテムレジストリは既に完全なので、`ForgeRegistries.ITEMS`(またはsync済みホワイトリスト)をその場でフィルタするだけ。
 - **唯一の例外**: プリセット/ホワイトリストエディタ画面を開く操作。`/class editor`と`/class whitelist`はサーバー側で実行(そこで権限チェック)され、その1クライアントにだけ小さなトリガーパケットを送り返して画面を開かせる。
-- **他Modへの依存ゼロ**: コンパイル時・実行時とも他Modへの依存なし。TACZ/SuperbWarfareはアイテムカタログの名前空間フィルタ(`tacz:`/`superbwarfare:`)として文字列的に参照されるだけ。
+- **ロードアウト/ホワイトリスト機構: 依存ゼロのまま**。コンパイル時・実行時とも他Modへの依存なし。TACZ/SuperbWarfareはアイテムカタログの名前空間フィルタ(`tacz:`/`superbwarfare:`)として文字列的に参照されるだけ。
+- **弾薬補給: squadtpと同じ隔離方式のソフト依存**。`compat/TaczCompat`/`compat/SuperbWarfareCompat`は`ModList.isLoaded(...)`の確認のみでTACZ/SW側の型を一切参照しない。実際のAPI呼び出し(`com.tacz.guns.api.item.IGun`、`com.atsuishio.superbwarfare.data.gun.Ammo`)は`compat/tacz/TaczAmmoResupplier`と`compat/superbwarfare/SwAmmoResupplier`だけが持ち、`isLoaded`の分岐内からしかクラスロードされない。この理由で`build.gradle`は両方を`modCompileOnly`としても宣言している(それでも同梱・必須化はしない。アイテムピッカーのような純粋な文字列判定ではなくなった、という点だけが変化)。
 
 ## ビルド・実行
 
@@ -61,5 +83,6 @@ gradlew runClient2     # 2人目の開発用クライアント(ユーザー名 "
 4. Dev1側: `/class editor` → プリセットを作成(このエディタのアイテム選択グリッドはホワイトリストに関係なく全アイテムが出ることを確認)、保存。
 5. Dev2側: 「ロードアウト」→そのプリセットの[適用]→リスポーンして、ホワイトリスト未登録のアイテムが含まれていてもホットバー0〜4番に反映されることを確認(プリセットは仕様上ホワイトリストを迂回する)。
 6. Dev1側: 先ほどホワイトリスト登録した中の1つを`/class whitelist`で削除し、Dev2のロードアウト画面のピッカーからそのアイテムが消えること(既存の割り当て自体は遡って解除されず、今後選べなくなるだけ)を確認。
+7. `gadget`スロットに`classloadout:health_pack`/`classloadout:ammo_pack`をホワイトリスト登録し、Dev2のロードアウトに割り当ててリスポーン→設置。周囲のプレイヤーが設定間隔で回復/弾薬補給されること、`packLifetimeSeconds`後に消滅すること、`maxActivePacksPerPlayer`を超える設置が拒否されること、`friendlyOnlyDestroy`有効時にDev1がDev2のパックを破壊できないことを確認。
 
-`build.gradle`はアイテムピッカーで実際の`tacz:`/`superbwarfare:`アイテムをテスト表示できるよう、TACZ/SuperbWarfare(と依存するKotlin/GeckoLib/Curios)を**開発実行時限定**の依存として取り込んでいる。ビルド・配布には一切不要。
+`build.gradle`はTACZ/SuperbWarfareを`modRuntimeOnly`(開発クライアント/サーバーに実際にロードさせてテストするため)と`modCompileOnly`(弾薬補給のcompatクラスが実APIに対してコンパイルできるようにするため)の両方で取り込んでいる。どちらもビルド・配布には不要。

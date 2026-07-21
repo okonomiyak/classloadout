@@ -62,12 +62,18 @@ repositories {
 }
 
 dependencies {
-    // classloadout never compiles against TACZ/SuperbWarfare classes - it only matches
-    // ResourceLocation namespaces at runtime. These are dev-runtime-only conveniences so the
-    // item picker has real tacz:/superbwarfare: items to show while testing; not required to build.
+    // The item picker itself never compiles against TACZ/SuperbWarfare classes - it only matches
+    // ResourceLocation namespaces at runtime. These are dev-runtime-only conveniences so it has
+    // real tacz:/superbwarfare: items to show while testing.
     modRuntimeOnly 'curse.maven:timeless-and-classics-zero-1028108:8141310'
     modRuntimeOnly 'curse.maven:superb-warfare-1218165:8104849'
     modRuntimeOnly 'thedarkcolour:kotlinforforge:4.12.0'
     modRuntimeOnly 'curse.maven:geckolib-388172:8285794'
     modRuntimeOnly 'curse.maven:curios-309927:6418456'
+
+    // Ammo-resupply gadget integration (compat/tacz, compat/superbwarfare) is a soft compile-time
+    // dependency, isolated behind ModList.isLoaded guards exactly like squadtp's TaczCompat -
+    // never shipped, never required, and the guarded classes are only classloaded when present.
+    modCompileOnly 'curse.maven:timeless-and-classics-zero-1028108:8141310'
+    modCompileOnly 'curse.maven:superb-warfare-1218165:8104849'
 }
