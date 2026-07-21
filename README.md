@@ -38,11 +38,11 @@ Item arguments accept any registered item id; `minecraft:air` is the "unset" sen
 
 ## Resupply Packs
 
-Two placeable blocks, `classloadout:health_pack` and `classloadout:ammo_pack` - like any other item, an OP has to whitelist them for the `gadget` slot before players can assign and place them.
+Two placeable items, `classloadout:health_pack` and `classloadout:ammo_pack` - like any other item, an OP has to whitelist them for the `gadget` slot before players can assign and place them. These are entities, not blocks (no hitbox to walk into, no blockstate/model/loot-table plumbing - just a floating, slowly-spinning render of the item's own icon, the same technique squadtp uses for its respawn beacon).
 
-- Right-click to place (ordinary block-item placement). Every `resupplyIntervalSeconds`, any player within `resupplyRadius` blocks is healed (health pack) or resupplied (ammo pack); it self-destructs after `packLifetimeSeconds` with no drop either way.
+- Right-click a block face to place it there. Every `resupplyIntervalSeconds`, any player within `resupplyRadius` blocks is healed (health pack) or resupplied (ammo pack); it self-destructs after `packLifetimeSeconds` with no drop either way.
 - A player can have at most `maxActivePacksPerPlayer` packs active at once (health + ammo combined); placing beyond that is rejected.
-- `friendlyOnlyDestroy` (default on): only the player who placed a pack can break it (there's no squad/team concept here, so "friendly" just means "the owner").
+- `friendlyOnlyDestroy` (default on): the pack has 1 HP, and only an attack from the player who placed it can actually damage it - everyone else's hits do nothing (there's no squad/team concept here, so "friendly" just means "the owner").
 - **Ammo resupply**: for TACZ, only guns using its "dummy ammo" reserve mode (`IGun.useDummyAmmo()`) are topped up - guns that consume real inventory ammo-box items aren't supported yet. For SuperbWarfare, all five ammo pools (handgun/rifle/shotgun/sniper/heavy) are topped up regardless of what's currently held. Neither mod installed → the ammo pack just does nothing (no crash).
 
 ## Thrown Resupply Packs
@@ -98,7 +98,7 @@ gradlew runClient2     # second dev client, username "Dev2" (separate game dir: 
 4. On Dev1: `/class editor` → create a preset (its item picker should show everything, not just whitelisted items), Save.
 5. On Dev2: open **Loadout**, click **Apply** on the preset, respawn, confirm the items appear in hotbar slots 0-4 even if some weren't individually whitelisted (presets bypass the whitelist by design).
 6. On Dev1: remove one of the earlier-whitelisted items via `/class whitelist`, confirm Dev2's loadout screen no longer offers it (existing assignment isn't retroactively cleared, only the picker's future choices change).
-7. Whitelist `classloadout:health_pack` and `classloadout:ammo_pack` for the `gadget` slot, assign one to Dev2's loadout, respawn, place it, and confirm: nearby players heal/resupply on the configured interval, it disappears after `packLifetimeSeconds`, a second placement past `maxActivePacksPerPlayer` is rejected, and (with `friendlyOnlyDestroy` on) Dev1 can't break Dev2's pack.
+7. Whitelist `classloadout:health_pack` and `classloadout:ammo_pack` for the `gadget` slot, assign one to Dev2's loadout, respawn, place it, and confirm: nearby players heal/resupply on the configured interval, it disappears after `packLifetimeSeconds`, a second placement past `maxActivePacksPerPlayer` is rejected, and (with `friendlyOnlyDestroy` on) Dev1 attacking Dev2's pack does nothing while Dev2 attacking it destroys it in one hit.
 8. Whitelist `classloadout:thrown_health_pack`/`classloadout:thrown_ammo_pack` for `gadget` too; assign, respawn, throw one at the ground and confirm it lands and starts affecting nearby players with a visibly smaller radius/weaker cadence than the placed version, plus the action-bar message. Throw again immediately and confirm it's blocked until `throwCooldownSeconds` passes, and that the item itself isn't consumed.
 9. With TACZ installed: `/class whitelist` → `main` tab → confirm individual gun names (e.g. `tacz:ak47`), not just the generic gun item, appear in the grid and can be whitelisted; assign one to a loadout, respawn, and confirm the correct specific gun (not an empty/unconfigured one) lands in hotbar slot 0.
 

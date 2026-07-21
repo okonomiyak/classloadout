@@ -24,6 +24,7 @@ public class ClassLoadoutMod {
         var modBus = FMLJavaModLoadingContext.get().getModEventBus();
         modBus.addListener(this::commonSetup);
         modBus.addListener(this::buildCreativeTabs);
+        modBus.addListener(this::registerAttributes);
         ModRegistry.register(modBus);
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, Config.SPEC);
         MinecraftForge.EVENT_BUS.register(ServerEvents.class);
@@ -33,12 +34,15 @@ public class ClassLoadoutMod {
         event.enqueueWork(NetworkHandler::register);
     }
 
+    private void registerAttributes(net.minecraftforge.event.entity.EntityAttributeCreationEvent event) {
+        event.put(ModRegistry.HEALTH_PACK.get(), uk.iwaservice.classloadout.resupply.AbstractResupplyPackEntity.createAttributes().build());
+        event.put(ModRegistry.AMMO_PACK.get(), uk.iwaservice.classloadout.resupply.AbstractResupplyPackEntity.createAttributes().build());
+    }
+
     private void buildCreativeTabs(net.minecraftforge.event.BuildCreativeModeTabContentsEvent event) {
-        if (event.getTabKey() == net.minecraft.world.item.CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+        if (event.getTabKey() == net.minecraft.world.item.CreativeModeTabs.COMBAT) {
             event.accept(ModRegistry.HEALTH_PACK_ITEM.get());
             event.accept(ModRegistry.AMMO_PACK_ITEM.get());
-        }
-        if (event.getTabKey() == net.minecraft.world.item.CreativeModeTabs.COMBAT) {
             event.accept(ModRegistry.THROWN_HEALTH_PACK_ITEM.get());
             event.accept(ModRegistry.THROWN_AMMO_PACK_ITEM.get());
         }

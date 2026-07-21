@@ -38,11 +38,11 @@ GNU General Public License v3.0 (GPL-3.0-only)。全文は [`LICENSE`](LICENSE) 
 
 ## 補給パック
 
-`classloadout:health_pack`と`classloadout:ammo_pack`の2種類のブロック。他のアイテムと同じく、OPが`gadget`スロット用にホワイトリスト登録して初めてプレイヤーが割り当て・設置できる。
+`classloadout:health_pack`と`classloadout:ammo_pack`の2種類の設置アイテム。他のアイテムと同じく、OPが`gadget`スロット用にホワイトリスト登録して初めてプレイヤーが割り当て・設置できる。実体はブロックではなくエンティティ(当たり判定で歩行を遮らない、blockstate/model/loot table等のブロック用アセット不要——アイテム自身のアイコンがゆっくり回転しながら浮遊表示されるだけ、squadtpのリスポーンビーコンと同じ手法)。
 
-- 右クリックで設置(通常のブロックアイテムと同じ)。`resupplyIntervalSeconds`秒ごとに、`resupplyRadius`ブロック以内の全プレイヤーを回復(回復パック)または弾薬補給(弾薬パック)する。`packLifetimeSeconds`秒で何もドロップせず自然消滅。
+- ブロックの面に向かって右クリックすると、その上に設置される。`resupplyIntervalSeconds`秒ごとに、`resupplyRadius`ブロック以内の全プレイヤーを回復(回復パック)または弾薬補給(弾薬パック)する。`packLifetimeSeconds`秒で何もドロップせず自然消滅。
 - 1人が同時に設置できるのは`maxActivePacksPerPlayer`個まで(回復・弾薬合算)。超える設置は拒否される。
-- `friendlyOnlyDestroy`(既定true): 設置した本人以外は破壊できない(classloadoutに分隊/チーム概念は無いため、「味方」=「設置者本人」)。
+- `friendlyOnlyDestroy`(既定true): 体力1のエンティティとして存在し、設置した本人の攻撃だけが実際にダメージを与える(それ以外のプレイヤーの攻撃は無効。classloadoutに分隊/チーム概念は無いため、「味方」=「設置者本人」)。
 - **弾薬補給**: TACZは「dummy ammo」方式(`IGun.useDummyAmmo()`)の銃のみ補充対象(インベントリの弾薬箱アイテムを消費する方式の銃は今回は非対応)。SuperbWarfareは持っている武器の種類を問わず5種類の弾薬プール(handgun/rifle/shotgun/sniper/heavy)全てを補充する。どちらも非導入なら弾薬パックは何もしない(クラッシュしない)。
 
 ## 投擲式補給パック
@@ -98,7 +98,7 @@ gradlew runClient2     # 2人目の開発用クライアント(ユーザー名 "
 4. Dev1側: `/class editor` → プリセットを作成(このエディタのアイテム選択グリッドはホワイトリストに関係なく全アイテムが出ることを確認)、保存。
 5. Dev2側: 「ロードアウト」→そのプリセットの[適用]→リスポーンして、ホワイトリスト未登録のアイテムが含まれていてもホットバー0〜4番に反映されることを確認(プリセットは仕様上ホワイトリストを迂回する)。
 6. Dev1側: 先ほどホワイトリスト登録した中の1つを`/class whitelist`で削除し、Dev2のロードアウト画面のピッカーからそのアイテムが消えること(既存の割り当て自体は遡って解除されず、今後選べなくなるだけ)を確認。
-7. `gadget`スロットに`classloadout:health_pack`/`classloadout:ammo_pack`をホワイトリスト登録し、Dev2のロードアウトに割り当ててリスポーン→設置。周囲のプレイヤーが設定間隔で回復/弾薬補給されること、`packLifetimeSeconds`後に消滅すること、`maxActivePacksPerPlayer`を超える設置が拒否されること、`friendlyOnlyDestroy`有効時にDev1がDev2のパックを破壊できないことを確認。
+7. `gadget`スロットに`classloadout:health_pack`/`classloadout:ammo_pack`をホワイトリスト登録し、Dev2のロードアウトに割り当ててリスポーン→設置。周囲のプレイヤーが設定間隔で回復/弾薬補給されること、`packLifetimeSeconds`後に消滅すること、`maxActivePacksPerPlayer`を超える設置が拒否されること、`friendlyOnlyDestroy`有効時にDev1が攻撃しても壊れず・Dev2が攻撃すると1発で壊れることを確認。
 8. `classloadout:thrown_health_pack`/`classloadout:thrown_ammo_pack`も`gadget`にホワイトリスト登録→割当→リスポーン→投擲。着弾して効果範囲・間隔が設置型より明らかに控えめであること、action bar通知が出ることを確認。すぐもう一度投げようとして`throwCooldownSeconds`が経過するまでブロックされること、アイテム自体は消費されないことを確認。
 9. TACZ導入環境で: `/class whitelist` → `main`タブ → 汎用アイテムだけでなく個々の銃名(例: `tacz:ak47`)がグリッドに並びホワイトリスト登録できることを確認。1つをロードアウトに割り当ててリスポーンし、空の未設定銃ではなく正しい特定の銃がホットバー0番に入ることを確認。
 

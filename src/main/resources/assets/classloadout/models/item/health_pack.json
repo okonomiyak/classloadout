@@ -1,3 +1,6 @@
 {
-  "parent": "classloadout:block/health_pack"
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "minecraft:item/golden_apple"
+  }
 }
