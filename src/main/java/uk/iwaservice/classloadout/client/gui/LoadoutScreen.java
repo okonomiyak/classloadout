@@ -5,10 +5,9 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.registries.ForgeRegistries;
+import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
@@ -178,9 +177,9 @@ public class LoadoutScreen extends Screen {
     private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, String labelKey) {
         graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
         if (loc != null) {
-            Item item = ForgeRegistries.ITEMS.getValue(loc);
-            if (item != null) {
-                graphics.renderItem(new ItemStack(item), x + (SLOT - ICON) / 2, y + (SLOT - ICON) / 2);
+            ItemStack stack = ItemResolver.resolve(loc);
+            if (stack != null) {
+                graphics.renderItem(stack, x + (SLOT - ICON) / 2, y + (SLOT - ICON) / 2);
             } else {
                 graphics.drawCenteredString(this.font, "?", x + SLOT / 2, y + SLOT / 2 - 4, 0xFFFF5555);
             }
@@ -193,8 +192,8 @@ public class LoadoutScreen extends Screen {
             graphics.fill(x, y, x + ICON, y + ICON, 0x30FFFFFF);
             return;
         }
-        Item item = LoadoutClientData.isItemAvailable(loc) ? ForgeRegistries.ITEMS.getValue(loc) : null;
-        graphics.renderItem(new ItemStack(item != null ? item : Items.BARRIER), x, y);
+        ItemStack resolved = ItemResolver.resolve(loc);
+        graphics.renderItem(resolved != null ? resolved : new ItemStack(Items.BARRIER), x, y);
     }
 
     @Override

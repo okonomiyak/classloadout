@@ -6,9 +6,8 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
+import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
 
@@ -261,10 +260,10 @@ public class ClassEditorScreen extends Screen {
 
         for (RowInfo row : listRows) {
             ResourceLocation icon = row.entry().icon();
-            if (icon != null && LoadoutClientData.isItemAvailable(icon)) {
-                Item item = ForgeRegistries.ITEMS.getValue(icon);
-                if (item != null) {
-                    graphics.renderItem(new ItemStack(item), l + PAD, row.y() + 1);
+            if (icon != null) {
+                ItemStack stack = ItemResolver.resolve(icon);
+                if (stack != null) {
+                    graphics.renderItem(stack, l + PAD, row.y() + 1);
                 }
             }
             graphics.drawString(this.font, trim(row.entry().name(), 8), l + PAD + 18, row.y() + 5, COLOR_TEXT);
@@ -288,9 +287,9 @@ public class ClassEditorScreen extends Screen {
     private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, String labelKey) {
         graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
         if (loc != null) {
-            Item item = ForgeRegistries.ITEMS.getValue(loc);
-            if (item != null) {
-                graphics.renderItem(new ItemStack(item), x + (SLOT - 16) / 2, y + (SLOT - 16) / 2);
+            ItemStack stack = ItemResolver.resolve(loc);
+            if (stack != null) {
+                graphics.renderItem(stack, x + (SLOT - 16) / 2, y + (SLOT - 16) / 2);
             } else {
                 graphics.drawCenteredString(this.font, "?", x + SLOT / 2, y + SLOT / 2 - 4, 0xFFFF5555);
             }

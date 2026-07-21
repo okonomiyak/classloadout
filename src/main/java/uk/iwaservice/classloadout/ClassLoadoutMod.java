@@ -38,5 +38,9 @@ public class ClassLoadoutMod {
             event.accept(ModRegistry.HEALTH_PACK_ITEM.get());
             event.accept(ModRegistry.AMMO_PACK_ITEM.get());
         }
+        if (event.getTabKey() == net.minecraft.world.item.CreativeModeTabs.COMBAT) {
+            event.accept(ModRegistry.THROWN_HEALTH_PACK_ITEM.get());
+            event.accept(ModRegistry.THROWN_AMMO_PACK_ITEM.get());
+        }
     }
 }

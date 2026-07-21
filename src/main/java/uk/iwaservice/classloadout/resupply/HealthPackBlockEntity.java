@@ -14,9 +14,6 @@ public class HealthPackBlockEntity extends AbstractResupplyPackBlockEntity {
 
     @Override
     protected void applyEffect(ServerPlayer player) {
-        if (player.getHealth() < player.getMaxHealth()) {
-            int amount = Config.RESUPPLY_HEALTH_PER_TICK.get();
-            player.heal(amount);
-        }
+        ResupplyEffects.heal(player, Config.RESUPPLY_HEALTH_PER_TICK.get());
     }
 }

@@ -69,10 +69,5 @@ public final class LoadoutClientData {
         return whitelists.get(slot);
     }
 
-    /** True if the given item is known to the client's item registry (used for the "not installed" grey-out). */
-    public static boolean isItemAvailable(@Nullable ResourceLocation item) {
-        return item == null || net.minecraftforge.registries.ForgeRegistries.ITEMS.containsKey(item);
-    }
-
     private LoadoutClientData() {}
 }

@@ -2,12 +2,10 @@ package uk.iwaservice.classloadout;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.registries.ForgeRegistries;
 import uk.iwaservice.classloadout.command.ClassCommand;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
@@ -46,8 +44,8 @@ public final class ServerEvents {
         }
         ResourceLocation[] slots = {loadout.main(), loadout.sidearm(), loadout.throwable(), loadout.gadget(), loadout.melee()};
         for (int i = 0; i < slots.length; i++) {
-            Item item = slots[i] == null ? null : ForgeRegistries.ITEMS.getValue(slots[i]);
-            player.getInventory().setItem(i, item == null ? ItemStack.EMPTY : new ItemStack(item));
+            ItemStack stack = slots[i] == null ? null : ItemResolver.resolve(slots[i]);
+            player.getInventory().setItem(i, stack == null ? ItemStack.EMPTY : stack);
         }
     }
 

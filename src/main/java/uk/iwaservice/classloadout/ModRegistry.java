@@ -1,5 +1,7 @@
 package uk.iwaservice.classloadout;
 
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -14,6 +16,9 @@ import uk.iwaservice.classloadout.resupply.AmmoPackBlockEntity;
 import uk.iwaservice.classloadout.resupply.HealthPackBlock;
 import uk.iwaservice.classloadout.resupply.HealthPackBlockEntity;
 import uk.iwaservice.classloadout.resupply.ResupplyPackItem;
+import uk.iwaservice.classloadout.resupply.ThrowableResupplyItem;
+import uk.iwaservice.classloadout.resupply.ThrownAmmoPackEntity;
+import uk.iwaservice.classloadout.resupply.ThrownHealthPackEntity;
 
 public final class ModRegistry {
 
@@ -21,6 +26,8 @@ public final class ModRegistry {
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, ClassLoadoutMod.MODID);
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, ClassLoadoutMod.MODID);
+    public static final DeferredRegister<EntityType<?>> ENTITY_TYPES =
+            DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, ClassLoadoutMod.MODID);
 
     public static final RegistryObject<Block> HEALTH_PACK = BLOCKS.register("health_pack",
             () -> new HealthPackBlock(BlockBehaviour.Properties.of()
@@ -40,10 +47,33 @@ public final class ModRegistry {
             BLOCK_ENTITIES.register("ammo_pack",
                     () -> BlockEntityType.Builder.of(AmmoPackBlockEntity::new, AMMO_PACK.get()).build(null));
 
+    public static final RegistryObject<EntityType<ThrownHealthPackEntity>> THROWN_HEALTH_PACK = ENTITY_TYPES.register(
+            "thrown_health_pack",
+            () -> EntityType.Builder.<ThrownHealthPackEntity>of(ThrownHealthPackEntity::new, MobCategory.MISC)
+                    .sized(0.25f, 0.25f)
+                    .clientTrackingRange(4)
+                    .updateInterval(10)
+                    .build("thrown_health_pack"));
+    public static final RegistryObject<Item> THROWN_HEALTH_PACK_ITEM = ITEMS.register("thrown_health_pack",
+            () -> new ThrowableResupplyItem(new Item.Properties().stacksTo(1),
+                    (level, player) -> new ThrownHealthPackEntity(level, player)));
+
+    public static final RegistryObject<EntityType<ThrownAmmoPackEntity>> THROWN_AMMO_PACK = ENTITY_TYPES.register(
+            "thrown_ammo_pack",
+            () -> EntityType.Builder.<ThrownAmmoPackEntity>of(ThrownAmmoPackEntity::new, MobCategory.MISC)
+                    .sized(0.25f, 0.25f)
+                    .clientTrackingRange(4)
+                    .updateInterval(10)
+                    .build("thrown_ammo_pack"));
+    public static final RegistryObject<Item> THROWN_AMMO_PACK_ITEM = ITEMS.register("thrown_ammo_pack",
+            () -> new ThrowableResupplyItem(new Item.Properties().stacksTo(1),
+                    (level, player) -> new ThrownAmmoPackEntity(level, player)));
+
     public static void register(IEventBus modBus) {
         BLOCKS.register(modBus);
         ITEMS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
+        ENTITY_TYPES.register(modBus);
     }
 
     private ModRegistry() {}

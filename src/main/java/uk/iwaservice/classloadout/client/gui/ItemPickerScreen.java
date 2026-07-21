@@ -8,7 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.registries.ForgeRegistries;
+import uk.iwaservice.classloadout.ItemResolver;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -180,7 +180,8 @@ public class ItemPickerScreen extends Screen {
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
-            ItemStack stack = index == 0 ? new ItemStack(Items.BARRIER) : new ItemStack(ForgeRegistries.ITEMS.getValue(shown.get(index - 1)));
+            ItemStack resolved = index == 0 ? null : ItemResolver.resolve(shown.get(index - 1));
+            ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
             if (hovered) {
                 hoveredStack = stack;

@@ -5,7 +5,7 @@
 A standalone Minecraft 1.20.1 / Forge 47.x mod: no dependency on any squad/party mod.
 Every player builds their own **personal loadout** by assigning an item to each of five slots (main weapon / sidearm / throwable / gadget / melee) from the death screen - but only from the items an OP has **whitelisted for that specific slot**. Admins can additionally define **presets** through a GUI editor, which a player can apply to their own loadout as a starting point and keep tweaking slot by slot. Whatever the player's personal loadout currently holds is auto-equipped into hotbar slots 0-4 on every respawn.
 
-The gadget slot can also hold **resupply pack** gadgets: placeable blocks that heal or resupply ammo for nearby players over time before self-destructing. Ammo resupply optionally hooks into TACZ/SuperbWarfare if installed (see [Design Notes](#design-notes)).
+The gadget slot can also hold **resupply pack** gadgets, in two flavors: placeable blocks (stronger, right-click to place, stays until broken or its lifetime runs out) and throwable packs (weaker, snowball-style throw, settles where it lands). Both heal or resupply ammo for nearby players over time. Ammo resupply optionally hooks into TACZ/SuperbWarfare if installed (see [Design Notes](#design-notes)), including picking a **specific TACZ gun** (not just a generic gun item) for a loadout slot.
 
 ## License
 
@@ -45,6 +45,14 @@ Two placeable blocks, `classloadout:health_pack` and `classloadout:ammo_pack` - 
 - `friendlyOnlyDestroy` (default on): only the player who placed a pack can break it (there's no squad/team concept here, so "friendly" just means "the owner").
 - **Ammo resupply**: for TACZ, only guns using its "dummy ammo" reserve mode (`IGun.useDummyAmmo()`) are topped up - guns that consume real inventory ammo-box items aren't supported yet. For SuperbWarfare, all five ammo pools (handgun/rifle/shotgun/sniper/heavy) are topped up regardless of what's currently held. Neither mod installed → the ammo pack just does nothing (no crash).
 
+## Thrown Resupply Packs
+
+Two throwable items, `classloadout:thrown_health_pack` and `classloadout:thrown_ammo_pack` - a deliberately weaker, more casual alternative to the placeable packs above (same whitelist requirement for the `gadget` slot).
+
+- Throw like a snowball/ender pearl. On impact it settles in place, spawns a burst of particles, and starts affecting nearby players - smaller radius, longer interval, shorter lifetime than the placed version (see the `throwable` config section). Affected players see an action-bar message ("Healing..." / "Resupplying ammo...") each tick.
+- **The item is never consumed** - only `throwCooldownSeconds` (vanilla's ender-pearl-style item cooldown) gates repeated throws, so it stays usable throw after throw once the cooldown clears.
+- Counts against the same `maxActivePacksPerPlayer` limit as the placed packs (combined, not a separate pool) once it lands.
+
 ## Configuration (`world/serverconfig/classloadout-server.toml`)
 
 - `resupply.resupplyRadius` (default 4) - blocks around a pack that players are affected within
@@ -52,8 +60,14 @@ Two placeable blocks, `classloadout:health_pack` and `classloadout:ammo_pack` - 
 - `resupply.resupplyHealthPerTick` (default 1) - health points (half-hearts) restored per tick by a health pack
 - `resupply.resupplyAmmoPerTick` (default 10) - ammo units restored per tick by an ammo pack (see [Resupply Packs](#resupply-packs) for what "unit" means per weapon mod)
 - `resupply.packLifetimeSeconds` (default 60) - seconds before a placed pack self-destructs
-- `resupply.maxActivePacksPerPlayer` (default 1) - active packs (health + ammo combined) a player may have at once
+- `resupply.maxActivePacksPerPlayer` (default 1) - active packs (health + ammo, placed + thrown, all combined) a player may have at once
 - `resupply.friendlyOnlyDestroy` (default true) - only the placing player can break their own pack
+- `throwable.throwPackRadius` (default 2) - smaller than `resupplyRadius` by design
+- `throwable.throwPackIntervalSeconds` (default 3)
+- `throwable.throwPackHealthPerTick` (default 1)
+- `throwable.throwPackAmmoPerTick` (default 5) - half of `resupplyAmmoPerTick` by default
+- `throwable.throwPackLifetimeSeconds` (default 25) - shorter than `packLifetimeSeconds` by design
+- `throwable.throwCooldownSeconds` (default 15) - per-player, per-item cooldown between throws
 
 ## Design Notes
 
@@ -61,8 +75,9 @@ Two placeable blocks, `classloadout:health_pack` and `classloadout:ammo_pack` - 
 - **Server-side enforcement, not just a GUI filter**: `/class assign` re-checks the item against that slot's whitelist on the server before accepting it, so a hand-typed command can't bypass what the item picker shows.
 - **Server-authoritative, no C2S packets**: presets, whitelists and every player's personal loadout are `SavedData`, persisted with the overworld. Every mutation (`assign`/`select`/`clear`/`save`/`delete`/`whitelist add`/`whitelist remove`) goes through a `/class` command, validated server-side - there is no client-to-server packet to spoof. The item picker doesn't need a server round trip either: the item registry is already fully populated on the client after login, so it just filters `ForgeRegistries.ITEMS` (or the synced whitelist) locally.
 - **One exception**: opening the preset/whitelist editor screens. `/class editor` and `/class whitelist` run on the server (permission-checked there), which then sends a tiny trigger packet back to that one client to open the screen - so the client never has to re-derive its own permission level.
-- **Loadout/whitelist system: zero coupling.** No compile-time or runtime dependency on any other mod. TACZ/SuperbWarfare are referenced only as string namespaces (`tacz:`/`superbwarfare:`) when building the item catalog, matched purely against whatever `ForgeRegistries.ITEMS` happens to contain.
-- **Ammo resupply: soft dependency, isolated the same way squadtp does it.** `compat/TaczCompat`/`compat/SuperbWarfareCompat` check `ModList.isLoaded(...)` and contain zero references to either mod's classes themselves; the actual API calls (`com.tacz.guns.api.item.IGun`, `com.atsuishio.superbwarfare.data.gun.Ammo`) live in `compat/tacz/TaczAmmoResupplier` and `compat/superbwarfare/SwAmmoResupplier`, which are only classloaded from inside the `isLoaded` branch. `build.gradle` declares both as `modCompileOnly` for this reason - still never shipped, never required, but no longer purely string-based like the item picker.
+- **Loadout/whitelist system: soft dependency, isolated the same way squadtp does it.** `compat/TaczCompat`/`compat/SuperbWarfareCompat` check `ModList.isLoaded(...)` and contain zero references to either mod's classes themselves; the actual API calls live in `compat/tacz/*`/`compat/superbwarfare/*`, only classloaded from inside the `isLoaded` branch. `build.gradle` declares both as `modCompileOnly` for this reason - never shipped, never required, but no longer purely string-based namespace matching.
+- **TACZ guns aren't registered items - `ItemResolver` bridges the gap.** TACZ ships one generic item (e.g. `tacz:modern_kinetic_gun`) for every gun; the specific gun (AK47, M4, ...) is a `GunId` NBT tag resolved through TACZ's data-driven gun index (`TimelessAPI`), not a distinct registry entry. So a TACZ gun's "item id" as stored in a preset/loadout/whitelist is really a *gun id*, and every place that turns a stored `ResourceLocation` into a real `ItemStack` (icon rendering, respawn equip, the item picker's own grid) goes through `ItemResolver.resolve()`, which tries `TaczCompat.buildGunStack()` (via TACZ's `GunItemBuilder`) before falling back to a plain registered item. `ItemCatalog` adds every TACZ gun id (`TimelessAPI.getAllCommonGunIndex()`) to the pickable pool the same way. SuperbWarfare needs no such bridge - its weapons are ordinary registered items.
+- **Ammo resupply**: the same `compat/tacz`/`compat/superbwarfare` modules also drive the resupply packs' ammo top-up (`TaczCompat.resupply`/`SuperbWarfareCompat.resupply`), sharing the guarded-classloading pattern above.
 
 ## Building & Running
 
@@ -84,5 +99,7 @@ gradlew runClient2     # second dev client, username "Dev2" (separate game dir: 
 5. On Dev2: open **Loadout**, click **Apply** on the preset, respawn, confirm the items appear in hotbar slots 0-4 even if some weren't individually whitelisted (presets bypass the whitelist by design).
 6. On Dev1: remove one of the earlier-whitelisted items via `/class whitelist`, confirm Dev2's loadout screen no longer offers it (existing assignment isn't retroactively cleared, only the picker's future choices change).
 7. Whitelist `classloadout:health_pack` and `classloadout:ammo_pack` for the `gadget` slot, assign one to Dev2's loadout, respawn, place it, and confirm: nearby players heal/resupply on the configured interval, it disappears after `packLifetimeSeconds`, a second placement past `maxActivePacksPerPlayer` is rejected, and (with `friendlyOnlyDestroy` on) Dev1 can't break Dev2's pack.
+8. Whitelist `classloadout:thrown_health_pack`/`classloadout:thrown_ammo_pack` for `gadget` too; assign, respawn, throw one at the ground and confirm it lands and starts affecting nearby players with a visibly smaller radius/weaker cadence than the placed version, plus the action-bar message. Throw again immediately and confirm it's blocked until `throwCooldownSeconds` passes, and that the item itself isn't consumed.
+9. With TACZ installed: `/class whitelist` → `main` tab → confirm individual gun names (e.g. `tacz:ak47`), not just the generic gun item, appear in the grid and can be whitelisted; assign one to a loadout, respawn, and confirm the correct specific gun (not an empty/unconfigured one) lands in hotbar slot 0.
 
-`build.gradle` pulls TACZ/SuperbWarfare (and their required Kotlin/GeckoLib/Curios chain) both as `modRuntimeOnly` (so dev clients/servers actually have the mods loaded to test against) and `modCompileOnly` (so the ammo-resupply compat classes can compile against their real APIs); neither is required to build or ship the mod itself.
+`build.gradle` pulls TACZ/SuperbWarfare (and their required Kotlin/GeckoLib/Curios chain) both as `modRuntimeOnly` (so dev clients/servers actually have the mods loaded to test against) and `modCompileOnly` (so the compat classes can compile against their real APIs); neither is required to build or ship the mod itself.
