@@ -14,9 +14,7 @@
 
 ## 現在のgit状態(★重要★)
 
-**直近のセッションでの変更が未コミット**。最終コミットは `794798e`(2026-07-21、"Convert placed resupply packs from blocks to entities")。それ以降の全変更(下記「今回のセッションでやったこと」5項目すべて)が**作業ツリーに存在するがコミットされていない**。
-
-**ユーザーからは明示的なコミット指示がまだ無いため、コミット・pushは実施していない。** 動作確認(下記の通り主要部分は完了)が取れたので、**次にやるべきことの筆頭はコミット・pushしてよいかユーザーに確認すること**。
+**2026-08-06、ユーザー指示によりコミット・push・リリース済み。** それまで複数セッション分蓄積されていた未コミット変更(下記の全項目)を1コミット`b7abb74`("Add loadout station docs, cover barrier, spawn kit, ammo grants, and death-clear inventory reset")にまとめて`origin/main`へpush、`gradle.properties`の`mod_version`を`0.1.0`→`0.2.0`に上げた上で`v0.2.0`タグ+GitHub Release(ビルド済みjar添付)を作成済み。以後の変更は再びこのセクションで追跡すること。
 
 ## 動作確認の状況(2026-07-21時点)
 
