@@ -39,6 +39,16 @@ public final class NetworkHandler {
                 .decoder(OpenWhitelistEditorPacket::decode)
                 .consumerMainThread(OpenWhitelistEditorPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(OpenProtectedItemsEditorPacket.class, 3, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenProtectedItemsEditorPacket::encode)
+                .decoder(OpenProtectedItemsEditorPacket::decode)
+                .consumerMainThread(OpenProtectedItemsEditorPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(OpenSpawnKitEditorPacket.class, 4, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenSpawnKitEditorPacket::encode)
+                .decoder(OpenSpawnKitEditorPacket::decode)
+                .consumerMainThread(OpenSpawnKitEditorPacket::handle)
+                .add();
     }
 
     public static void sendLoadoutSync(ServerPlayer player, LoadoutSyncPacket packet) {
@@ -51,6 +61,14 @@ public final class NetworkHandler {
 
     public static void sendOpenWhitelistEditor(ServerPlayer player) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenWhitelistEditorPacket());
+    }
+
+    public static void sendOpenProtectedItemsEditor(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenProtectedItemsEditorPacket());
+    }
+
+    public static void sendOpenSpawnKitEditor(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenSpawnKitEditorPacket());
     }
 
     private NetworkHandler() {}

@@ -86,9 +86,15 @@ public class ClassEditorScreen extends Screen {
         panelTop = (this.height - panelHeight) / 2;
         dataRevision = LoadoutClientData.getRevision();
 
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.protect_button"),
+                        b -> minecraft.setScreen(new ProtectedItemsEditorScreen()))
+                .bounds(panelLeft + panelWidth - PAD - 90, panelTop + 2, 90, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_button"),
                         b -> minecraft.setScreen(new WhitelistEditorScreen()))
-                .bounds(panelLeft + panelWidth - PAD - 90, panelTop + 2, 90, 20).build());
+                .bounds(panelLeft + panelWidth - PAD - 90 - 94, panelTop + 2, 90, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.spawnkit_button"),
+                        b -> minecraft.setScreen(new SpawnKitEditorScreen()))
+                .bounds(panelLeft + panelWidth - PAD - 90 - 94 - 94, panelTop + 2, 90, 20).build());
 
         buildLeftColumn();
         if (editing) {
@@ -261,7 +267,7 @@ public class ClassEditorScreen extends Screen {
         for (RowInfo row : listRows) {
             ResourceLocation icon = row.entry().icon();
             if (icon != null) {
-                ItemStack stack = ItemResolver.resolve(icon);
+                ItemStack stack = ItemResolver.resolve(icon, LoadoutClientData.getItemVariants());
                 if (stack != null) {
                     graphics.renderItem(stack, l + PAD, row.y() + 1);
                 }
@@ -287,7 +293,7 @@ public class ClassEditorScreen extends Screen {
     private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, String labelKey) {
         graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
         if (loc != null) {
-            ItemStack stack = ItemResolver.resolve(loc);
+            ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             if (stack != null) {
                 graphics.renderItem(stack, x + (SLOT - 16) / 2, y + (SLOT - 16) / 2);
             } else {

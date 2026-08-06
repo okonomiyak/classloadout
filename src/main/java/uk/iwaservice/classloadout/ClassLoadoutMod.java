@@ -37,6 +37,7 @@ public class ClassLoadoutMod {
     private void registerAttributes(net.minecraftforge.event.entity.EntityAttributeCreationEvent event) {
         event.put(ModRegistry.HEALTH_PACK.get(), uk.iwaservice.classloadout.resupply.AbstractResupplyPackEntity.createAttributes().build());
         event.put(ModRegistry.AMMO_PACK.get(), uk.iwaservice.classloadout.resupply.AbstractResupplyPackEntity.createAttributes().build());
+        event.put(ModRegistry.COVER.get(), uk.iwaservice.classloadout.cover.CoverEntity.createAttributes().build());
     }
 
     private void buildCreativeTabs(net.minecraftforge.event.BuildCreativeModeTabContentsEvent event) {
@@ -45,6 +46,10 @@ public class ClassLoadoutMod {
             event.accept(ModRegistry.AMMO_PACK_ITEM.get());
             event.accept(ModRegistry.THROWN_HEALTH_PACK_ITEM.get());
             event.accept(ModRegistry.THROWN_AMMO_PACK_ITEM.get());
+            event.accept(ModRegistry.COVER_ITEM.get());
+            event.accept(ModRegistry.BANDAGE_ITEM.get());
+        } else if (event.getTabKey() == net.minecraft.world.item.CreativeModeTabs.FUNCTIONAL_BLOCKS) {
+            event.accept(ModRegistry.LOADOUT_STATION_ITEM.get());
         }
     }
 }

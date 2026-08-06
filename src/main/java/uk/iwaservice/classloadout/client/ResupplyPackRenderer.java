@@ -1,35 +1,44 @@
 package uk.iwaservice.classloadout.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import uk.iwaservice.classloadout.resupply.AbstractResupplyPackEntity;
-
-import java.util.function.Supplier;
+import net.minecraftforge.registries.RegistryObject;
 
 /**
- * No 3D model - just a slowly spinning, bobbing render of the pack's own
- * item icon (the same technique squadtp's {@code RespawnBeaconRenderer}
- * uses), plus the standard nametag/hurt-flash from {@link EntityRenderer}.
- * One class shared by both pack types via the {@code iconStack} supplier -
- * only the icon differs.
+ * Renders the pack's own item model - same technique as squadtp's
+ * {@code RespawnBeaconRenderer} (draw the item's registered model via
+ * {@link net.minecraft.client.renderer.entity.ItemRenderer}), plus the
+ * standard nametag/hurt-flash from {@link EntityRenderer}. The item's model
+ * is a full Blockbench box (see {@code models/item/health_pack.json} /
+ * {@code ammo_pack.json}), not a flat icon, so this renders as a real 3D
+ * prop sitting on the ground rather than a floating icon. Generic over any
+ * placed entity that should render this way - shared by the resupply packs
+ * and {@code CoverEntity} alike; only the item differs.
+ *
+ * <p>{@code ItemRenderer.render(...)} unconditionally re-translates by
+ * (-0.5,-0.5,-0.5) to center a [0,1]-space item/block model on the render
+ * origin. That alone centers X/Z correctly (the entity origin is already
+ * horizontally centered), but sinks the model half a block into the ground
+ * on Y, so only Y is pre-compensated here, back up to 0.
  */
-public class ResupplyPackRenderer<T extends AbstractResupplyPackEntity> extends EntityRenderer<T> {
+public class ResupplyPackRenderer<T extends Entity> extends EntityRenderer<T> {
 
     private static final ResourceLocation TEXTURE = new ResourceLocation("minecraft", "textures/misc/particles.png");
 
-    private final Supplier<ItemStack> iconStack;
+    private final RegistryObject<Item> item;
 
-    public ResupplyPackRenderer(EntityRendererProvider.Context context, Supplier<ItemStack> iconStack) {
+    public ResupplyPackRenderer(EntityRendererProvider.Context context, RegistryObject<Item> item) {
         super(context);
-        this.iconStack = iconStack;
+        this.item = item;
         this.shadowRadius = 0.3f;
     }
 
@@ -42,12 +51,10 @@ public class ResupplyPackRenderer<T extends AbstractResupplyPackEntity> extends 
     public void render(T entity, float entityYaw, float partialTicks,
                        PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         poseStack.pushPose();
-        double bob = Math.sin((entity.tickCount + partialTicks) / 10.0) * 0.1;
-        poseStack.translate(0.0, 0.7 + bob, 0.0);
-        poseStack.mulPose(Axis.YP.rotationDegrees((entity.tickCount + partialTicks) * 2.0f));
-        poseStack.scale(1.25f, 1.25f, 1.25f);
+        poseStack.translate(0.0, 0.5, 0.0);
 
-        Minecraft.getInstance().getItemRenderer().renderStatic(iconStack.get(), ItemDisplayContext.GROUND,
+        ItemStack stack = new ItemStack(item.get());
+        Minecraft.getInstance().getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED,
                 packedLight, OverlayTexture.NO_OVERLAY, poseStack, buffer, entity.level(), entity.getId());
         poseStack.popPose();
 

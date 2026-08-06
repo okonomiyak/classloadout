@@ -177,7 +177,7 @@ public class LoadoutScreen extends Screen {
     private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, String labelKey) {
         graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
         if (loc != null) {
-            ItemStack stack = ItemResolver.resolve(loc);
+            ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             if (stack != null) {
                 graphics.renderItem(stack, x + (SLOT - ICON) / 2, y + (SLOT - ICON) / 2);
             } else {
@@ -192,7 +192,7 @@ public class LoadoutScreen extends Screen {
             graphics.fill(x, y, x + ICON, y + ICON, 0x30FFFFFF);
             return;
         }
-        ItemStack resolved = ItemResolver.resolve(loc);
+        ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
         graphics.renderItem(resolved != null ? resolved : new ItemStack(Items.BARRIER), x, y);
     }
 

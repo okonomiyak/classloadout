@@ -2,12 +2,20 @@ package uk.iwaservice.classloadout;
 
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.material.MapColor;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
+import uk.iwaservice.classloadout.cover.CoverEntity;
+import uk.iwaservice.classloadout.cover.CoverPlacerItem;
 import uk.iwaservice.classloadout.resupply.AmmoPackEntity;
+import uk.iwaservice.classloadout.resupply.BandageItem;
 import uk.iwaservice.classloadout.resupply.HealthPackEntity;
 import uk.iwaservice.classloadout.resupply.ResupplyPackPlacerItem;
 import uk.iwaservice.classloadout.resupply.ThrowableResupplyItem;
@@ -17,8 +25,19 @@ import uk.iwaservice.classloadout.resupply.ThrownHealthPackEntity;
 public final class ModRegistry {
 
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, ClassLoadoutMod.MODID);
+    public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, ClassLoadoutMod.MODID);
     public static final DeferredRegister<EntityType<?>> ENTITY_TYPES =
             DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, ClassLoadoutMod.MODID);
+
+    // --- loadout station (right-click to open the loadout screen without dying) ---
+
+    public static final RegistryObject<Block> LOADOUT_STATION = BLOCKS.register("loadout_station",
+            () -> new Block(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.WOOD)
+                    .strength(2.5F)
+                    .sound(SoundType.WOOD)));
+    public static final RegistryObject<Item> LOADOUT_STATION_ITEM = ITEMS.register("loadout_station",
+            () -> new BlockItem(LOADOUT_STATION.get(), new Item.Properties()));
 
     // --- placed resupply packs (right-click to place, stronger, combat-destroyable - see AbstractResupplyPackEntity) ---
 
@@ -68,8 +87,27 @@ public final class ModRegistry {
             () -> new ThrowableResupplyItem(new Item.Properties().stacksTo(1),
                     (level, player) -> new ThrownAmmoPackEntity(level, player)));
 
+    // --- placed cover (right-click to place, high-HP crouch barrier - see CoverEntity) ---
+
+    public static final RegistryObject<EntityType<CoverEntity>> COVER = ENTITY_TYPES.register(
+            "cover",
+            () -> EntityType.Builder.<CoverEntity>of(CoverEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.25f)
+                    .clientTrackingRange(10)
+                    .updateInterval(20)
+                    .fireImmune()
+                    .build("cover"));
+    public static final RegistryObject<Item> COVER_ITEM = ITEMS.register("cover",
+            () -> new CoverPlacerItem(new Item.Properties()));
+
+    // --- self-heal item (right-click to instantly heal yourself, consumed on use) ---
+
+    public static final RegistryObject<Item> BANDAGE_ITEM = ITEMS.register("bandage",
+            () -> new BandageItem(new Item.Properties().stacksTo(16)));
+
     public static void register(IEventBus modBus) {
         ITEMS.register(modBus);
+        BLOCKS.register(modBus);
         ENTITY_TYPES.register(modBus);
     }
 

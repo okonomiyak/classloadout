@@ -6,6 +6,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
 import uk.iwaservice.classloadout.ItemResolver;
+import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 
 import java.util.ArrayList;
@@ -16,14 +17,16 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * The full pool of items an OP can browse when curating a slot whitelist or
- * editing a preset: every registered item in the {@code tacz},
- * {@code superbwarfare}, {@code minecraft} and {@code classloadout}
- * (the mod's own resupply pack items) namespaces, plus - if TACZ is loaded -
- * every individual TACZ gun id (TACZ doesn't register one item per gun; see
- * {@link TaczCompat}). Shared by {@link ItemPickerScreen} and
- * {@link WhitelistEditorScreen} so both grids list and search the exact same
- * candidates.
+ * The full pool of items an OP can browse when curating a slot whitelist,
+ * editing a preset, or picking an ammo grant's ammo item: every registered
+ * item in the {@code tacz}, {@code superbwarfare}, {@code minecraft} and
+ * {@code classloadout} (the mod's own resupply pack items) namespaces, plus -
+ * if TACZ is loaded - every individual TACZ gun id and every individual TACZ
+ * ammo id (TACZ doesn't register one item per gun or per ammo type; see
+ * {@link TaczCompat}), plus every OP-registered "exact held item" variant
+ * (see {@link LoadoutClientData#getItemVariants()}). Shared by
+ * {@link ItemPickerScreen} and {@link WhitelistEditorScreen} so both grids
+ * list and search the exact same candidates.
  */
 final class ItemCatalog {
 
@@ -39,6 +42,8 @@ final class ItemCatalog {
             set.add(loc);
         }
         set.addAll(TaczCompat.allGunIds());
+        set.addAll(TaczCompat.allAmmoIds());
+        set.addAll(LoadoutClientData.getItemVariants().keySet());
         List<ResourceLocation> list = new ArrayList<>(set);
         list.sort(Comparator.comparing(ResourceLocation::toString));
         return list;
@@ -51,7 +56,7 @@ final class ItemCatalog {
         }
         List<ResourceLocation> filtered = new ArrayList<>();
         for (ResourceLocation loc : items) {
-            ItemStack stack = ItemResolver.resolve(loc);
+            ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             String displayName = stack == null ? "" : stack.getHoverName().getString().toLowerCase(Locale.ROOT);
             if (loc.getPath().contains(q) || displayName.contains(q)) {
                 filtered.add(loc);

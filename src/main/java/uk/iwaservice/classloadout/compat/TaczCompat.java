@@ -19,7 +19,9 @@ import java.util.List;
  * {@code GunId} NBT tag selecting which one it actually is, resolved via
  * TACZ's data-driven gun index. {@link #isGunId} / {@link #buildGunStack} /
  * {@link #allGunIds} let the rest of the mod treat a gun id exactly like any
- * other selectable {@link ResourceLocation}.
+ * other selectable {@link ResourceLocation}. Ammo works the same way (one
+ * generic ammo item + an {@code AmmoId} NBT tag) - {@link #isAmmoId} /
+ * {@link #buildAmmoStack} / {@link #allAmmoIds} are the ammo equivalents.
  */
 public final class TaczCompat {
 
@@ -43,7 +45,7 @@ public final class TaczCompat {
     /** Builds a fully-configured ItemStack for the given gun id, or null if it isn't a known gun (or TACZ isn't installed). */
     @Nullable
     public static ItemStack buildGunStack(ResourceLocation id) {
-        if (!isLoaded()) {
+        if (!isLoaded() || !uk.iwaservice.classloadout.compat.tacz.TaczGunResolver.isGunId(id)) {
             return null;
         }
         return uk.iwaservice.classloadout.compat.tacz.TaczGunResolver.buildStack(id);
@@ -55,6 +57,28 @@ public final class TaczCompat {
             return List.of();
         }
         return uk.iwaservice.classloadout.compat.tacz.TaczGunResolver.allGunIds();
+    }
+
+    /** True if {@code id} is a registered TACZ ammo id (as opposed to a plain item id). */
+    public static boolean isAmmoId(ResourceLocation id) {
+        return isLoaded() && uk.iwaservice.classloadout.compat.tacz.TaczAmmoResolver.isAmmoId(id);
+    }
+
+    /** Builds a fully-configured ItemStack for the given ammo id, or null if it isn't a known ammo type (or TACZ isn't installed). */
+    @Nullable
+    public static ItemStack buildAmmoStack(ResourceLocation id) {
+        if (!isLoaded() || !uk.iwaservice.classloadout.compat.tacz.TaczAmmoResolver.isAmmoId(id)) {
+            return null;
+        }
+        return uk.iwaservice.classloadout.compat.tacz.TaczAmmoResolver.buildStack(id);
+    }
+
+    /** Every registered TACZ ammo id; empty if TACZ isn't installed. */
+    public static List<ResourceLocation> allAmmoIds() {
+        if (!isLoaded()) {
+            return List.of();
+        }
+        return uk.iwaservice.classloadout.compat.tacz.TaczAmmoResolver.allAmmoIds();
     }
 
     private TaczCompat() {}

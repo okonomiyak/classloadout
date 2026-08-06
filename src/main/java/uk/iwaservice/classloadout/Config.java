@@ -21,6 +21,13 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue THROW_PACK_LIFETIME_SECONDS;
     public static final ForgeConfigSpec.IntValue THROW_COOLDOWN_SECONDS;
 
+    public static final ForgeConfigSpec.IntValue BANDAGE_HEAL_AMOUNT;
+
+    public static final ForgeConfigSpec.IntValue COVER_LIFETIME_SECONDS;
+    public static final ForgeConfigSpec.IntValue MAX_ACTIVE_COVERS_PER_PLAYER;
+
+    public static final ForgeConfigSpec.BooleanValue CLEAR_INVENTORY_ON_DEATH;
+
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
 
@@ -41,7 +48,7 @@ public final class Config {
                 .defineInRange("resupplyAmmoPerTick", 10, 1, 1000);
         PACK_LIFETIME_SECONDS = b
                 .comment("Seconds a placed resupply pack lasts before it self-destructs.")
-                .defineInRange("packLifetimeSeconds", 60, 5, 3600);
+                .defineInRange("packLifetimeSeconds", 20, 5, 3600);
         MAX_ACTIVE_PACKS_PER_PLAYER = b
                 .comment("Maximum resupply packs a single player may have active at once. Shared between placed",
                         "packs and landed thrown packs (see the throwable section below) - they count together.")
@@ -72,6 +79,35 @@ public final class Config {
                 .comment("Seconds before the same player can throw another pack. The item is not consumed on",
                         "throw - only this cooldown gates repeated use, matching vanilla's ender pearl cooldown.")
                 .defineInRange("throwCooldownSeconds", 15, 0, 600);
+        b.pop();
+
+        b.push("bandage");
+        BANDAGE_HEAL_AMOUNT = b
+                .comment("Health points (half-hearts) restored instantly by a bandage. Single-use - the item is",
+                        "consumed on use (unless the player is in creative mode). Only usable while missing health.")
+                .defineInRange("bandageHealAmount", 10, 1, 40);
+        b.pop();
+
+        b.push("cover");
+        COVER_LIFETIME_SECONDS = b
+                .comment("Seconds a placed cover (high-HP crouch barrier) lasts before it self-destructs.",
+                        "Much longer than a resupply pack's lifetime by design - it's a defensive structure,",
+                        "not a consumable.")
+                .defineInRange("coverLifetimeSeconds", 600, 5, 7200);
+        MAX_ACTIVE_COVERS_PER_PLAYER = b
+                .comment("Maximum covers a single player may have active at once.")
+                .defineInRange("maxActiveCoversPerPlayer", 2, 1, 20);
+        b.pop();
+
+        b.push("death");
+        CLEAR_INVENTORY_ON_DEATH = b
+                .comment("If true, a player's entire inventory (main inventory, armor, offhand) is wiped on",
+                        "respawn, except items on the OP-curated protected-items list (/class protect). Runs",
+                        "before the personal loadout is re-equipped into hotbar slots 0-4, so loadout gear",
+                        "always reappears regardless of this setting. Intended for use with the keepInventory",
+                        "gamerule turned on - if it's off, vanilla already drops (and permanently loses) items,",
+                        "protected or not, before this ever runs.")
+                .define("clearInventoryOnDeath", true);
         b.pop();
 
         SPEC = b.build();

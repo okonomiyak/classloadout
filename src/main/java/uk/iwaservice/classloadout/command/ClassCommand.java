@@ -1,6 +1,7 @@
 package uk.iwaservice.classloadout.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -14,6 +15,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import uk.iwaservice.classloadout.ServerEvents;
 import uk.iwaservice.classloadout.loadout.ClassDefinition;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
@@ -32,7 +35,8 @@ import java.util.UUID;
  * (editor/save/delete), OP-curated per-slot <b>whitelists</b> (whitelist
  * .../add/remove), and each player's own self-service <b>personal
  * loadout</b> (assign/select/clear) - the personal loadout, not any preset,
- * is what actually gets equipped on respawn. {@code select} applies a
+ * is what actually gets equipped, immediately (via {@link ServerEvents#equipLoadout})
+ * as well as on every respawn. {@code select} applies a
  * preset's five items into the player's own loadout as a starting point.
  * {@code assign} is checked against that slot's whitelist server-side -
  * the item picker only ever offers whitelisted items, but this is the
@@ -72,7 +76,38 @@ public final class ClassCommand {
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                                 .then(Commands.argument("item", ResourceLocationArgument.id())
-                                        .executes(ctx -> whitelistRemove(ctx))))))
+                                        .executes(ctx -> whitelistRemove(ctx)))))
+                        .then(Commands.literal("add_held")
+                                .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
+                                        .executes(ctx -> whitelistAddHeld(ctx))))
+                        .then(Commands.literal("register_held")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> whitelistRegisterHeld(ctx))))
+                        .then(Commands.literal("ammo")
+                                .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("ammoItem", ResourceLocationArgument.id())
+                                .then(Commands.argument("count", IntegerArgumentType.integer(0))
+                                        .executes(ctx -> whitelistAmmo(ctx))))))))
+                .then(Commands.literal("protect")
+                        .requires(src -> src.hasPermission(2))
+                        .executes(ctx -> protectEditor(ctx))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> protectAdd(ctx))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> protectRemove(ctx)))))
+                .then(Commands.literal("spawnkit")
+                        .requires(src -> src.hasPermission(2))
+                        .executes(ctx -> spawnKitEditor(ctx))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("count", IntegerArgumentType.integer(0))
+                                        .executes(ctx -> spawnKitAdd(ctx)))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> spawnKitRemove(ctx)))))
                 .then(Commands.literal("assign")
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -155,6 +190,117 @@ public final class ClassCommand {
     }
 
     /**
+     * Whitelists the exact item (item, count and full tag - enchantments, custom name,
+     * TACZ gun attachments, ...) currently in the OP's main hand, under a fresh synthetic
+     * id, instead of just the bare item type. Sent by the whitelist editor's "Add Held
+     * Item" button, not typed by hand.
+     */
+    private static int whitelistAddHeld(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        LoadoutSlot slot = parseSlot(ctx);
+        if (slot == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
+        }
+        ItemStack held = player.getMainHandItem();
+        if (held.isEmpty()) {
+            return fail(ctx, "classloadout.msg.hand_empty");
+        }
+        Component heldName = held.getHoverName();
+        LoadoutManager.get(ctx.getSource().getServer()).addHeldItemToWhitelist(ctx.getSource().getServer(), slot, held);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.held_item_whitelisted", heldName), true);
+        return 1;
+    }
+
+    /**
+     * Registers the exact item in the OP's main hand as a reusable NBT-bearing variant,
+     * under a client-supplied id (so the ammo grant popup that sent this command knows the
+     * resulting id right away), without whitelisting it anywhere - used to pick a specific
+     * NBT-bearing ammo item for an ammo grant's {@code ammoItem}, not a whitelist entry.
+     */
+    private static int whitelistRegisterHeld(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        ItemStack held = player.getMainHandItem();
+        if (held.isEmpty()) {
+            return fail(ctx, "classloadout.msg.hand_empty");
+        }
+        Component heldName = held.getHoverName();
+        LoadoutManager.get(ctx.getSource().getServer()).registerItemVariant(ctx.getSource().getServer(), id, held);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.held_item_registered", heldName), true);
+        return 1;
+    }
+
+    /**
+     * Attaches (or, with count 0, clears) an ammo grant to an already-whitelisted
+     * (slot, item) pair: equipping that item on respawn will also give the
+     * player {@code count} of {@code ammoItem} into their general inventory.
+     */
+    private static int whitelistAmmo(CommandContext<CommandSourceStack> ctx) {
+        LoadoutSlot slot = parseSlot(ctx);
+        if (slot == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
+        }
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        if (!manager.isWhitelisted(slot, item)) {
+            return fail(ctx, "classloadout.msg.not_whitelisted", item.toString());
+        }
+        ResourceLocation ammoItem = ResourceLocationArgument.getId(ctx, "ammoItem");
+        int count = IntegerArgumentType.getInteger(ctx, "count");
+        if (count <= 0) {
+            manager.clearAmmoGrant(ctx.getSource().getServer(), slot, item);
+            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.ammo_grant_cleared", item.toString()), true);
+        } else {
+            manager.setAmmoGrant(ctx.getSource().getServer(), slot, item, ammoItem, count);
+            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.ammo_grant_set",
+                    item.toString(), count, ammoItem.toString()), true);
+        }
+        return 1;
+    }
+
+    /** Opens the OP-only protected-items editor client-side; permission already enforced by the command node. */
+    private static int protectEditor(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NetworkHandler.sendOpenProtectedItemsEditor(ctx.getSource().getPlayerOrException());
+        return 1;
+    }
+
+    private static int protectAdd(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).addProtectedItem(ctx.getSource().getServer(), item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.protect_added", item.toString()), true);
+        return 1;
+    }
+
+    private static int protectRemove(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).removeProtectedItem(ctx.getSource().getServer(), item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.protect_removed", item.toString()), true);
+        return 1;
+    }
+
+    /** Opens the OP-only spawn kit editor client-side; permission already enforced by the command node. */
+    private static int spawnKitEditor(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NetworkHandler.sendOpenSpawnKitEditor(ctx.getSource().getPlayerOrException());
+        return 1;
+    }
+
+    /** count 0 removes the entry instead (matches /class whitelist ammo's convention). */
+    private static int spawnKitAdd(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        int count = IntegerArgumentType.getInteger(ctx, "count");
+        LoadoutManager.get(ctx.getSource().getServer()).setSpawnKitEntry(ctx.getSource().getServer(), item, count);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.spawnkit_set", count, item.toString()), true);
+        return 1;
+    }
+
+    private static int spawnKitRemove(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).removeSpawnKitEntry(ctx.getSource().getServer(), item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.spawnkit_removed", item.toString()), true);
+        return 1;
+    }
+
+    /**
      * Player self-service: assigns (or, with minecraft:air, clears) one slot
      * of their own loadout. The item must be on that slot's OP-curated
      * whitelist - this is the actual enforcement, not just the GUI filter.
@@ -171,6 +317,7 @@ public final class ClassCommand {
             return fail(ctx, "classloadout.msg.not_whitelisted", item.toString());
         }
         manager.setSlot(ctx.getSource().getServer(), player, slot, item);
+        ServerEvents.equipLoadout(player);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.slot_set",
                 Component.translatable("classloadout.gui.slot_" + slot.key())), false);
         return 1;
@@ -186,6 +333,7 @@ public final class ClassCommand {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
         manager.applyPreset(ctx.getSource().getServer(), player, id);
+        ServerEvents.equipLoadout(player);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.preset_applied", def.name()), false);
         return 1;
     }
@@ -193,6 +341,7 @@ public final class ClassCommand {
     private static int clear(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         LoadoutManager.get(ctx.getSource().getServer()).clearPersonalLoadout(ctx.getSource().getServer(), player);
+        ServerEvents.equipLoadout(player);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.class_cleared"), false);
         return 1;
     }

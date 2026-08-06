@@ -10,6 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
+import uk.iwaservice.classloadout.loadout.AmmoGrant;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 
 import java.util.List;
@@ -94,8 +95,13 @@ public class WhitelistEditorScreen extends Screen {
         gridTop = tabY + TAB_H + 6 + SEARCH_H + 6;
         gridHeight = panelTop + panelHeight - PAD - 24 - gridTop;
 
+        int closeWidth = (panelWidth - 2 * PAD - 4) * 2 / 3;
+        int addHeldWidth = panelWidth - 2 * PAD - 4 - closeWidth;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
-                .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, panelWidth - 2 * PAD, 20).build());
+                .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, closeWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_add_held"),
+                        b -> command("class whitelist add_held " + selectedSlot.key()))
+                .bounds(panelLeft + PAD + closeWidth + 4, panelTop + panelHeight - PAD - 20, addHeldWidth, 20).build());
 
         updateShown();
     }
@@ -138,6 +144,14 @@ public class WhitelistEditorScreen extends Screen {
         if (index >= 0) {
             ResourceLocation item = shown.get(index);
             boolean whitelisted = LoadoutClientData.getWhitelist(selectedSlot).contains(item);
+            if (button == 1) {
+                // right-click: configure (or re-configure) an ammo grant, whitelisting first if needed
+                if (!whitelisted) {
+                    command("class whitelist add " + selectedSlot.key() + " " + item);
+                }
+                minecraft.setScreen(new AmmoGrantScreen(this, selectedSlot, item));
+                return true;
+            }
             String cmd = "class whitelist " + (whitelisted ? "remove " : "add ") + selectedSlot.key() + " " + item;
             command(cmd);
             return true;
@@ -185,6 +199,8 @@ public class WhitelistEditorScreen extends Screen {
         int hoveredX = 0;
         int hoveredY = 0;
         boolean hoveredWhitelisted = false;
+        boolean hoveredHasAmmoGrant = false;
+        boolean hoveredIsVariant = false;
         for (int index = 0; index < shown.size(); index++) {
             int col = index % COLS;
             int row = index / COLS;
@@ -195,6 +211,7 @@ public class WhitelistEditorScreen extends Screen {
             }
             ResourceLocation loc = shown.get(index);
             boolean whitelisted = whitelist.contains(loc);
+            AmmoGrant grant = LoadoutClientData.getAmmoGrant(selectedSlot, loc);
             boolean hovered = mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL
                     && mouseY >= gridTop && mouseY < gridTop + gridHeight;
             if (whitelisted) {
@@ -204,14 +221,22 @@ public class WhitelistEditorScreen extends Screen {
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
-            ItemStack resolved = ItemResolver.resolve(loc);
+            ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
+            if (grant != null) {
+                graphics.fill(x + CELL - 5, y + 1, x + CELL - 1, y + 5, 0xFFFFAA00);
+            }
+            if (LoadoutClientData.getItemVariants().containsKey(loc)) {
+                graphics.fill(x + 1, y + CELL - 5, x + 5, y + CELL - 1, 0xFF55AAFF);
+            }
             if (hovered) {
                 hoveredStack = stack;
                 hoveredX = mouseX;
                 hoveredY = mouseY;
                 hoveredWhitelisted = whitelisted;
+                hoveredHasAmmoGrant = grant != null;
+                hoveredIsVariant = LoadoutClientData.getItemVariants().containsKey(loc);
             }
         }
         graphics.disableScissor();
@@ -220,6 +245,12 @@ public class WhitelistEditorScreen extends Screen {
             Component name = hoveredStack.getHoverName().copy().append(hoveredWhitelisted
                     ? Component.translatable("classloadout.gui.whitelist_on")
                     : Component.translatable("classloadout.gui.whitelist_off"));
+            if (hoveredHasAmmoGrant) {
+                name = name.copy().append(Component.translatable("classloadout.gui.ammo_grant_marker"));
+            }
+            if (hoveredIsVariant) {
+                name = name.copy().append(Component.translatable("classloadout.gui.held_item_marker"));
+            }
             graphics.renderTooltip(this.font, name, hoveredX, hoveredY);
         }
 

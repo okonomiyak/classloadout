@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.ItemResolver;
+import uk.iwaservice.classloadout.client.LoadoutClientData;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -180,7 +181,7 @@ public class ItemPickerScreen extends Screen {
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
-            ItemStack resolved = index == 0 ? null : ItemResolver.resolve(shown.get(index - 1));
+            ItemStack resolved = index == 0 ? null : ItemResolver.resolve(shown.get(index - 1), LoadoutClientData.getItemVariants());
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
             if (hovered) {

@@ -1,12 +1,17 @@
 package uk.iwaservice.classloadout.client;
 
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import uk.iwaservice.classloadout.loadout.AmmoGrant;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -24,6 +29,10 @@ public final class LoadoutClientData {
     private static LoadoutSyncPacket.PersonalData personal =
             new LoadoutSyncPacket.PersonalData(null, null, null, null, null);
     private static LoadoutSyncPacket.Whitelists whitelists = EMPTY_WHITELISTS;
+    private static Map<LoadoutSlot, Map<ResourceLocation, AmmoGrant>> ammoGrants = Map.of();
+    private static Map<ResourceLocation, CompoundTag> itemVariants = Map.of();
+    private static List<ResourceLocation> protectedItems = List.of();
+    private static Map<ResourceLocation, Integer> spawnKit = Map.of();
     /** Incremented on every sync; lets screens detect updates cheaply. */
     private static int revision;
 
@@ -33,10 +42,30 @@ public final class LoadoutClientData {
 
     public static synchronized void applySync(List<LoadoutSyncPacket.Entry> newClasses,
                                               LoadoutSyncPacket.PersonalData newPersonal,
-                                              LoadoutSyncPacket.Whitelists newWhitelists) {
+                                              LoadoutSyncPacket.Whitelists newWhitelists,
+                                              List<LoadoutSyncPacket.AmmoGrantEntry> newAmmoGrants,
+                                              List<LoadoutSyncPacket.VariantEntry> newVariants,
+                                              List<ResourceLocation> newProtectedItems,
+                                              List<LoadoutSyncPacket.SpawnKitEntry> newSpawnKit) {
         classes = List.copyOf(newClasses);
         personal = newPersonal;
         whitelists = newWhitelists;
+        Map<LoadoutSlot, Map<ResourceLocation, AmmoGrant>> grants = new EnumMap<>(LoadoutSlot.class);
+        for (LoadoutSyncPacket.AmmoGrantEntry g : newAmmoGrants) {
+            grants.computeIfAbsent(g.slot(), s -> new HashMap<>()).put(g.item(), new AmmoGrant(g.ammoItem(), g.count()));
+        }
+        ammoGrants = grants;
+        Map<ResourceLocation, CompoundTag> variants = new HashMap<>();
+        for (LoadoutSyncPacket.VariantEntry v : newVariants) {
+            variants.put(v.id(), v.stack());
+        }
+        itemVariants = variants;
+        protectedItems = List.copyOf(newProtectedItems);
+        Map<ResourceLocation, Integer> kit = new HashMap<>();
+        for (LoadoutSyncPacket.SpawnKitEntry s : newSpawnKit) {
+            kit.put(s.item(), s.count());
+        }
+        spawnKit = kit;
         revision++;
     }
 
@@ -44,6 +73,10 @@ public final class LoadoutClientData {
         classes = List.of();
         personal = new LoadoutSyncPacket.PersonalData(null, null, null, null, null);
         whitelists = EMPTY_WHITELISTS;
+        ammoGrants = Map.of();
+        itemVariants = Map.of();
+        protectedItems = List.of();
+        spawnKit = Map.of();
         revision++;
     }
 
@@ -67,6 +100,25 @@ public final class LoadoutClientData {
 
     public static synchronized List<ResourceLocation> getWhitelist(LoadoutSlot slot) {
         return whitelists.get(slot);
+    }
+
+    @Nullable
+    public static synchronized AmmoGrant getAmmoGrant(LoadoutSlot slot, ResourceLocation item) {
+        Map<ResourceLocation, AmmoGrant> bySlot = ammoGrants.get(slot);
+        return bySlot == null ? null : bySlot.get(item);
+    }
+
+    /** Client-side mirror of {@code LoadoutManager.getItemVariants()}; used to resolve slot/whitelist ids back into real ItemStacks. */
+    public static synchronized Map<ResourceLocation, CompoundTag> getItemVariants() {
+        return itemVariants;
+    }
+
+    public static synchronized List<ResourceLocation> getProtectedItems() {
+        return protectedItems;
+    }
+
+    public static synchronized Map<ResourceLocation, Integer> getSpawnKit() {
+        return spawnKit;
     }
 
     private LoadoutClientData() {}

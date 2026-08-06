@@ -1,5 +1,6 @@
 package uk.iwaservice.classloadout.network;
 
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
@@ -21,9 +22,25 @@ import java.util.UUID;
  * preset, the slot whitelists change, or the player's own loadout changes:
  * the full preset roster and the five slot whitelists (same for everyone),
  * plus that one recipient's own personal loadout (never someone else's -
- * each player gets a packet built specifically for them).
+ * each player gets a packet built specifically for them), plus the
+ * OP-curated protected-items list and spawn kit (exempt from the on-death
+ * inventory clear / granted on every respawn - same for everyone).
  */
-public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whitelists whitelists) {
+public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whitelists whitelists,
+                                List<AmmoGrantEntry> ammoGrants, List<VariantEntry> variants,
+                                List<ResourceLocation> protectedItems, List<SpawnKitEntry> spawnKit) {
+
+    /** One OP-configured ammo grant: equipping {@code item} in {@code slot} also gives {@code count} of {@code ammoItem}. */
+    public record AmmoGrantEntry(LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
+    }
+
+    /** One OP-configured spawn kit entry: every player gets {@code count} of {@code item} on every respawn. */
+    public record SpawnKitEntry(ResourceLocation item, int count) {
+    }
+
+    /** One OP-registered "exact held item" whitelist entry - see {@link uk.iwaservice.classloadout.loadout.LoadoutManager#addHeldItemToWhitelist}. */
+    public record VariantEntry(ResourceLocation id, CompoundTag stack) {
+    }
 
     public record Entry(UUID id, String name,
                         @Nullable ResourceLocation icon,
@@ -98,6 +115,24 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         writeList(buf, msg.whitelists.throwable());
         writeList(buf, msg.whitelists.gadget());
         writeList(buf, msg.whitelists.melee());
+        buf.writeVarInt(msg.ammoGrants.size());
+        for (AmmoGrantEntry g : msg.ammoGrants) {
+            buf.writeEnum(g.slot());
+            buf.writeResourceLocation(g.item());
+            buf.writeResourceLocation(g.ammoItem());
+            buf.writeVarInt(g.count());
+        }
+        buf.writeVarInt(msg.variants.size());
+        for (VariantEntry v : msg.variants) {
+            buf.writeResourceLocation(v.id());
+            buf.writeNbt(v.stack());
+        }
+        writeList(buf, msg.protectedItems);
+        buf.writeVarInt(msg.spawnKit.size());
+        for (SpawnKitEntry s : msg.spawnKit) {
+            buf.writeResourceLocation(s.item());
+            buf.writeVarInt(s.count());
+        }
     }
 
     public static LoadoutSyncPacket decode(FriendlyByteBuf buf) {
@@ -117,7 +152,31 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         PersonalData personal = new PersonalData(readOptional(buf), readOptional(buf), readOptional(buf),
                 readOptional(buf), readOptional(buf));
         Whitelists whitelists = new Whitelists(readList(buf), readList(buf), readList(buf), readList(buf), readList(buf));
-        return new LoadoutSyncPacket(classes, personal, whitelists);
+        int ammoGrantCount = buf.readVarInt();
+        List<AmmoGrantEntry> ammoGrants = new ArrayList<>(ammoGrantCount);
+        for (int i = 0; i < ammoGrantCount; i++) {
+            LoadoutSlot slot = buf.readEnum(LoadoutSlot.class);
+            ResourceLocation item = buf.readResourceLocation();
+            ResourceLocation ammoItem = buf.readResourceLocation();
+            int grantCount = buf.readVarInt();
+            ammoGrants.add(new AmmoGrantEntry(slot, item, ammoItem, grantCount));
+        }
+        int variantCount = buf.readVarInt();
+        List<VariantEntry> variants = new ArrayList<>(variantCount);
+        for (int i = 0; i < variantCount; i++) {
+            ResourceLocation id = buf.readResourceLocation();
+            CompoundTag stack = buf.readNbt();
+            variants.add(new VariantEntry(id, stack == null ? new CompoundTag() : stack));
+        }
+        List<ResourceLocation> protectedItems = readList(buf);
+        int spawnKitCount = buf.readVarInt();
+        List<SpawnKitEntry> spawnKit = new ArrayList<>(spawnKitCount);
+        for (int i = 0; i < spawnKitCount; i++) {
+            ResourceLocation item = buf.readResourceLocation();
+            int itemCount = buf.readVarInt();
+            spawnKit.add(new SpawnKitEntry(item, itemCount));
+        }
+        return new LoadoutSyncPacket(classes, personal, whitelists, ammoGrants, variants, protectedItems, spawnKit);
     }
 
     private static void writeOptional(FriendlyByteBuf buf, @Nullable ResourceLocation loc) {
