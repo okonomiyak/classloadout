@@ -80,21 +80,26 @@ public class ClassEditorScreen extends Screen {
 
     @Override
     protected void init() {
-        panelWidth = Math.min(420, this.width - 16);
+        panelWidth = Math.min(520, this.width - 16);
         panelHeight = Math.min(300, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
         dataRevision = LoadoutClientData.getRevision();
 
+        int navW = 84;
+        int navGap = 4;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.protect_button"),
                         b -> minecraft.setScreen(new ProtectedItemsEditorScreen()))
-                .bounds(panelLeft + panelWidth - PAD - 90, panelTop + 2, 90, 20).build());
+                .bounds(panelLeft + panelWidth - PAD - navW, panelTop + 2, navW, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_button"),
                         b -> minecraft.setScreen(new WhitelistEditorScreen()))
-                .bounds(panelLeft + panelWidth - PAD - 90 - 94, panelTop + 2, 90, 20).build());
+                .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 2 + navGap, panelTop + 2, navW, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.spawnkit_button"),
                         b -> minecraft.setScreen(new SpawnKitEditorScreen()))
-                .bounds(panelLeft + panelWidth - PAD - 90 - 94 - 94, panelTop + 2, 90, 20).build());
+                .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 3 + navGap, panelTop + 2, navW, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.hammerblocks_button"),
+                        b -> minecraft.setScreen(new HammerBlocksEditorScreen()))
+                .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 4 + navGap, panelTop + 2, navW, 20).build());
 
         buildLeftColumn();
         if (editing) {

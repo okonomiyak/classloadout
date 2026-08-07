@@ -1,12 +1,11 @@
 package uk.iwaservice.classloadout.cover;
 
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
@@ -21,15 +20,23 @@ import java.util.UUID;
  * resupply packs ({@link uk.iwaservice.classloadout.resupply.AbstractResupplyPackEntity}):
  * same "no-AI {@link PathfinderMob}, no Block/BlockEntity/blockstate needed"
  * technique, but it does nothing on its own besides sit there and soak
- * damage. 1000 HP is a fixed design constant (not config-driven) because
- * {@link net.minecraftforge.event.entity.EntityAttributeCreationEvent} fires
+ * damage. Same as the resupply packs, anyone can destroy it (no
+ * {@code hurt()} override at all; it just uses the default damage handling) -
+ * it's a placed prop on the battlefield, not personal property.
+ *
+ * <p>Max health is config-driven ({@code Config.COVER_MAX_HEALTH}), but
+ * can't be baked into {@link #createAttributes()} - that runs once at
+ * mod-load time via {@link net.minecraftforge.event.entity.EntityAttributeCreationEvent},
  * before the server config is loaded, so {@link Config} values aren't
- * readable yet at attribute-registration time - see how the resupply packs'
- * own 1.0 HP is likewise hardcoded in {@code createAttributes()}.
+ * readable there yet (see how the resupply packs' own 1.0 HP is likewise
+ * hardcoded in their {@code createAttributes()}). Instead, the constructor -
+ * which runs per-instance, well after the config is loaded - overrides the
+ * attribute's base value and current health directly from config.
  */
 public class CoverEntity extends PathfinderMob {
 
-    private static final double MAX_HEALTH = 1000.0;
+    /** Template default for {@link #createAttributes()}; immediately overridden per-instance from config below. */
+    private static final double DEFAULT_MAX_HEALTH = 1000.0;
 
     @Nullable
     private UUID ownerId;
@@ -39,11 +46,17 @@ public class CoverEntity extends PathfinderMob {
         super(type, level);
         this.setNoAi(true);
         this.setPersistenceRequired();
+        double maxHealth = Config.COVER_MAX_HEALTH.get();
+        AttributeInstance maxHealthAttribute = this.getAttribute(Attributes.MAX_HEALTH);
+        if (maxHealthAttribute != null) {
+            maxHealthAttribute.setBaseValue(maxHealth);
+        }
+        this.setHealth((float) maxHealth);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes()
-                .add(Attributes.MAX_HEALTH, MAX_HEALTH)
+                .add(Attributes.MAX_HEALTH, DEFAULT_MAX_HEALTH)
                 .add(Attributes.MOVEMENT_SPEED, 0.0)
                 .add(Attributes.FOLLOW_RANGE, 0.0);
     }
@@ -82,20 +95,6 @@ public class CoverEntity extends PathfinderMob {
     @Override
     public boolean causeFallDamage(float distance, float multiplier, DamageSource source) {
         return false; // don't die to fall damage right after being placed
-    }
-
-    /** friendlyOnlyDestroy: only the owner can land a hit that actually does anything. */
-    @Override
-    public boolean hurt(DamageSource source, float amount) {
-        if (level().isClientSide) {
-            return false;
-        }
-        Entity attacker = source.getEntity();
-        if (Config.FRIENDLY_ONLY_DESTROY.get() && ownerId != null
-                && !(attacker instanceof ServerPlayer player && player.getUUID().equals(ownerId))) {
-            return false;
-        }
-        return super.hurt(source, amount);
     }
 
     @Override

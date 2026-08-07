@@ -14,7 +14,7 @@
 
 ## 現在のgit状態(★重要★)
 
-**2026-08-06、ユーザー指示によりコミット・push・リリース済み。** それまで複数セッション分蓄積されていた未コミット変更(下記の全項目)を1コミット`b7abb74`("Add loadout station docs, cover barrier, spawn kit, ammo grants, and death-clear inventory reset")にまとめて`origin/main`へpush、`gradle.properties`の`mod_version`を`0.1.0`→`0.2.0`に上げた上で`v0.2.0`タグ+GitHub Release(ビルド済みjar添付)を作成済み。以後の変更は再びこのセクションで追跡すること。
+**2026-08-06、v0.2.0としてコミット・push・リリース済み**(コミット`b7abb74`、タグ`v0.2.0`)。**その後2026-08-07に追加した「ハンマー範囲破壊」機能(下記参照)はまだ未コミット。** ユーザーから明示的なコミット・push指示が出たら、これも前回同様まとめてコミットしてよいか確認すること。
 
 ## 動作確認の状況(2026-07-21時点)
 
@@ -169,9 +169,62 @@
 - `gradlew build`成功、`gradlew runServer`で例外なく`Done`到達確認済み
 - **実地確認は未実施**: OPがスポーンキットにアイテムを追加→ロードアウト未設定のプレイヤーも含めてリスポーンで配布されること、個数指定が正しく効くこと、既存のアイテムにスタックすること、を`runClient`で確認する必要あり
 
+## ハンマー範囲破壊機能の追加(2026-08-07)
+
+ユーザー指示「ハンマーで爆破のように指定されたブロックだけを破壊できるようにして」→「ハンマーはSuperBのを使って」(SuperbWarfareの既存ハンマーアイテムを使う指示)。実装前に`javap`でSuperbWarfareの`HammerItem`(`com.atsuishio.superbwarfare.item.weapon.HammerItem`、`SwordItem`継承)を調査したところ、**採掘・範囲破壊ロジックは一切無い**(純粋な近接武器、bettercombat連携のみ)ことを確認。つまり範囲破壊機能はclassloadout側で新規実装する必要があった。
+
+**重要な発見**: SuperbWarfareのハンマー各種(`hammer`/`golden_hammer`/`steel_hammer`/`diamond_hammer`/`cemented_carbide_hammer`/`netherite_hammer`)は全て汎用アイテムタグ`#forge:tools/hammer`(データ駆動、SuperbWarfare本体が定義)に登録済み。このタグは**データパック由来でJavaクラス参照が不要**なため、`compat/SuperbWarfareCompat`のような`ModList.isLoaded`ガード無しで安全に参照できる(SuperbWarfare未導入ならタグが単に空になるだけ)。既存のTACZ/SuperbWarfare連携とは異なる、より軽量な連携方法。
+
+設計(ユーザーへの確認は省略、既存パターンから妥当な既定値で実装):
+- OP-curated「ハンマー範囲破壊の対象ブロック」ホワイトリスト(除外アイテムと同型、ブロック版)
+- 破壊したブロック自体もホワイトリスト登録されている必要がある(でなければ通常のハンマーとして振る舞う)
+- 範囲は破壊地点中心の立方体(`hammerAoeRadius`、既定1=3x3x3)——「爆破のように」という表現に合わせて方向性の無い対称な範囲にした
+- ドロップはハンマー本体のエンチャント(幸運/シルクタッチ等)を反映(`Level.destroyBlock(pos, true, player)`がplayerの手持ちアイテムを見て計算するため自然に実現)
+
+実装:
+- `Config.HAMMER_AOE_RADIUS`(`hammer.hammerAoeRadius`、既定1、0〜4、0で無効化)
+- `LoadoutManager`に6つ目の管理対象として`hammerBlocks: Set<ResourceLocation>`(除外アイテムと全く同じ永続化・同期パターン、ただしブロックの登録名)
+- コマンド: `/class hammerblocks`(エディタを開く)、`/class hammerblocks add/remove <block>`
+- GUI: `client/gui/BlockCatalog.java`(新規、`ItemCatalog`のブロック版——アイテムと違い全namespace許可、`block.asItem() != AIR`のものだけ収録)+ `HammerBlocksEditorScreen`(`ProtectedItemsEditorScreen`と同型、赤枠でマーク)。プリセットエディタのナビゲーションボタンが4つ目に増えたため、パネル幅を420→520・ボタン幅90→84に調整
+- `ServerEvents.onBlockBreak`(新規`@SubscribeEvent`、`BlockEvent.BreakEvent`購読): プレイヤーのメインハンドが`#forge:tools/hammer`タグ持ち、かつ破壊したブロックがホワイトリスト登録済みなら、半径内の他のホワイトリスト登録ブロックも`serverLevel.destroyBlock(pos, true, player)`で破壊。`Level.destroyBlock()`は`BlockEvent.BreakEvent`を再発火しないため、無限連鎖のリスクは無い
+- README.md/README.ja.mdに新セクション「ハンマー範囲破壊」/「Hammer Area-of-Effect」、コマンド表・GUI節・config一覧・design notes・2人プレイテスト手順(14番目)を追記
+- `gradlew build`成功、`gradlew runServer`で例外なく`Done`到達確認済み
+- **実地確認は未実施**: SuperbWarfare導入環境で、ホワイトリスト登録ブロックをハンマーで破壊した際に範囲内の登録ブロックも一緒に壊れること・未登録ブロックは無傷であること・登録ブロックを起点にしない限り何も起きないことをGUI操作で確認する必要あり
+
+**余談**: 同じ会話内で「エンティティのはしご」(ラダーをエンティティとして実装できないか)も依頼されたが、Minecraftのクライミング判定がブロック状態(BlockState)ベースであり、エンティティ単体に同じ判定を持たせるのは技術的にかなり無理があること(プレイヤー移動処理を毎tick自前で書き換える必要がある等)を説明したところ、ユーザーが「諦めます」と撤回。実装はしていない。
+
+## 遮蔽物: 誰でも破壊可能化+HPのconfig化(2026-08-07)
+
+ユーザー指示「Coverを全員が壊せるようにして あとHPをconfigから変えられるようにして」。
+
+1. **誰でも破壊可能化**: `CoverEntity.hurt()`のオーバーライド(`friendlyOnlyDestroy`チェック)を丸ごと削除。デフォルトの`Mob`/`LivingEntity`の`hurt()`挙動(誰の攻撃でもダメージが通る)にフォールバックするだけ。遮蔽物は「個人の所有物」ではなく「戦場の中立な地形」という位置づけなので、補給パックと違って友軍制限を適用しない、という設計判断。
+
+2. **HPのconfig化**: 従来「`EntityAttributeCreationEvent`はサーバーconfigロードより前に発火するためConfig値が読めない」という理由でHP1000をハードコードしていたが、**この制約は`createAttributes()`(mod読み込み時に一度だけ呼ばれるテンプレート)にのみ当てはまり、エンティティの**コンストラクタ**(実際にゲーム中でインスタンスが作られる際、config読み込み後)には当てはまらない**ことに気づき、そちらで上書きする方式に変更。`CoverEntity`のコンストラクタで`this.getAttribute(Attributes.MAX_HEALTH).setBaseValue(Config.COVER_MAX_HEALTH.get())`+`this.setHealth(...)`を実行。`createAttributes()`側のテンプレート値(1000)は単なる初期値で、コンストラクタで即座に上書きされるため実質使われない。
+   - `Config.COVER_MAX_HEALTH`(`cover.coverMaxHealth`、既定1000、範囲1〜1024)を新設。**上限1024はバニラの`max_health`属性自体が持つハード上限**(全エンティティ共通、`RangedAttribute`で1.0〜1024.0と定義)のため、それより大きい値を設定してもクランプされてしまう——config側でも同じ上限にしておくことで「設定したのに反映されない」という混乱を防いだ
+   - 既存の設置済み遮蔽物(NBTに保存済み)は、バニラの`Attributes`タグ経由で設置時点のHPがそのまま復元されるため、**config変更は新規設置分にのみ反映**され、既存のものは遡って変わらない(意図通りの挙動、config変更で世界の状態が突然変わらないようにするため)
+- README.md/README.ja.mdの「遮蔽物」節・イントロ文言・config一覧・2人プレイテスト手順(10番目)を更新
+- `gradlew build`成功、`gradlew runServer`で`cover.coverMaxHealth`のデフォルト値生成含め例外なく`Done`到達確認済み
+- **実地確認は未実施**: 遮蔽物を設置した状態でOP以外のプレイヤー(設置者以外)が攻撃しても通ること、`coverMaxHealth`を変更して新規設置分にのみ反映されることをGUI操作で確認する必要あり
+
+## 補給パック(health_pack/ammo_pack)も誰でも破壊可能化+friendlyOnlyDestroy設定を完全撤去(2026-08-07)
+
+ユーザー指示「他のやつも他人が壊せるように」(直前のCoverの変更に続き、補給パックにも同じ変更を、という指示)。
+
+- `AbstractResupplyPackEntity.hurt()`のオーバーライド(`friendlyOnlyDestroy`チェック)を丸ごと削除。Coverと全く同じ変更(health_pack/ammo_packはこのクラスを継承しているため1ファイルの変更で両方に反映)
+- この時点で`Config.FRIENDLY_ONLY_DESTROY`(`resupply.friendlyOnlyDestroy`)を参照するコードが完全に無くなった(Coverも補給パックも使わなくなったため)ので、**config自体も削除**(未使用configを残さない方針)。既存の`serverconfig`ファイルに残る`friendlyOnlyDestroy = true`の行は起動時に無視されるだけで実害は無い
+- `CoverEntity.java`のjavadocコメント内に残っていた`Config.FRIENDLY_ONLY_DESTROY`への言及も削除済みの設定を指さないよう修正
+- README.md/README.ja.mdの補給パック節・遮蔽物節・config一覧・design notes・2人プレイテスト手順(7番目)から`friendlyOnlyDestroy`関連の記述を全て削除、「誰でも破壊できる」という記述に統一
+- HANDOVER.mdの「既知の制限事項」から該当項目を削除
+- これで**このMod内で設置される全てのプロップ(補給パック・投擲パック・遮蔽物)が友軍制限なしで誰でも破壊できる**、という一貫した設計になった
+- `gradlew build`成功、`gradlew runServer`で例外なく`Done`到達確認済み
+- **実地確認は未実施**: 補給パックを設置者以外が攻撃して壊せることをGUI操作で確認する必要あり
+
 ## 次にやるべきこと(優先順)
 
-1. 上記のスポーンキット機能の実地確認(ロードアウト未設定のプレイヤーにも配布されるか含め、GUI操作を伴うため`runClient`でのユーザー確認待ち)——優先度最高(直近のユーザー指摘への対応のため)
+1. 上記の補給パック誰でも破壊可能化の実地確認(GUI操作を伴うため`runClient`でのユーザー確認待ち)——優先度最高(直近のユーザー指摘への対応のため)
+1v. 上記の遮蔽物(誰でも破壊可能化+HP config化)の実地確認(GUI操作を伴うため`runClient`でのユーザー確認待ち)
+1w. 上記のハンマー範囲破壊機能の実地確認(SuperbWarfare導入環境でのGUI操作を伴うため`runClient`でのユーザー確認待ち)
+1x. 上記のスポーンキット機能の実地確認(ロードアウト未設定のプレイヤーにも配布されるか含め、GUI操作を伴うため`runClient`でのユーザー確認待ち)
 1y. 上記の死亡時インベントリクリア+除外アイテム機能の実地確認(`keepInventory true`環境での一巡、GUI操作を伴うため`runClient`でのユーザー確認待ち)
 1z. 上記のロードアウト即時装備化の実地確認(生存中の即時反映+弾薬付与がリスポーン限定であることの両方、GUI操作を伴うため`runClient`でのユーザー確認待ち)
 1a. 上記の遮蔽物エンティティの実地確認(設置→耐久→寿命→friendlyOnlyDestroy→上限、GUI操作を伴うため`runClient`でのユーザー確認待ち)
@@ -189,7 +242,6 @@
 
 - TACZの弾薬補給(設置/投擲パック、ammo pack由来のもの): dummy ammo方式の銃は内部弾数を直接補充、それ以外(標準銃含む)は対応する実弾薬アイテムをインベントリに付与(2026-07-24修正、上記参照)
 - TACZの汎用「素の銃」アイテム(例: `tacz:modern_kinetic_gun`)は個別銃IDと並んでアイテム選択グリッドに出現する(見た目上の重複、フィルタしていない)。弾薬も同様に汎用アイテムと個別弾薬IDが並んで出現する
-- 分隊/チーム概念が無いため、`friendlyOnlyDestroy`の「味方」=「設置者本人」のみ
 
 ## 参考ファイル
 

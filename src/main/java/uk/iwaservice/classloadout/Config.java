@@ -12,7 +12,6 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue RESUPPLY_AMMO_PER_TICK;
     public static final ForgeConfigSpec.IntValue PACK_LIFETIME_SECONDS;
     public static final ForgeConfigSpec.IntValue MAX_ACTIVE_PACKS_PER_PLAYER;
-    public static final ForgeConfigSpec.BooleanValue FRIENDLY_ONLY_DESTROY;
 
     public static final ForgeConfigSpec.IntValue THROW_PACK_RADIUS;
     public static final ForgeConfigSpec.IntValue THROW_PACK_INTERVAL_SECONDS;
@@ -25,8 +24,11 @@ public final class Config {
 
     public static final ForgeConfigSpec.IntValue COVER_LIFETIME_SECONDS;
     public static final ForgeConfigSpec.IntValue MAX_ACTIVE_COVERS_PER_PLAYER;
+    public static final ForgeConfigSpec.IntValue COVER_MAX_HEALTH;
 
     public static final ForgeConfigSpec.BooleanValue CLEAR_INVENTORY_ON_DEATH;
+
+    public static final ForgeConfigSpec.IntValue HAMMER_AOE_RADIUS;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -53,9 +55,6 @@ public final class Config {
                 .comment("Maximum resupply packs a single player may have active at once. Shared between placed",
                         "packs and landed thrown packs (see the throwable section below) - they count together.")
                 .defineInRange("maxActivePacksPerPlayer", 1, 1, 20);
-        FRIENDLY_ONLY_DESTROY = b
-                .comment("If true, only the player who placed a resupply pack can break it.")
-                .define("friendlyOnlyDestroy", true);
         b.pop();
 
         b.push("throwable");
@@ -97,6 +96,11 @@ public final class Config {
         MAX_ACTIVE_COVERS_PER_PLAYER = b
                 .comment("Maximum covers a single player may have active at once.")
                 .defineInRange("maxActiveCoversPerPlayer", 2, 1, 20);
+        COVER_MAX_HEALTH = b
+                .comment("Max health of a placed cover. Applied per-instance when it's placed (read from this",
+                        "config, not baked in at mod-load time), capped at 1024 - vanilla's own hard ceiling for",
+                        "the max_health attribute, shared by every entity in the game.")
+                .defineInRange("coverMaxHealth", 1000, 1, 1024);
         b.pop();
 
         b.push("death");
@@ -108,6 +112,16 @@ public final class Config {
                         "gamerule turned on - if it's off, vanilla already drops (and permanently loses) items,",
                         "protected or not, before this ever runs.")
                 .define("clearInventoryOnDeath", true);
+        b.pop();
+
+        b.push("hammer");
+        HAMMER_AOE_RADIUS = b
+                .comment("Cube radius (in blocks) around a block broken with a SuperbWarfare hammer",
+                        "(anything in the #forge:tools/hammer item tag) that also gets destroyed, like a",
+                        "small explosion - but only for block types on the OP-curated list (/class hammerblocks).",
+                        "The broken block itself must also be on that list, or no bonus blocks break at all.",
+                        "0 disables the area effect entirely (still a normal single-block break).")
+                .defineInRange("hammerAoeRadius", 1, 0, 4);
         b.pop();
 
         SPEC = b.build();

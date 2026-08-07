@@ -1,12 +1,20 @@
 package uk.iwaservice.classloadout;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.NonNullList;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 import uk.iwaservice.classloadout.command.ClassCommand;
@@ -15,8 +23,17 @@ import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
 
-/** Forge-bus event handlers: command registration, respawn equip, login sync. */
+/** Forge-bus event handlers: command registration, respawn equip, login sync, hammer AOE breaking. */
 public final class ServerEvents {
+
+    /**
+     * The generic data-pack-driven "hammer" item tag - matches every SuperbWarfare hammer
+     * variant (and anything else that opts in) without a compile-time dependency on
+     * SuperbWarfare itself, unlike the rest of this mod's TACZ/SuperbWarfare integrations
+     * under {@code compat/}. If SuperbWarfare isn't installed, the tag is simply empty and
+     * this check always fails harmlessly.
+     */
+    private static final TagKey<Item> HAMMER_TAG = ItemTags.create(new ResourceLocation("forge", "tools/hammer"));
 
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
@@ -27,6 +44,46 @@ public final class ServerEvents {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             LoadoutManager.get(player.server).sendTo(player.server, player);
+        }
+    }
+
+    /**
+     * Breaking a block on the OP-curated hammer-blocks whitelist (see
+     * {@code /class hammerblocks}) with a hammer (anything in {@link #HAMMER_TAG}) also
+     * destroys every other whitelisted block within {@code hammerAoeRadius} - an
+     * explosion-like burst, but limited to block types an OP has explicitly approved so it
+     * can't be used to grief arbitrary terrain/builds. The originally-broken block must
+     * itself be whitelisted, or no bonus blocks break at all (a hammer is still just a
+     * normal tool against everything else). {@link net.minecraft.world.level.Level#destroyBlock}
+     * doesn't re-fire this event, so there's no risk of a recursive chain reaction.
+     */
+    @SubscribeEvent
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        Player player = event.getPlayer();
+        int radius = Config.HAMMER_AOE_RADIUS.get();
+        if (radius <= 0 || !(player instanceof ServerPlayer) || !(event.getLevel() instanceof ServerLevel serverLevel)
+                || !player.getMainHandItem().is(HAMMER_TAG)) {
+            return;
+        }
+        LoadoutManager manager = LoadoutManager.get(serverLevel.getServer());
+        ResourceLocation centerBlockId = ForgeRegistries.BLOCKS.getKey(event.getState().getBlock());
+        if (centerBlockId == null || !manager.isHammerBlock(centerBlockId)) {
+            return;
+        }
+        BlockPos center = event.getPos();
+        for (BlockPos pos : BlockPos.betweenClosed(center.offset(-radius, -radius, -radius),
+                center.offset(radius, radius, radius))) {
+            if (pos.equals(center) || !serverLevel.isLoaded(pos)) {
+                continue;
+            }
+            BlockState state = serverLevel.getBlockState(pos);
+            if (state.isAir()) {
+                continue;
+            }
+            ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(state.getBlock());
+            if (blockId != null && manager.isHammerBlock(blockId)) {
+                serverLevel.destroyBlock(pos, true, player);
+            }
         }
     }
 

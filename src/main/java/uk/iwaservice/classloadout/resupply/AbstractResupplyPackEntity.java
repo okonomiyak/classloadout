@@ -4,7 +4,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
@@ -27,6 +26,9 @@ import java.util.UUID;
  * {@code noAi} is the established way in this codebase to get a "placed
  * object with combat-based destroy permission" without needing a Block at
  * all (no blockstate/model/loot-table plumbing, just an item texture).
+ * Anyone can destroy one (no {@code hurt()} override, just default damage
+ * handling) - same reasoning as {@link uk.iwaservice.classloadout.cover.CoverEntity}:
+ * it's a placed prop on the battlefield, not personal property.
  */
 public abstract class AbstractResupplyPackEntity extends PathfinderMob {
 
@@ -81,20 +83,6 @@ public abstract class AbstractResupplyPackEntity extends PathfinderMob {
     @Override
     public boolean causeFallDamage(float distance, float multiplier, DamageSource source) {
         return false; // don't die to fall damage right after being placed
-    }
-
-    /** friendlyOnlyDestroy: only the owner can land a hit that actually does anything. */
-    @Override
-    public boolean hurt(DamageSource source, float amount) {
-        if (level().isClientSide) {
-            return false;
-        }
-        Entity attacker = source.getEntity();
-        if (Config.FRIENDLY_ONLY_DESTROY.get() && ownerId != null
-                && !(attacker instanceof ServerPlayer player && player.getUUID().equals(ownerId))) {
-            return false;
-        }
-        return super.hurt(source, amount);
     }
 
     @Override

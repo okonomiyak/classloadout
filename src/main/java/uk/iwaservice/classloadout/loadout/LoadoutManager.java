@@ -23,16 +23,18 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Server-authoritative registry of five things, persisted with the
+ * Server-authoritative registry of six things, persisted with the
  * overworld: admin-defined preset classes, the OP-curated per-slot item
  * whitelists, the OP-curated protected-items list (exempt from the on-death
  * inventory clear, see {@code Config.CLEAR_INVENTORY_ON_DEATH}), the
  * OP-curated spawn kit (item/count pairs given to every player on every
  * respawn, unconditionally - not tied to any loadout slot or whitelist),
- * and each player's own personal loadout (the thing that actually gets
- * equipped on respawn). The only writers are the {@code /class} commands -
- * there is no other mutation path (no config-file editing, no C2S
- * packets). Presets, whitelists, protected items and the spawn kit are
+ * the OP-curated hammer AOE block whitelist (block types a SuperbWarfare
+ * hammer's area-of-effect break is allowed to also destroy), and each
+ * player's own personal loadout (the thing that actually gets equipped on
+ * respawn). The only writers are the {@code /class} commands - there is no
+ * other mutation path (no config-file editing, no C2S packets). Presets,
+ * whitelists, protected items, the spawn kit and the hammer block list are
  * OP-only; a player's own loadout is self-service (assigning a whitelisted
  * item to a slot, or applying a preset as a starting point - presets are
  * not themselves whitelist-restricted, since defining one already requires
@@ -64,6 +66,8 @@ public class LoadoutManager extends SavedData {
     private final Set<ResourceLocation> protectedItems = new LinkedHashSet<>();
     /** OP-curated: item -> count given to every player on every respawn, unconditionally (not tied to the loadout system at all - see {@code ServerEvents}). Insertion order preserved for a stable editor grid. */
     private final Map<ResourceLocation, Integer> spawnKit = new LinkedHashMap<>();
+    /** OP-curated: block types (registry names, not items) a SuperbWarfare hammer's area-of-effect break can also destroy - see {@code Config.HAMMER_AOE_RADIUS}. */
+    private final Set<ResourceLocation> hammerBlocks = new LinkedHashSet<>();
 
     public static LoadoutManager get(MinecraftServer server) {
         return server.overworld().getDataStorage()
@@ -251,6 +255,30 @@ public class LoadoutManager extends SavedData {
         }
     }
 
+    // --- hammer AOE block whitelist (OP-curated) ---
+
+    public Set<ResourceLocation> getHammerBlocks() {
+        return hammerBlocks;
+    }
+
+    public boolean isHammerBlock(ResourceLocation block) {
+        return hammerBlocks.contains(block);
+    }
+
+    public void addHammerBlock(MinecraftServer server, ResourceLocation block) {
+        if (hammerBlocks.add(block)) {
+            setDirty();
+            broadcastAll(server);
+        }
+    }
+
+    public void removeHammerBlock(MinecraftServer server, ResourceLocation block) {
+        if (hammerBlocks.remove(block)) {
+            setDirty();
+            broadcastAll(server);
+        }
+    }
+
     // --- personal loadout (player self-service) ---
 
     /** Null means the player has never touched their loadout - equip-on-respawn leaves their inventory alone. */
@@ -333,7 +361,8 @@ public class LoadoutManager extends SavedData {
 
         NetworkHandler.sendLoadoutSync(player, new LoadoutSyncPacket(entries,
                 LoadoutSyncPacket.PersonalData.of(personal), LoadoutSyncPacket.Whitelists.of(whitelistsBySlot),
-                ammoGrantEntries, variantEntries, new ArrayList<>(protectedItems), spawnKitEntries));
+                ammoGrantEntries, variantEntries, new ArrayList<>(protectedItems), spawnKitEntries,
+                new ArrayList<>(hammerBlocks)));
     }
 
     // --- persistence ---
@@ -389,6 +418,10 @@ public class LoadoutManager extends SavedData {
         for (int i = 0; i < spawnKitList.size(); i++) {
             CompoundTag s = spawnKitList.getCompound(i);
             manager.spawnKit.put(new ResourceLocation(s.getString("Item")), s.getInt("Count"));
+        }
+        ListTag hammerBlockList = tag.getList("HammerBlocks", Tag.TAG_STRING);
+        for (Tag t : hammerBlockList) {
+            manager.hammerBlocks.add(new ResourceLocation(t.getAsString()));
         }
         return manager;
     }
@@ -459,6 +492,12 @@ public class LoadoutManager extends SavedData {
             spawnKitList.add(s);
         }
         tag.put("SpawnKit", spawnKitList);
+
+        ListTag hammerBlockList = new ListTag();
+        for (ResourceLocation loc : hammerBlocks) {
+            hammerBlockList.add(net.minecraft.nbt.StringTag.valueOf(loc.toString()));
+        }
+        tag.put("HammerBlocks", hammerBlockList);
         return tag;
     }
 }

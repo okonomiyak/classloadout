@@ -2,6 +2,7 @@ package uk.iwaservice.classloadout.client;
 
 import net.minecraft.client.Minecraft;
 import uk.iwaservice.classloadout.client.gui.ClassEditorScreen;
+import uk.iwaservice.classloadout.client.gui.HammerBlocksEditorScreen;
 import uk.iwaservice.classloadout.client.gui.ProtectedItemsEditorScreen;
 import uk.iwaservice.classloadout.client.gui.SpawnKitEditorScreen;
 import uk.iwaservice.classloadout.client.gui.WhitelistEditorScreen;
@@ -12,7 +13,15 @@ public final class ClientPacketHandler {
 
     public static void handleLoadoutSync(LoadoutSyncPacket msg) {
         LoadoutClientData.applySync(msg.classes(), msg.personal(), msg.whitelists(), msg.ammoGrants(), msg.variants(),
-                msg.protectedItems(), msg.spawnKit());
+                msg.protectedItems(), msg.spawnKit(), msg.hammerBlocks());
+    }
+
+    /** Server already checked permission level before sending this; re-check defensively anyway. */
+    public static void handleOpenHammerBlocksEditor() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.player.hasPermissions(2)) {
+            mc.setScreen(new HammerBlocksEditorScreen());
+        }
     }
 
     /** Server already checked permission level before sending this; re-check defensively anyway. */

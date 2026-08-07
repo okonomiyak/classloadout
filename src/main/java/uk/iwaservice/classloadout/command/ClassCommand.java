@@ -108,6 +108,15 @@ public final class ClassCommand {
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("item", ResourceLocationArgument.id())
                                         .executes(ctx -> spawnKitRemove(ctx)))))
+                .then(Commands.literal("hammerblocks")
+                        .requires(src -> src.hasPermission(2))
+                        .executes(ctx -> hammerBlocksEditor(ctx))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("block", ResourceLocationArgument.id())
+                                        .executes(ctx -> hammerBlocksAdd(ctx))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("block", ResourceLocationArgument.id())
+                                        .executes(ctx -> hammerBlocksRemove(ctx)))))
                 .then(Commands.literal("assign")
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -297,6 +306,26 @@ public final class ClassCommand {
         ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
         LoadoutManager.get(ctx.getSource().getServer()).removeSpawnKitEntry(ctx.getSource().getServer(), item);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.spawnkit_removed", item.toString()), true);
+        return 1;
+    }
+
+    /** Opens the OP-only hammer-blocks editor client-side; permission already enforced by the command node. */
+    private static int hammerBlocksEditor(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NetworkHandler.sendOpenHammerBlocksEditor(ctx.getSource().getPlayerOrException());
+        return 1;
+    }
+
+    private static int hammerBlocksAdd(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation block = ResourceLocationArgument.getId(ctx, "block");
+        LoadoutManager.get(ctx.getSource().getServer()).addHammerBlock(ctx.getSource().getServer(), block);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.hammerblocks_added", block.toString()), true);
+        return 1;
+    }
+
+    private static int hammerBlocksRemove(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation block = ResourceLocationArgument.getId(ctx, "block");
+        LoadoutManager.get(ctx.getSource().getServer()).removeHammerBlock(ctx.getSource().getServer(), block);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.hammerblocks_removed", block.toString()), true);
         return 1;
     }
 

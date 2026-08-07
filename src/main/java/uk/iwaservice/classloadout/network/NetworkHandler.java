@@ -49,6 +49,11 @@ public final class NetworkHandler {
                 .decoder(OpenSpawnKitEditorPacket::decode)
                 .consumerMainThread(OpenSpawnKitEditorPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(OpenHammerBlocksEditorPacket.class, 5, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenHammerBlocksEditorPacket::encode)
+                .decoder(OpenHammerBlocksEditorPacket::decode)
+                .consumerMainThread(OpenHammerBlocksEditorPacket::handle)
+                .add();
     }
 
     public static void sendLoadoutSync(ServerPlayer player, LoadoutSyncPacket packet) {
@@ -69,6 +74,10 @@ public final class NetworkHandler {
 
     public static void sendOpenSpawnKitEditor(ServerPlayer player) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenSpawnKitEditorPacket());
+    }
+
+    public static void sendOpenHammerBlocksEditor(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenHammerBlocksEditorPacket());
     }
 
     private NetworkHandler() {}

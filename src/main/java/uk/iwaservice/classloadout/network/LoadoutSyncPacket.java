@@ -23,12 +23,14 @@ import java.util.UUID;
  * the full preset roster and the five slot whitelists (same for everyone),
  * plus that one recipient's own personal loadout (never someone else's -
  * each player gets a packet built specifically for them), plus the
- * OP-curated protected-items list and spawn kit (exempt from the on-death
- * inventory clear / granted on every respawn - same for everyone).
+ * OP-curated protected-items list, spawn kit and hammer AOE block list
+ * (exempt from the on-death inventory clear / granted on every respawn /
+ * eligible for the hammer's area-of-effect break - same for everyone).
  */
 public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whitelists whitelists,
                                 List<AmmoGrantEntry> ammoGrants, List<VariantEntry> variants,
-                                List<ResourceLocation> protectedItems, List<SpawnKitEntry> spawnKit) {
+                                List<ResourceLocation> protectedItems, List<SpawnKitEntry> spawnKit,
+                                List<ResourceLocation> hammerBlocks) {
 
     /** One OP-configured ammo grant: equipping {@code item} in {@code slot} also gives {@code count} of {@code ammoItem}. */
     public record AmmoGrantEntry(LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
@@ -133,6 +135,7 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
             buf.writeResourceLocation(s.item());
             buf.writeVarInt(s.count());
         }
+        writeList(buf, msg.hammerBlocks);
     }
 
     public static LoadoutSyncPacket decode(FriendlyByteBuf buf) {
@@ -176,7 +179,9 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
             int itemCount = buf.readVarInt();
             spawnKit.add(new SpawnKitEntry(item, itemCount));
         }
-        return new LoadoutSyncPacket(classes, personal, whitelists, ammoGrants, variants, protectedItems, spawnKit);
+        List<ResourceLocation> hammerBlocks = readList(buf);
+        return new LoadoutSyncPacket(classes, personal, whitelists, ammoGrants, variants, protectedItems, spawnKit,
+                hammerBlocks);
     }
 
     private static void writeOptional(FriendlyByteBuf buf, @Nullable ResourceLocation loc) {

@@ -33,6 +33,7 @@ public final class LoadoutClientData {
     private static Map<ResourceLocation, CompoundTag> itemVariants = Map.of();
     private static List<ResourceLocation> protectedItems = List.of();
     private static Map<ResourceLocation, Integer> spawnKit = Map.of();
+    private static List<ResourceLocation> hammerBlocks = List.of();
     /** Incremented on every sync; lets screens detect updates cheaply. */
     private static int revision;
 
@@ -46,7 +47,8 @@ public final class LoadoutClientData {
                                               List<LoadoutSyncPacket.AmmoGrantEntry> newAmmoGrants,
                                               List<LoadoutSyncPacket.VariantEntry> newVariants,
                                               List<ResourceLocation> newProtectedItems,
-                                              List<LoadoutSyncPacket.SpawnKitEntry> newSpawnKit) {
+                                              List<LoadoutSyncPacket.SpawnKitEntry> newSpawnKit,
+                                              List<ResourceLocation> newHammerBlocks) {
         classes = List.copyOf(newClasses);
         personal = newPersonal;
         whitelists = newWhitelists;
@@ -66,6 +68,7 @@ public final class LoadoutClientData {
             kit.put(s.item(), s.count());
         }
         spawnKit = kit;
+        hammerBlocks = List.copyOf(newHammerBlocks);
         revision++;
     }
 
@@ -77,6 +80,7 @@ public final class LoadoutClientData {
         itemVariants = Map.of();
         protectedItems = List.of();
         spawnKit = Map.of();
+        hammerBlocks = List.of();
         revision++;
     }
 
@@ -119,6 +123,10 @@ public final class LoadoutClientData {
 
     public static synchronized Map<ResourceLocation, Integer> getSpawnKit() {
         return spawnKit;
+    }
+
+    public static synchronized List<ResourceLocation> getHammerBlocks() {
+        return hammerBlocks;
     }
 
     private LoadoutClientData() {}
