@@ -45,11 +45,19 @@ public final class ItemResolver {
      * {@code LoadoutClientData.getItemVariants()} - for an OP-registered "exact held item"
      * whitelist entry (full item+count+tag, not just a bare item id). {@code variants} may be
      * null or not contain {@code id}, in which case this behaves exactly like the 1-arg overload.
+     *
+     * <p>{@code saved} is the single {@link CompoundTag} instance stored in {@code variants} for
+     * this id, shared by every caller that resolves it. {@code ItemStack.of(CompoundTag)} doesn't
+     * deep-copy the tag it's built from, it keeps a reference to it - so without {@link
+     * ItemStack#copy()} here, every player issued this item ends up with an {@code ItemStack}
+     * whose NBT is literally the same object as everyone else's: TACZ writing a gun's current
+     * ammo count on one player's stack mutates that shared tag and instantly changes it for every
+     * other player holding "their own" copy too.
      */
     @Nullable
     public static ItemStack resolve(ResourceLocation id, @Nullable Map<ResourceLocation, CompoundTag> variants) {
         CompoundTag saved = variants == null ? null : variants.get(id);
-        return saved != null ? ItemStack.of(saved) : resolve(id);
+        return saved != null ? ItemStack.of(saved).copy() : resolve(id);
     }
 
     public static boolean isAvailable(ResourceLocation id) {
