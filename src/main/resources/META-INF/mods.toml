@@ -4,7 +4,7 @@ license="GPL-3.0-only"
 
 [[mods]]
 modId="classloadout"
-version="0.1.0"
+version="${file.jarVersion}"
 displayName="Class Loadout"
 description='''Define equipment loadout classes via a GUI editor; players pick one on the death screen and it is auto-equipped on every respawn.'''
 
