@@ -14,7 +14,11 @@
 
 ## 現在のgit状態(★重要★)
 
-**2026-08-07、v0.3.0としてコミット・push・リリース済み**(コミット`d9fdb5f`、タグ`v0.3.0`)。ハンマー範囲破壊機能・遮蔽物HPのconfig化・全設置物の誰でも破壊可能化(`friendlyOnlyDestroy`config撤去)を含む。「リリースして」というユーザーの明示的指示で実施。以後の変更は再びこのセクションで追跡すること。
+**2026-08-08、v0.3.3としてコミット・push・リリース済み**(コミット`57cc56f`、タグ`v0.3.3`)。弾薬同期バグの修正・バージョン表示修正・CIビルド追加を含む。詳細は下記「弾薬状態が全員に同期されるバグの修正(2026-08-08)」節を参照。以後の変更は再びこのセクションで追跡すること。
+
+このセッションはLinux機(`/home/iwa/projects/java/classloadout`)で実施。従来のWindows機(`C:\Users\tomip\program\java\classloadout`)とは別PC。**Claude Codeのメモリ(`~/.claude/projects/.../memory/`)はマシンごとに独立していてgit管理外のため、PCを跨ぐと自動では引き継がれない**——このHANDOVER.md(gitでpushされる)が唯一の確実な引継ぎ手段。別PCで作業を再開する際は、まずこのファイルを読むこと。
+
+**⚠️未解決の判断待ち事項**: `v0.3.1`リリース(2026-08-08作成)は、後に誤りと判明した修正(`stripVolatileGunState`、根本原因ではなかった)を含んだままGitHub上に残っている。削除するか残すかユーザーに確認できておらず未対応。次回このリポジトリを触るセッションで確認すること。
 
 ## 動作確認の状況(2026-07-21時点)
 
@@ -219,9 +223,62 @@
 - `gradlew build`成功、`gradlew runServer`で例外なく`Done`到達確認済み
 - **実地確認は未実施**: 補給パックを設置者以外が攻撃して壊せることをGUI操作で確認する必要あり
 
+## 弾薬状態が全員に同期されるバグの修正(2026-08-08)
+
+ユーザー報告「手持ちを登録を行うとロードアウトの銃をNBTごとコピーしてるせいでUUIDが重複して全員の弾薬の状態が同期されてる」。ユーザー自身の見立ては「症状からの推測」(実際にNBT上でUUIDタグを確認したわけではない)とのこと。
+
+**調査で遠回りした点(教訓として記録)**: 最初にTACZ本体(`tacz-1.20.1-1.1.8-hotfix.jar`)を`javap`で逆コンパイルし、ガンや弾薬のNBTスキーマにUUIDタグが存在するか徹底的に調査した(`GunItemDataAccessor`/`AmmoBoxItemDataAccessor`等)。結果、TACZ本体にはガン/弾薬インスタンスを識別するUUIDタグは一切無いことを確認——つまりユーザーの「UUID」という言葉は文字通りのNBTタグではなく症状からの比喩的表現だった。この調査自体は無駄ではなかった(TACZのNBTスキーマの正確な理解は得られた)が、最初にユーザーに「どこで確認したか」を聞いていればもっと早く本題に入れた。
+
+この調査中に立てた**誤った仮説**: 「`LoadoutManager.addHeldItemToWhitelist`/`registerItemVariant`が`held.save(new CompoundTag())`でOPの手持ちアイテムの瞬間のNBT(TACZの`GunCurrentAmmoCount`等の実行時カウンタ含む)をそのまま保存テンプレートに焼き付けているせいで、全員が同じ固定値を受け取っている」という説。これに基づき`stripVolatileGunState`(登録時にTACZの実行時状態タグを除去する関数)を実装・コミット・v0.3.1としてリリースまでしてしまった。
+
+**ユーザーの指摘で判明した真因**: 「アイテムを渡すときはコピーしないといけないんだって」「`ItemStack.copy()`」という一言で、実際の原因は別にあると判明。`LoadoutManager.itemVariants`(`Map<ResourceLocation, CompoundTag>`)は各バリアントにつき単一の`CompoundTag`オブジェクトを保持しており、`ItemResolver.resolve(id, variants)`はそれを`ItemStack.of(saved)`に**そのまま**渡していた。**MinecraftのItemStack.of(CompoundTag)はタグをディープコピーせず参照をそのまま保持する**ため、このメソッドを複数回呼ぶ(=複数プレイヤーがそれぞれリスポーンして装備する)たびに生成される「別々の」ItemStackが、内部的には全く同じNBTオブジェクトを共有してしまっていた。TACZが誰か一人の弾薬数をNBTに書き込むと、その場で全員の「別々の」武器の弾薬数が変わって見える——これが「同期されている」ように見えた実際の仕組み。
+
+なお同じファイル内の`ServerEvents.giveItem`(弾薬付与・スポーンキット用)は既に`template.copy()`/`template.copyWithCount()`を使っており正しく実装されていた。装備側(`equipLoadout`が使う`ItemResolver.resolve`)だけがこのコピー漏れを持っていた、という非対称性が実際のバグ。
+
+**修正**:
+1. `stripVolatileGunState`関連の変更は`git checkout <直前コミット> -- LoadoutManager.java`で完全にrevert(手動で書き戻すのではなくgit操作でやり直す方が確実、というのが今回得た教訓)
+2. `ItemResolver.resolve(ResourceLocation id, Map<ResourceLocation, CompoundTag> variants)`の戻り値を`ItemStack.of(saved)`→`ItemStack.of(saved).copy()`に変更。これだけで解決(コミット`bf1ae51`)
+
+**教訓**: 「複数プレイヤー間で状態が同期される」系のバグを見たら、まず依存Mod(TACZ等)側の独自NBTタグを疑う前に、**自分のコード側でCompoundTag/ItemStackの参照が使い回されていないか**(特に「テンプレートを保持するMapから`ItemStack.of()`/コンストラクタで直接組み立てている箇所」)を先に確認すべき。同じ処理をする既存の別メソッドが`.copy()`しているかどうかを比較するのが手っ取り早い(今回は`giveItem`との非対称性が答えだった)。
+
+### ついでに見つかった別バグ: バージョン表示が0.1.0固定
+
+上記の調査・リリース作業中に、`src/main/resources/META-INF/mods.toml`の`version`が`"0.1.0"`と**ハードコード**されていることが発覚(`gradle.properties`の`mod_version`をいくら上げてもMod一覧の表示等には一切反映されない状態だった)。
+
+- `mods.toml`: `version="0.1.0"` → `version="${file.jarVersion}"`(Forgeがjarマニフェストの`Implementation-Version`から解決する標準プレースホルダー)に変更
+- ただし`build.gradle`の`jar`タスクは元々`Implementation-Version`をマニフェストに書き込んでいなかった(NeoForgeの`legacyforge`プラグインは自動で付けてくれない)ため、`${file.jarVersion}`だけ直しても実際には解決されない状態のまま気づかずv0.3.2をタグ付けしてしまい、jarのMANIFEST.MFを確認して発覚→v0.3.2は未リリースのままタグ削除し、`build.gradle`に以下を追加してv0.3.3として仕切り直した:
+
+```gradle
+tasks.named('jar', Jar) {
+    manifest {
+        attributes(['Implementation-Version': project.version])
+    }
+}
+```
+
+v0.3.3のjarでは`unzip -p ... META-INF/MANIFEST.MF`で`Implementation-Version: 0.3.3`が入ることを確認済み(Forge起動時に`${file.jarVersion}`が実際に0.3.3へ解決されるかどうかまでは、Minecraftクライアント/サーバーを起動する実地確認が必要——未実施)。
+
+### CIビルドの新規追加
+
+このリポジトリには`.github/workflows/`が存在しなかった(ビルド確認は開発者のローカル実行のみに依存)。今回`.github/workflows/build.yml`を新設し、push/PRのたびに`./gradlew build`が通ることをGitHub Actions上で検証するようにした。
+
+- `gradle.properties`の`org.gradle.java.home`がWindowsのローカルパス(`C:/Program Files/Java/jdk-21.0.10`)にハードコードされておりLinux/CI上ではそのままでは動かない。**この行はコミットされたファイルなので不用意に書き換えない**こと(Windows機での開発者本人のビルドを壊すため)。CI側では`actions/setup-java`でJDK21を用意した上で`./gradlew build -Dorg.gradle.java.home="$JAVA_HOME"`という**システムプロパティ(`-D`)での上書き**を使っている(`-P`ではGradleの`org.gradle.java.home`は上書きできない——これはプロジェクトプロパティではなくGradleプロパティなので、コマンドラインからは`-D`が必要、というのも今回の副産物的な学び)
+- ローカル(Linux機)でこのプロジェクトを一時的にビルドしたい場合も同じ理屈で、`gradle.properties`を直接編集するかシステムプロパティで上書きする必要がある。JDK21は`/usr/lib/jvm/java-21-openjdk`にインストール済み
+
+### リリース作業メモ
+
+GitHub push認証がこの環境のHTTPS `origin`では通らなかった(`could not read Username for 'https://github.com'`)。SSHのホストエイリアス`github-okonomiyak`(`~/.ssh/config`に定義済み、鍵は`~/.ssh/id_ed25519_okonomiyaki`)に向けて`git remote set-url origin git@github-okonomiyak:okonomiyak/classloadout.git`してpushした。セッション途中から`gh` CLIも使えるようになった(`okonomiyak`としてログイン済み)ので、以降はGitHub Actionsの実行状況確認・リリース作成は`gh run watch`/`gh run download`/`gh release create`を使った。
+
+- v0.2.0・v0.3.0: 今回のセッション以前からの既存リリース
+- v0.3.1: 誤った修正(`stripVolatileGunState`)を含むリリース。**削除するかどうか未確認、そのまま残っている**(上記「未解決の判断待ち事項」参照)
+- v0.3.2: タグは作ったがリリースはしていない(マニフェストの`Implementation-Version`欠落に気づいて即座にタグ削除。GitHub上には残っていない)
+- v0.3.3: 弾薬同期バグの正しい修正+バージョン表示修正+CI追加、を含む最新の正式リリース
+
 ## 次にやるべきこと(優先順)
 
-1. 上記の補給パック誰でも破壊可能化の実地確認(GUI操作を伴うため`runClient`でのユーザー確認待ち)——優先度最高(直近のユーザー指摘への対応のため)
+0a. **v0.3.1リリースを削除するかどうかユーザーに確認する**(誤った修正を含んだまま公開されている、上記参照)——最優先、次にこのリポジトリを触るセッションの冒頭で確認すること
+0b. **弾薬同期バグ修正(v0.3.3)の実地確認**: 2人以上のプレイヤーで同じ武器をロードアウトに割り当て、片方が発砲して弾薬を消費しても、もう片方の弾薬数が変わらないことを`runClient`(2クライアント同時起動可能、`client`/`client2`のrun設定あり)で確認する。あわせてMod一覧画面でバージョンが`0.3.3`と表示されることも確認(`${file.jarVersion}`が実際に解決されるかの実地確認、上記参照)——優先度最高(今回のセッションの主目的)
+1. 上記の補給パック誰でも破壊可能化の実地確認(GUI操作を伴うため`runClient`でのユーザー確認待ち)
 1v. 上記の遮蔽物(誰でも破壊可能化+HP config化)の実地確認(GUI操作を伴うため`runClient`でのユーザー確認待ち)
 1w. 上記のハンマー範囲破壊機能の実地確認(SuperbWarfare導入環境でのGUI操作を伴うため`runClient`でのユーザー確認待ち)
 1x. 上記のスポーンキット機能の実地確認(ロードアウト未設定のプレイヤーにも配布されるか含め、GUI操作を伴うため`runClient`でのユーザー確認待ち)
