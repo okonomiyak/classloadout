@@ -1,0 +1,36 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # gradle.properties pins org.gradle.java.home to the maintainer's local Windows
+      # JDK path (needed there because Gradle 8.8 can't run on their system-default
+      # Java). That path doesn't exist on the runner, so point Gradle at the JDK
+      # setup-java just installed instead - a -D system property overrides the value
+      # from gradle.properties without needing to touch the committed file.
+      - name: Build
+        run: ./gradlew build -Dorg.gradle.java.home="$JAVA_HOME"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: classloadout-jar
+          path: build/libs/*.jar

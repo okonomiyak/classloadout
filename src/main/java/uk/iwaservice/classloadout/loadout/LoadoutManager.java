@@ -147,7 +147,7 @@ public class LoadoutManager extends SavedData {
             return null;
         }
         ResourceLocation variantId = variantId(UUID.randomUUID());
-        itemVariants.put(variantId, held.save(new CompoundTag()));
+        itemVariants.put(variantId, stripVolatileGunState(held.save(new CompoundTag())));
         whitelists.computeIfAbsent(slot, s -> new LinkedHashSet<>()).add(variantId);
         setDirty();
         broadcastAll(server);
@@ -166,13 +166,38 @@ public class LoadoutManager extends SavedData {
         if (held.isEmpty()) {
             return;
         }
-        itemVariants.put(variantId(id), held.save(new CompoundTag()));
+        itemVariants.put(variantId(id), stripVolatileGunState(held.save(new CompoundTag())));
         setDirty();
         broadcastAll(server);
     }
 
     private static ResourceLocation variantId(UUID id) {
         return new ResourceLocation(ClassLoadoutMod.MODID, "variant_" + id);
+    }
+
+    /** NBT tag keys TACZ uses on a gun item to track live in-match state (loaded ammo, chambered
+     *  round, dummy-ammo counter, heat) rather than the gun's configuration (id, attachments, ...). */
+    private static final Set<String> TACZ_VOLATILE_GUN_TAGS =
+            Set.of("GunCurrentAmmoCount", "HasBulletInBarrel", "DummyAmmo", "HeatAmount", "OverHeated");
+
+    /**
+     * {@code held.save(...)} snapshots the exact NBT of whatever the OP happens to be holding,
+     * including TACZ's live-state tags above. Left in place, that snapshot becomes a single
+     * shared template every player is later issued a copy of, so every player's gun would always
+     * come back with the OP's leftover ammo/chamber/heat from the moment of registration -
+     * indistinguishable from every player's ammo state being synced to one another. Strip those
+     * keys so only the gun's actual configuration survives into the stored variant.
+     */
+    private static CompoundTag stripVolatileGunState(CompoundTag saved) {
+        if (!saved.contains("tag", Tag.TAG_COMPOUND)) {
+            return saved;
+        }
+        CompoundTag tag = saved.getCompound("tag");
+        if (!tag.contains("GunId")) {
+            return saved;
+        }
+        TACZ_VOLATILE_GUN_TAGS.forEach(tag::remove);
+        return saved;
     }
 
     /** Server-side counterpart of {@code LoadoutClientData.getItemVariants()}; used to resolve slot/whitelist ids back into real ItemStacks (see {@link uk.iwaservice.classloadout.ItemResolver}). */
