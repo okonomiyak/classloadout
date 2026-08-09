@@ -9,6 +9,7 @@ import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -47,6 +48,35 @@ final class ItemCatalog {
         List<ResourceLocation> list = new ArrayList<>(set);
         list.sort(Comparator.comparing(ResourceLocation::toString));
         return list;
+    }
+
+    /** Namespace-based grouping shown as tabs in {@link WhitelistEditorScreen}; OP-registered held-item variants get their own bucket regardless of the item they wrap, since browsing "guns" and browsing "the customized gun I registered" are different tasks. */
+    enum Category { TACZ, SUPERBWARFARE, MINECRAFT, CLASSLOADOUT, HELD_ITEMS }
+
+    static Category categoryOf(ResourceLocation loc) {
+        if ("classloadout".equals(loc.getNamespace()) && loc.getPath().startsWith("variant_")) {
+            return Category.HELD_ITEMS;
+        }
+        return switch (loc.getNamespace()) {
+            case "tacz" -> Category.TACZ;
+            case "superbwarfare" -> Category.SUPERBWARFARE;
+            case "minecraft" -> Category.MINECRAFT;
+            default -> Category.CLASSLOADOUT;
+        };
+    }
+
+    /** {@code null} category means no filtering (all categories). */
+    static List<ResourceLocation> byCategory(List<ResourceLocation> items, @Nullable Category category) {
+        if (category == null) {
+            return items;
+        }
+        List<ResourceLocation> filtered = new ArrayList<>();
+        for (ResourceLocation loc : items) {
+            if (categoryOf(loc) == category) {
+                filtered.add(loc);
+            }
+        }
+        return filtered;
     }
 
     static List<ResourceLocation> search(List<ResourceLocation> items, String query) {

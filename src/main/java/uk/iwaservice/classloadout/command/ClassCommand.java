@@ -83,6 +83,9 @@ public final class ClassCommand {
                         .then(Commands.literal("register_held")
                                 .then(Commands.argument("id", UuidArgument.uuid())
                                         .executes(ctx -> whitelistRegisterHeld(ctx))))
+                        .then(Commands.literal("delete_variant")
+                                .then(Commands.argument("id", ResourceLocationArgument.id())
+                                        .executes(ctx -> whitelistDeleteVariant(ctx))))
                         .then(Commands.literal("ammo")
                                 .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                                 .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -120,10 +123,15 @@ public final class ClassCommand {
                 .then(Commands.literal("assign")
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
-                                .executes(ctx -> assign(ctx)))))
+                                .executes(ctx -> assign(ctx, true))
+                                .then(Commands.literal("defer").executes(ctx -> assign(ctx, false))))))
                 .then(Commands.literal("select")
-                        .then(Commands.argument("id", UuidArgument.uuid()).executes(ctx -> select(ctx))))
-                .then(Commands.literal("clear").executes(ctx -> clear(ctx))));
+                        .then(Commands.argument("id", UuidArgument.uuid())
+                                .executes(ctx -> select(ctx, true))
+                                .then(Commands.literal("defer").executes(ctx -> select(ctx, false)))))
+                .then(Commands.literal("clear")
+                        .executes(ctx -> clear(ctx, true))
+                        .then(Commands.literal("defer").executes(ctx -> clear(ctx, false)))));
     }
 
     /** Opens the OP-only preset editor client-side; permission already enforced by the command node. */
@@ -239,6 +247,14 @@ public final class ClassCommand {
         return 1;
     }
 
+    /** Permanently removes a registered held-item variant from the catalog (see {@link LoadoutManager#deleteItemVariant}). */
+    private static int whitelistDeleteVariant(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
+        LoadoutManager.get(ctx.getSource().getServer()).deleteItemVariant(ctx.getSource().getServer(), id);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.variant_deleted", id.toString()), true);
+        return 1;
+    }
+
     /**
      * Attaches (or, with count 0, clears) an ammo grant to an already-whitelisted
      * (slot, item) pair: equipping that item on respawn will also give the
@@ -333,8 +349,12 @@ public final class ClassCommand {
      * Player self-service: assigns (or, with minecraft:air, clears) one slot
      * of their own loadout. The item must be on that slot's OP-curated
      * whitelist - this is the actual enforcement, not just the GUI filter.
+     * {@code immediate} equips the change into the hotbar right away (the
+     * regular loadout station); with {@code false} (the "defer" command
+     * variant, sent by the deferred loadout locker) only the saved data
+     * changes and the hotbar is left alone until the next respawn.
      */
-    private static int assign(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+    private static int assign(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         LoadoutSlot slot = parseSlot(ctx);
         if (slot == null) {
@@ -346,14 +366,16 @@ public final class ClassCommand {
             return fail(ctx, "classloadout.msg.not_whitelisted", item.toString());
         }
         manager.setSlot(ctx.getSource().getServer(), player, slot, item);
-        ServerEvents.equipLoadout(player);
+        if (immediate) {
+            ServerEvents.equipLoadout(player);
+        }
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.slot_set",
                 Component.translatable("classloadout.gui.slot_" + slot.key())), false);
         return 1;
     }
 
-    /** Applies a preset to the player's own loadout as a starting point (they can keep tweaking individual slots afterward). */
-    private static int select(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+    /** Applies a preset to the player's own loadout as a starting point (they can keep tweaking individual slots afterward). See {@link #assign} for {@code immediate}. */
+    private static int select(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         UUID id = UuidArgument.getUuid(ctx, "id");
         LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
@@ -362,15 +384,20 @@ public final class ClassCommand {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
         manager.applyPreset(ctx.getSource().getServer(), player, id);
-        ServerEvents.equipLoadout(player);
+        if (immediate) {
+            ServerEvents.equipLoadout(player);
+        }
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.preset_applied", def.name()), false);
         return 1;
     }
 
-    private static int clear(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+    /** See {@link #assign} for {@code immediate}. */
+    private static int clear(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         LoadoutManager.get(ctx.getSource().getServer()).clearPersonalLoadout(ctx.getSource().getServer(), player);
-        ServerEvents.equipLoadout(player);
+        if (immediate) {
+            ServerEvents.equipLoadout(player);
+        }
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.class_cleared"), false);
         return 1;
     }

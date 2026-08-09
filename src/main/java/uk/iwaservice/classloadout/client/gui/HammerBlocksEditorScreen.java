@@ -12,6 +12,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraftforge.registries.ForgeRegistries;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 /**
@@ -51,8 +52,23 @@ public class HammerBlocksEditorScreen extends Screen {
     private int maxScroll;
     private int dataRevision = -1;
 
+    @Nullable
+    private final Screen parent;
+
+    /** Opened directly by {@code /class hammerblocks} - closing exits the GUI entirely (no parent to return to). */
     public HammerBlocksEditorScreen() {
+        this(null);
+    }
+
+    /** Opened via the class editor's nav bar - closing returns to {@code parent} instead of exiting. */
+    public HammerBlocksEditorScreen(@Nullable Screen parent) {
         super(Component.translatable("classloadout.gui.hammerblocks_editor_title"));
+        this.parent = parent;
+    }
+
+    @Override
+    public void onClose() {
+        minecraft.setScreen(parent);
     }
 
     @Override

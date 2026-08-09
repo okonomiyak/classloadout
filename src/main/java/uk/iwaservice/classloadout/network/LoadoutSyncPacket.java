@@ -40,8 +40,8 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
     public record SpawnKitEntry(ResourceLocation item, int count) {
     }
 
-    /** One OP-registered "exact held item" whitelist entry - see {@link uk.iwaservice.classloadout.loadout.LoadoutManager#addHeldItemToWhitelist}. */
-    public record VariantEntry(ResourceLocation id, CompoundTag stack) {
+    /** One OP-registered "exact held item" whitelist entry - see {@link uk.iwaservice.classloadout.loadout.LoadoutManager#addHeldItemToWhitelist}. {@code registeredAt} is an epoch-millis timestamp, shown in the whitelist editor's tooltip. */
+    public record VariantEntry(ResourceLocation id, CompoundTag stack, long registeredAt) {
     }
 
     public record Entry(UUID id, String name,
@@ -128,6 +128,7 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         for (VariantEntry v : msg.variants) {
             buf.writeResourceLocation(v.id());
             buf.writeNbt(v.stack());
+            buf.writeVarLong(v.registeredAt());
         }
         writeList(buf, msg.protectedItems);
         buf.writeVarInt(msg.spawnKit.size());
@@ -169,7 +170,8 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         for (int i = 0; i < variantCount; i++) {
             ResourceLocation id = buf.readResourceLocation();
             CompoundTag stack = buf.readNbt();
-            variants.add(new VariantEntry(id, stack == null ? new CompoundTag() : stack));
+            long registeredAt = buf.readVarLong();
+            variants.add(new VariantEntry(id, stack == null ? new CompoundTag() : stack, registeredAt));
         }
         List<ResourceLocation> protectedItems = readList(buf);
         int spawnKitCount = buf.readVarInt();

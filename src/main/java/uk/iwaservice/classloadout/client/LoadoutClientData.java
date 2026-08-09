@@ -31,6 +31,7 @@ public final class LoadoutClientData {
     private static LoadoutSyncPacket.Whitelists whitelists = EMPTY_WHITELISTS;
     private static Map<LoadoutSlot, Map<ResourceLocation, AmmoGrant>> ammoGrants = Map.of();
     private static Map<ResourceLocation, CompoundTag> itemVariants = Map.of();
+    private static Map<ResourceLocation, Long> variantRegisteredAt = Map.of();
     private static List<ResourceLocation> protectedItems = List.of();
     private static Map<ResourceLocation, Integer> spawnKit = Map.of();
     private static List<ResourceLocation> hammerBlocks = List.of();
@@ -58,10 +59,13 @@ public final class LoadoutClientData {
         }
         ammoGrants = grants;
         Map<ResourceLocation, CompoundTag> variants = new HashMap<>();
+        Map<ResourceLocation, Long> registeredAt = new HashMap<>();
         for (LoadoutSyncPacket.VariantEntry v : newVariants) {
             variants.put(v.id(), v.stack());
+            registeredAt.put(v.id(), v.registeredAt());
         }
         itemVariants = variants;
+        variantRegisteredAt = registeredAt;
         protectedItems = List.copyOf(newProtectedItems);
         Map<ResourceLocation, Integer> kit = new HashMap<>();
         for (LoadoutSyncPacket.SpawnKitEntry s : newSpawnKit) {
@@ -78,6 +82,7 @@ public final class LoadoutClientData {
         whitelists = EMPTY_WHITELISTS;
         ammoGrants = Map.of();
         itemVariants = Map.of();
+        variantRegisteredAt = Map.of();
         protectedItems = List.of();
         spawnKit = Map.of();
         hammerBlocks = List.of();
@@ -115,6 +120,11 @@ public final class LoadoutClientData {
     /** Client-side mirror of {@code LoadoutManager.getItemVariants()}; used to resolve slot/whitelist ids back into real ItemStacks. */
     public static synchronized Map<ResourceLocation, CompoundTag> getItemVariants() {
         return itemVariants;
+    }
+
+    /** Epoch-millis registration time for a held-item variant id, or 0 if unknown. */
+    public static synchronized long getVariantRegisteredAt(ResourceLocation id) {
+        return variantRegisteredAt.getOrDefault(id, 0L);
     }
 
     public static synchronized List<ResourceLocation> getProtectedItems() {

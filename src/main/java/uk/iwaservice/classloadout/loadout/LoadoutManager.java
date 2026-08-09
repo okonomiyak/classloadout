@@ -62,6 +62,8 @@ public class LoadoutManager extends SavedData {
      * needs to know about this map.
      */
     private final Map<ResourceLocation, CompoundTag> itemVariants = new LinkedHashMap<>();
+    /** Wall-clock registration time (epoch millis) per {@link #itemVariants} entry, shown in the whitelist editor's tooltip. */
+    private final Map<ResourceLocation, Long> variantRegisteredAt = new LinkedHashMap<>();
     /** OP-curated: items that survive the on-death inventory clear (see {@code clearInventoryOnDeath}). Matched by base item type, not exact NBT. */
     private final Set<ResourceLocation> protectedItems = new LinkedHashSet<>();
     /** OP-curated: item -> count given to every player on every respawn, unconditionally (not tied to the loadout system at all - see {@code ServerEvents}). Insertion order preserved for a stable editor grid. */
@@ -148,6 +150,7 @@ public class LoadoutManager extends SavedData {
         }
         ResourceLocation variantId = variantId(UUID.randomUUID());
         itemVariants.put(variantId, held.save(new CompoundTag()));
+        variantRegisteredAt.put(variantId, System.currentTimeMillis());
         whitelists.computeIfAbsent(slot, s -> new LinkedHashSet<>()).add(variantId);
         setDirty();
         broadcastAll(server);
@@ -167,8 +170,24 @@ public class LoadoutManager extends SavedData {
             return;
         }
         itemVariants.put(variantId(id), held.save(new CompoundTag()));
+        variantRegisteredAt.put(variantId(id), System.currentTimeMillis());
         setDirty();
         broadcastAll(server);
+    }
+
+    /**
+     * Permanently removes a registered held-item variant so it stops appearing in the item
+     * catalog. Mirrors {@link #removeFromWhitelist}'s tolerance for orphans in the other
+     * direction: if the variant is still referenced by a whitelist/ammo grant/spawn kit entry,
+     * that entry is left as-is and simply resolves to nothing (same graceful "unknown id"
+     * fallback already used everywhere ids are resolved), rather than cascading the deletion.
+     */
+    public void deleteItemVariant(MinecraftServer server, ResourceLocation variantId) {
+        if (itemVariants.remove(variantId) != null) {
+            variantRegisteredAt.remove(variantId);
+            setDirty();
+            broadcastAll(server);
+        }
     }
 
     private static ResourceLocation variantId(UUID id) {
@@ -178,6 +197,10 @@ public class LoadoutManager extends SavedData {
     /** Server-side counterpart of {@code LoadoutClientData.getItemVariants()}; used to resolve slot/whitelist ids back into real ItemStacks (see {@link uk.iwaservice.classloadout.ItemResolver}). */
     public Map<ResourceLocation, CompoundTag> getItemVariants() {
         return itemVariants;
+    }
+
+    public Map<ResourceLocation, Long> getVariantRegisteredAt() {
+        return variantRegisteredAt;
     }
 
     // --- per-whitelist-entry ammo grants (OP-curated) ---
@@ -351,7 +374,8 @@ public class LoadoutManager extends SavedData {
 
         List<LoadoutSyncPacket.VariantEntry> variantEntries = new ArrayList<>(itemVariants.size());
         for (Map.Entry<ResourceLocation, CompoundTag> e : itemVariants.entrySet()) {
-            variantEntries.add(new LoadoutSyncPacket.VariantEntry(e.getKey(), e.getValue()));
+            variantEntries.add(new LoadoutSyncPacket.VariantEntry(e.getKey(), e.getValue(),
+                    variantRegisteredAt.getOrDefault(e.getKey(), 0L)));
         }
 
         List<LoadoutSyncPacket.SpawnKitEntry> spawnKitEntries = new ArrayList<>(spawnKit.size());
@@ -408,7 +432,9 @@ public class LoadoutManager extends SavedData {
         ListTag variantList = tag.getList("ItemVariants", Tag.TAG_COMPOUND);
         for (int i = 0; i < variantList.size(); i++) {
             CompoundTag v = variantList.getCompound(i);
-            manager.itemVariants.put(new ResourceLocation(v.getString("Id")), v.getCompound("Stack"));
+            ResourceLocation id = new ResourceLocation(v.getString("Id"));
+            manager.itemVariants.put(id, v.getCompound("Stack"));
+            manager.variantRegisteredAt.put(id, v.getLong("RegisteredAt"));
         }
         ListTag protectedList = tag.getList("ProtectedItems", Tag.TAG_STRING);
         for (Tag t : protectedList) {
@@ -474,6 +500,7 @@ public class LoadoutManager extends SavedData {
             CompoundTag v = new CompoundTag();
             v.putString("Id", e.getKey().toString());
             v.put("Stack", e.getValue());
+            v.putLong("RegisteredAt", variantRegisteredAt.getOrDefault(e.getKey(), 0L));
             variantList.add(v);
         }
         tag.put("ItemVariants", variantList);

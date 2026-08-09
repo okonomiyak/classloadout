@@ -8,12 +8,20 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.TooltipFlag;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
+import uk.iwaservice.classloadout.compat.TaczCompat;
 import uk.iwaservice.classloadout.loadout.AmmoGrant;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 
+import javax.annotation.Nullable;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 /**
  * OP-only screen for curating, per slot, the set of items players are
@@ -28,6 +36,7 @@ public class WhitelistEditorScreen extends Screen {
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
     private static final int TAB_H = 20;
+    private static final int CAT_H = 20;
     private static final int SEARCH_H = 20;
     private static final int CELL = 20;
     private static final int COLS = 9;
@@ -39,6 +48,8 @@ public class WhitelistEditorScreen extends Screen {
     private static final int COLOR_HOVER = 0x60FFFFFF;
 
     private LoadoutSlot selectedSlot = LoadoutSlot.MAIN;
+    @Nullable
+    private ItemCatalog.Category selectedCategory = null;
     private List<ResourceLocation> allItems = List.of();
     private List<ResourceLocation> shown = List.of();
     private EditBox search;
@@ -54,14 +65,29 @@ public class WhitelistEditorScreen extends Screen {
     private int maxScroll;
     private int dataRevision = -1;
 
+    @Nullable
+    private final Screen parent;
+
+    /** Opened directly by {@code /class whitelist} - closing exits the GUI entirely (no parent to return to). */
     public WhitelistEditorScreen() {
+        this(null);
+    }
+
+    /** Opened via the class editor's nav bar - closing returns to {@code parent} instead of exiting. */
+    public WhitelistEditorScreen(@Nullable Screen parent) {
         super(Component.translatable("classloadout.gui.whitelist_editor_title"));
+        this.parent = parent;
+    }
+
+    @Override
+    public void onClose() {
+        minecraft.setScreen(parent);
     }
 
     @Override
     protected void init() {
         panelWidth = Math.max(PAD * 2 + COLS * CELL, 260);
-        panelHeight = Math.min(300, this.height - 32);
+        panelHeight = Math.min(326, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
         dataRevision = LoadoutClientData.getRevision();
@@ -83,8 +109,27 @@ public class WhitelistEditorScreen extends Screen {
             x += tabWidth;
         }
 
+        int catY = tabY + TAB_H + 6;
+        int catCount = ItemCatalog.Category.values().length + 1; // +1 for the "all" tab
+        int catWidth = (panelWidth - 2 * PAD) / catCount;
+        int cx = panelLeft + PAD;
+        Button allBtn = Button.builder(Component.translatable("classloadout.gui.category_all"), btn -> selectCategory(null))
+                .bounds(cx, catY, catWidth, CAT_H).build();
+        allBtn.active = selectedCategory != null;
+        addRenderableWidget(allBtn);
+        cx += catWidth;
+        for (ItemCatalog.Category category : ItemCatalog.Category.values()) {
+            ItemCatalog.Category captured = category;
+            Button b = Button.builder(Component.translatable("classloadout.gui.category_" + category.name().toLowerCase(Locale.ROOT)),
+                            btn -> selectCategory(captured))
+                    .bounds(cx, catY, catWidth, CAT_H).build();
+            b.active = selectedCategory != category;
+            addRenderableWidget(b);
+            cx += catWidth;
+        }
+
         String previousQuery = search != null ? search.getValue() : "";
-        search = new EditBox(this.font, panelLeft + PAD, tabY + TAB_H + 6,
+        search = new EditBox(this.font, panelLeft + PAD, catY + CAT_H + 6,
                 panelWidth - 2 * PAD, SEARCH_H, Component.translatable("classloadout.gui.item_search"));
         search.setHint(Component.translatable("classloadout.gui.item_search"));
         search.setValue(previousQuery);
@@ -92,7 +137,7 @@ public class WhitelistEditorScreen extends Screen {
         addRenderableWidget(search);
 
         gridLeft = panelLeft + PAD;
-        gridTop = tabY + TAB_H + 6 + SEARCH_H + 6;
+        gridTop = catY + CAT_H + 6 + SEARCH_H + 6;
         gridHeight = panelTop + panelHeight - PAD - 24 - gridTop;
 
         int closeWidth = (panelWidth - 2 * PAD - 4) * 2 / 3;
@@ -120,8 +165,15 @@ public class WhitelistEditorScreen extends Screen {
         }
     }
 
+    private void selectCategory(@Nullable ItemCatalog.Category category) {
+        if (category != selectedCategory) {
+            selectedCategory = category;
+            this.init(this.minecraft, this.width, this.height);
+        }
+    }
+
     private void updateShown() {
-        shown = ItemCatalog.search(allItems, search.getValue());
+        shown = ItemCatalog.search(ItemCatalog.byCategory(allItems, selectedCategory), search.getValue());
         int rows = (shown.size() + COLS - 1) / COLS;
         int contentHeight = rows * CELL;
         maxScroll = Math.max(0, contentHeight - gridHeight);
@@ -143,6 +195,10 @@ public class WhitelistEditorScreen extends Screen {
         int index = cellIndexAt(mouseX, mouseY);
         if (index >= 0) {
             ResourceLocation item = shown.get(index);
+            if (button == 0 && hasShiftDown() && LoadoutClientData.getItemVariants().containsKey(item)) {
+                command("class whitelist delete_variant " + item);
+                return true;
+            }
             boolean whitelisted = LoadoutClientData.getWhitelist(selectedSlot).contains(item);
             if (button == 1) {
                 // right-click: configure (or re-configure) an ammo grant, whitelisting first if needed
@@ -166,6 +222,22 @@ public class WhitelistEditorScreen extends Screen {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    /** Every slot key this variant id is currently whitelisted under, comma-joined ("-" if none). */
+    private static String variantSlotsText(ResourceLocation id) {
+        List<String> slots = new ArrayList<>();
+        for (LoadoutSlot slot : LoadoutSlot.values()) {
+            if (LoadoutClientData.getWhitelist(slot).contains(id)) {
+                slots.add(slot.key());
+            }
+        }
+        return slots.isEmpty() ? "-" : String.join(", ", slots);
+    }
+
+    private static String variantRegisteredText(ResourceLocation id) {
+        long millis = LoadoutClientData.getVariantRegisteredAt(id);
+        return millis <= 0 ? "-" : new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date(millis));
     }
 
     private void command(String cmd) {
@@ -196,6 +268,7 @@ public class WhitelistEditorScreen extends Screen {
 
         graphics.enableScissor(gridLeft, gridTop, gridLeft + COLS * CELL, gridTop + gridHeight);
         ItemStack hoveredStack = null;
+        ResourceLocation hoveredLoc = null;
         int hoveredX = 0;
         int hoveredY = 0;
         boolean hoveredWhitelisted = false;
@@ -232,6 +305,7 @@ public class WhitelistEditorScreen extends Screen {
             }
             if (hovered) {
                 hoveredStack = stack;
+                hoveredLoc = loc;
                 hoveredX = mouseX;
                 hoveredY = mouseY;
                 hoveredWhitelisted = whitelisted;
@@ -242,16 +316,23 @@ public class WhitelistEditorScreen extends Screen {
         graphics.disableScissor();
 
         if (hoveredStack != null) {
-            Component name = hoveredStack.getHoverName().copy().append(hoveredWhitelisted
+            List<Component> lines = new ArrayList<>(hoveredStack.getTooltipLines(
+                    this.minecraft.player, TooltipFlag.Default.NORMAL));
+            lines.addAll(TaczCompat.describeGunTooltip(hoveredStack));
+            lines.addAll(TaczCompat.describeAmmoBoxTooltip(hoveredStack));
+            lines.add(hoveredWhitelisted
                     ? Component.translatable("classloadout.gui.whitelist_on")
                     : Component.translatable("classloadout.gui.whitelist_off"));
             if (hoveredHasAmmoGrant) {
-                name = name.copy().append(Component.translatable("classloadout.gui.ammo_grant_marker"));
+                lines.add(Component.translatable("classloadout.gui.ammo_grant_marker"));
             }
             if (hoveredIsVariant) {
-                name = name.copy().append(Component.translatable("classloadout.gui.held_item_marker"));
+                lines.add(Component.translatable("classloadout.gui.held_item_marker"));
+                lines.add(Component.translatable("classloadout.gui.held_item_delete_hint"));
+                lines.add(Component.translatable("classloadout.gui.variant_slots", variantSlotsText(hoveredLoc)));
+                lines.add(Component.translatable("classloadout.gui.variant_registered", variantRegisteredText(hoveredLoc)));
             }
-            graphics.renderTooltip(this.font, name, hoveredX, hoveredY);
+            graphics.renderTooltip(this.font, lines, Optional.empty(), hoveredX, hoveredY);
         }
 
         if (maxScroll > 0) {

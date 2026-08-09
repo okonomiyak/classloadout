@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
+import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
 
 import javax.annotation.Nullable;
@@ -89,16 +90,16 @@ public class ClassEditorScreen extends Screen {
         int navW = 84;
         int navGap = 4;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.protect_button"),
-                        b -> minecraft.setScreen(new ProtectedItemsEditorScreen()))
+                        b -> minecraft.setScreen(new ProtectedItemsEditorScreen(this)))
                 .bounds(panelLeft + panelWidth - PAD - navW, panelTop + 2, navW, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_button"),
-                        b -> minecraft.setScreen(new WhitelistEditorScreen()))
+                        b -> minecraft.setScreen(new WhitelistEditorScreen(this)))
                 .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 2 + navGap, panelTop + 2, navW, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.spawnkit_button"),
-                        b -> minecraft.setScreen(new SpawnKitEditorScreen()))
+                        b -> minecraft.setScreen(new SpawnKitEditorScreen(this)))
                 .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 3 + navGap, panelTop + 2, navW, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.hammerblocks_button"),
-                        b -> minecraft.setScreen(new HammerBlocksEditorScreen()))
+                        b -> minecraft.setScreen(new HammerBlocksEditorScreen(this)))
                 .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 4 + navGap, panelTop + 2, navW, 20).build());
 
         buildLeftColumn();
@@ -207,18 +208,18 @@ public class ClassEditorScreen extends Screen {
 
         iconX = rightX;
         iconY = y;
-        addRenderableWidget(slotButton(iconX, iconY, loc -> pendingIcon = loc));
+        addRenderableWidget(slotButton(iconX, iconY, loc -> pendingIcon = loc, null));
         y += SLOT + 22;
 
         for (int i = 0; i < 5; i++) {
             slotX[i] = rightX + i * (SLOT + 8);
         }
         slotY = y;
-        addRenderableWidget(slotButton(slotX[0], slotY, loc -> pendingMain = loc));
-        addRenderableWidget(slotButton(slotX[1], slotY, loc -> pendingSidearm = loc));
-        addRenderableWidget(slotButton(slotX[2], slotY, loc -> pendingThrowable = loc));
-        addRenderableWidget(slotButton(slotX[3], slotY, loc -> pendingGadget = loc));
-        addRenderableWidget(slotButton(slotX[4], slotY, loc -> pendingMelee = loc));
+        addRenderableWidget(slotButton(slotX[0], slotY, loc -> pendingMain = loc, LoadoutClientData.getWhitelist(LoadoutSlot.MAIN)));
+        addRenderableWidget(slotButton(slotX[1], slotY, loc -> pendingSidearm = loc, LoadoutClientData.getWhitelist(LoadoutSlot.SIDEARM)));
+        addRenderableWidget(slotButton(slotX[2], slotY, loc -> pendingThrowable = loc, LoadoutClientData.getWhitelist(LoadoutSlot.THROWABLE)));
+        addRenderableWidget(slotButton(slotX[3], slotY, loc -> pendingGadget = loc, LoadoutClientData.getWhitelist(LoadoutSlot.GADGET)));
+        addRenderableWidget(slotButton(slotX[4], slotY, loc -> pendingMelee = loc, LoadoutClientData.getWhitelist(LoadoutSlot.MELEE)));
         y += SLOT + 30;
 
         int bw = (rightWidth - 8) / (editingExisting ? 3 : 2);
@@ -236,9 +237,10 @@ public class ClassEditorScreen extends Screen {
                 .bounds(bx, y, bw, 20).build());
     }
 
-    private Button slotButton(int x, int y, Consumer<ResourceLocation> setter) {
+    /** {@code restrictTo} null means unrestricted (only used for the icon slot, which isn't a real loadout slot); the five gear slots pass that slot's whitelist so a preset can't be built from items players couldn't otherwise be assigned. */
+    private Button slotButton(int x, int y, Consumer<ResourceLocation> setter, @Nullable List<ResourceLocation> restrictTo) {
         return Button.builder(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this,
-                        loc -> setter.accept(isAir(loc) ? null : loc))))
+                        loc -> setter.accept(isAir(loc) ? null : loc), restrictTo)))
                 .bounds(x, y, SLOT, SLOT).build();
     }
 

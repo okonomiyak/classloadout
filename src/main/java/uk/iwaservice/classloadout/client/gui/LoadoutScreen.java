@@ -44,6 +44,8 @@ public class LoadoutScreen extends Screen {
     private record PresetRow(LoadoutSyncPacket.Entry entry, int y) {}
 
     private final Screen returnTo;
+    /** True (the regular loadout station / death screen): changes equip into the hotbar right away. False (the deferred loadout locker): only the saved data changes, taking effect on the next respawn. */
+    private final boolean immediate;
     private final List<PresetRow> presetRows = new ArrayList<>();
 
     private int panelWidth;
@@ -55,9 +57,15 @@ public class LoadoutScreen extends Screen {
     private final int[] slotX = new int[5];
     private int slotY;
 
+    /** Immediate mode (regular loadout station / death screen). */
     public LoadoutScreen(Screen returnTo) {
-        super(Component.translatable("classloadout.gui.loadout_title"));
+        this(returnTo, true);
+    }
+
+    public LoadoutScreen(Screen returnTo, boolean immediate) {
+        super(Component.translatable(immediate ? "classloadout.gui.loadout_title" : "classloadout.gui.loadout_title_deferred"));
         this.returnTo = returnTo;
+        this.immediate = immediate;
     }
 
     @Override
@@ -121,7 +129,7 @@ public class LoadoutScreen extends Screen {
 
     private void command(String cmd) {
         if (minecraft != null && minecraft.player != null) {
-            minecraft.player.connection.sendCommand(cmd);
+            minecraft.player.connection.sendCommand(immediate ? cmd : cmd + " defer");
         }
     }
 

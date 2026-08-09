@@ -11,6 +11,7 @@ import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,8 +60,23 @@ public class ProtectedItemsEditorScreen extends Screen {
     private int maxScroll;
     private int dataRevision = -1;
 
+    @Nullable
+    private final Screen parent;
+
+    /** Opened directly by {@code /class protect} - closing exits the GUI entirely (no parent to return to). */
     public ProtectedItemsEditorScreen() {
+        this(null);
+    }
+
+    /** Opened via the class editor's nav bar - closing returns to {@code parent} instead of exiting. */
+    public ProtectedItemsEditorScreen(@Nullable Screen parent) {
         super(Component.translatable("classloadout.gui.protect_editor_title"));
+        this.parent = parent;
+    }
+
+    @Override
+    public void onClose() {
+        minecraft.setScreen(parent);
     }
 
     @Override

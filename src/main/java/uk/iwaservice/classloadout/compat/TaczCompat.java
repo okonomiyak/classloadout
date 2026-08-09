@@ -1,5 +1,6 @@
 package uk.iwaservice.classloadout.compat;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -79,6 +80,22 @@ public final class TaczCompat {
             return List.of();
         }
         return uk.iwaservice.classloadout.compat.tacz.TaczAmmoResolver.allAmmoIds();
+    }
+
+    /** Extra tooltip lines (gun id, ammo, attachments) for a TACZ gun stack; empty if TACZ isn't installed or the stack isn't a gun. */
+    public static List<Component> describeGunTooltip(ItemStack stack) {
+        if (!isLoaded()) {
+            return List.of();
+        }
+        return uk.iwaservice.classloadout.compat.tacz.TaczGunResolver.describeGunTooltip(stack);
+    }
+
+    /** Extra tooltip line (loaded ammo type + count) for a TACZ ammo box stack; empty if TACZ isn't installed or the stack isn't an ammo box. */
+    public static List<Component> describeAmmoBoxTooltip(ItemStack stack) {
+        if (!isLoaded()) {
+            return List.of();
+        }
+        return uk.iwaservice.classloadout.compat.tacz.TaczAmmoResolver.describeAmmoBoxTooltip(stack);
     }
 
     private TaczCompat() {}

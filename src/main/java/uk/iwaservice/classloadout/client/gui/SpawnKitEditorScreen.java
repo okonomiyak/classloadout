@@ -11,6 +11,7 @@ import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 
+import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
 
@@ -58,8 +59,23 @@ public class SpawnKitEditorScreen extends Screen {
     private int maxScroll;
     private int dataRevision = -1;
 
+    @Nullable
+    private final Screen parent;
+
+    /** Opened directly by {@code /class spawnkit} - closing exits the GUI entirely (no parent to return to). */
     public SpawnKitEditorScreen() {
+        this(null);
+    }
+
+    /** Opened via the class editor's nav bar - closing returns to {@code parent} instead of exiting. */
+    public SpawnKitEditorScreen(@Nullable Screen parent) {
         super(Component.translatable("classloadout.gui.spawnkit_editor_title"));
+        this.parent = parent;
+    }
+
+    @Override
+    public void onClose() {
+        minecraft.setScreen(parent);
     }
 
     @Override

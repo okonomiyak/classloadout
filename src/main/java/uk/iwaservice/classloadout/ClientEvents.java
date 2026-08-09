@@ -23,10 +23,14 @@ public final class ClientEvents {
     }
 
     /**
-     * Right-clicking a placed loadout station opens the same self-service
-     * {@link LoadoutScreen} as the death screen's button - purely client-side
-     * (the loadout data is already synced), so there's nothing for the server
-     * to authorize and no reason to route this through a packet.
+     * Right-clicking a placed loadout station or loadout locker opens the
+     * same self-service {@link LoadoutScreen} as the death screen's button -
+     * purely client-side (the loadout data is already synced), so there's
+     * nothing for the server to authorize and no reason to route this
+     * through a packet. The station equips changes into the hotbar right
+     * away ({@code immediate=true}); the locker only saves them, leaving the
+     * hotbar alone until the next respawn ({@code immediate=false}) - see
+     * {@link LoadoutScreen#LoadoutScreen(Screen, boolean)}.
      *
      * <p>{@code RightClickBlock} fires once per hand for a single physical
      * click; without the {@code MAIN_HAND} guard below, a single click could
@@ -36,12 +40,17 @@ public final class ClientEvents {
      */
     @SubscribeEvent
     public static void onRightClickLoadoutStation(PlayerInteractEvent.RightClickBlock event) {
-        if (event.getHand() != InteractionHand.MAIN_HAND
-                || !event.getLevel().getBlockState(event.getPos()).is(ModRegistry.LOADOUT_STATION.get())) {
+        if (event.getHand() != InteractionHand.MAIN_HAND) {
             return;
         }
-        event.setCanceled(true);
-        Minecraft.getInstance().setScreen(new LoadoutScreen(null));
+        var state = event.getLevel().getBlockState(event.getPos());
+        if (state.is(ModRegistry.LOADOUT_STATION.get())) {
+            event.setCanceled(true);
+            Minecraft.getInstance().setScreen(new LoadoutScreen(null, true));
+        } else if (state.is(ModRegistry.LOADOUT_LOCKER.get())) {
+            event.setCanceled(true);
+            Minecraft.getInstance().setScreen(new LoadoutScreen(null, false));
+        }
     }
 
     /** Adds a "Loadout" button to the vanilla death screen, in the corner to avoid the Respawn/Title stack. */

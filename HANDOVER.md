@@ -14,11 +14,27 @@
 
 ## 現在のgit状態(★重要★)
 
-**2026-08-08、v0.3.3としてコミット・push・リリース済み**(コミット`57cc56f`、タグ`v0.3.3`)。弾薬同期バグの修正・バージョン表示修正・CIビルド追加を含む。詳細は下記「弾薬状態が全員に同期されるバグの修正(2026-08-08)」節を参照。以後の変更は再びこのセクションで追跡すること。
+**2026-08-09、v0.4.0としてコミット・push・リリース予定**。ホワイトリスト編集画面のmod別カテゴリ分け・手持ち登録アイテムの削除機能・詳細ツールチップ(TACZ銃/弾薬箱)・登録スロット/日時表示、`/class editor`のサブ画面からの戻る導線、プリセット編集のスロットピッカーがホワイトリストに従うように、新規ブロック`classloadout:loadout_locker`(即時反映しないロードアウトステーション)、両ロードアウトブロックの当たり判定調整+向き対応、を含む。詳細は下記「2026-08-09セッションのまとめ」節を参照。以後の変更は再びこのセクションで追跡すること。
 
 このセッションはLinux機(`/home/iwa/projects/java/classloadout`)で実施。従来のWindows機(`C:\Users\tomip\program\java\classloadout`)とは別PC。**Claude Codeのメモリ(`~/.claude/projects/.../memory/`)はマシンごとに独立していてgit管理外のため、PCを跨ぐと自動では引き継がれない**——このHANDOVER.md(gitでpushされる)が唯一の確実な引継ぎ手段。別PCで作業を再開する際は、まずこのファイルを読むこと。
 
-**⚠️未解決の判断待ち事項**: `v0.3.1`リリース(2026-08-08作成)は、後に誤りと判明した修正(`stripVolatileGunState`、根本原因ではなかった)を含んだままGitHub上に残っている。削除するか残すかユーザーに確認できておらず未対応。次回このリポジトリを触るセッションで確認すること。
+**⚠️未解決の判断待ち事項**: `v0.3.1`リリース(2026-08-08作成)は、後に誤りと判明した修正(`stripVolatileGunState`、根本原因ではなかった)を含んだままGitHub上に残っている。2026-08-09セッションでユーザーに確認したところ「残しといて」との回答で、削除しない方針が確定した。以後この項目は対応不要。
+
+## 2026-08-09セッションのまとめ
+
+Windows機での対話セッション。テストサーバーの起動(`online-mode=false`+`ops.json`手動編集、いずれも`.gitignore`対象で追跡外)から始まり、ホワイトリスト編集画面まわりのUI改善・新規ブロックを連続して実装した。
+
+- **ホワイトリスト編集画面のmodカテゴリ分け**: `ItemCatalog.Category`(`TACZ`/`SUPERBWARFARE`/`MINECRAFT`/`CLASSLOADOUT`/`HELD_ITEMS`)を追加。手持ち登録アイテム(`classloadout:variant_*`)は元アイテムのmodに関わらず`HELD_ITEMS`に分類。スロットタブの下にカテゴリタブ行(全部/TACZ/SW/MC/CL/手持ち)を追加。適用範囲はユーザーの選択で**ホワイトリスト編集画面のみ**(他のピッカー画面は未対応)。
+- **手持ち登録アイテムの完全削除**: 従来`removeFromWhitelist`はホワイトリストから外すだけで`itemVariants`自体は孤児のまま残っていた(意図的仕様)。今回は逆方向の操作として`LoadoutManager.deleteItemVariant`+`/class whitelist delete_variant <id>`(OP限定)を追加、ホワイトリスト編集画面でHeld Itemsセルを**Shift+左クリック**すると完全削除できるようにした。他のホワイトリスト/弾薬付与/スポーンキットから参照されたまま削除された場合はカスケード削除せず「解決不能なID」として静かに無視される(既存の孤児許容方針を踏襲)。
+- **ツールチップの情報量強化**: `hoveredStack.getTooltipLines(...)`を使い完全なアイテムツールチップ(エンチャント等)を表示するよう変更。TACZ銃は`compat/tacz/TaczGunResolver.describeGunTooltip`でガンID・弾薬ID+装填数・装着中アタッチメント(`IGun#getAttachmentId`+`DefaultAssets.isEmptyAttachmentId`)を追加表示。TACZ弾薬箱(`IAmmoBox`)は`TaczAmmoResolver.describeAmmoBoxTooltip`で装填中の弾薬種類+数(未装填なら「not loaded yet」)を表示。手持ち登録アイテムには登録スロット一覧・登録日時(`LoadoutManager.variantRegisteredAt`、NBT/同期パケットに新フィールド追加、既存ワールドのセーブには無いため「-」表示)も追加。
+- **`/class editor`のサブ画面ナビゲーション改善**: ホワイトリスト/除外アイテム/スポーンキット/ハンマーブロックの各編集画面に`@Nullable Screen parent`を追加、`onClose()`をオーバーライドして`parent`(無ければ`null`=従来通りGUI終了)に戻るようにした。`ClassEditorScreen`のナビボタンは`this`を渡すよう変更。
+- **プリセット編集のスロットピッカーをホワイトリスト制限**: `ClassEditorScreen.slotButton`に`restrictTo`引数を追加、メイン/サイドアーム/投擲物/ガジェット/近接の5スロットは`LoadoutClientData.getWhitelist(slot)`で絞り込むように変更(アイコン欄のみ無制限のまま)。**サーバー側の`/class save`コマンド自体は引き続き無検証**(ドキュメント通り、OP権限前提の意図的な設計)——今回の変更はGUI側の絞り込みのみ。
+- **新規ブロック`classloadout:loadout_locker`(即時反映しないロードアウトステーション)**: 既存の`loadout_station`(即時装備)とは別に、変更が**次のリスポーン時まで反映されない**バリアントを追加。実装は`/class assign|select|clear`の末尾に`defer`リテラルを追加できるようコマンドツリーを分岐し(`immediate`引数で`ServerEvents.equipLoadout`呼び出しをスキップ)、`LoadoutScreen`に`immediate`フラグを持たせてロッカー起動時は自動で`defer`を付与する方式。ブロック自体はステーションと別登録(鉄ブロック風テクスチャで視覚的に区別、クリエイティブタブは同じ「建築ブロック」)。
+- **両ロードアウトブロックの当たり判定・向き対応**: ユーザーがBlockbench製の実モデル(`loadout_locker`→その後`loadout_station`も)に差し替えたのを受けて、`LoadoutLockerBlock`/`LoadoutStationBlock`(新規クラス)を作成:
+  - `.noOcclusion()`をプロパティに追加(フルキューブではない形状なので、光を通す・隣接ブロックの面が正しく描画されるようにするため)
+  - `getShape()`をオーバーライドしてモデル実寸に合わせた`VoxelShape`当たり判定を実装。ロッカーは非対称形状なので`FACING`ごとに90度刻みで回転させたシェイプを用意(`rotateClockwise`ヘルパー、`(x,z)->(1-z,x)`が1ステップ=時計回り90度、ブロックステートJSONの`y:90/180/270`と一致する回転規則であることを検証済み)。ステーションは背面リム(視覚のみ、当たり判定から意図的に除外——ユーザー確認済み)を除くと4隅対称な形状のため、回転不要でそのまま使い回し
+  - 両ブロックを`HorizontalDirectionalBlock`継承に変更、`getStateForPlacement`でプレイヤーの向いている方向の逆(=正面がプレイヤー側)に`FACING`を設定(かまど等と同じ慣習)。ブロックステートJSONに`facing=north/east/south/west`のバリアントと対応する`y`回転を追加
+- `gradlew build`成功を毎ステップ確認済み。**GUI/実地確認は一切未実施**(このセッションではビルド確認のみ、下記「次にやるべきこと」参照)
 
 ## 動作確認の状況(2026-07-21時点)
 
@@ -270,13 +286,19 @@ v0.3.3のjarでは`unzip -p ... META-INF/MANIFEST.MF`で`Implementation-Version:
 GitHub push認証がこの環境のHTTPS `origin`では通らなかった(`could not read Username for 'https://github.com'`)。SSHのホストエイリアス`github-okonomiyak`(`~/.ssh/config`に定義済み、鍵は`~/.ssh/id_ed25519_okonomiyaki`)に向けて`git remote set-url origin git@github-okonomiyak:okonomiyak/classloadout.git`してpushした。セッション途中から`gh` CLIも使えるようになった(`okonomiyak`としてログイン済み)ので、以降はGitHub Actionsの実行状況確認・リリース作成は`gh run watch`/`gh run download`/`gh release create`を使った。
 
 - v0.2.0・v0.3.0: 今回のセッション以前からの既存リリース
-- v0.3.1: 誤った修正(`stripVolatileGunState`)を含むリリース。**削除するかどうか未確認、そのまま残っている**(上記「未解決の判断待ち事項」参照)
+- v0.3.1: 誤った修正(`stripVolatileGunState`)を含むリリース。ユーザー確認済み、**意図的にそのまま残す方針**(上記参照)
 - v0.3.2: タグは作ったがリリースはしていない(マニフェストの`Implementation-Version`欠落に気づいて即座にタグ削除。GitHub上には残っていない)
-- v0.3.3: 弾薬同期バグの正しい修正+バージョン表示修正+CI追加、を含む最新の正式リリース
+- v0.3.3: 弾薬同期バグの正しい修正+バージョン表示修正+CI追加、を含むリリース
+- v0.4.0: ホワイトリスト編集画面のUI強化・`loadout_locker`ブロック・当たり判定/向き対応、を含む最新の正式リリース(2026-08-09、上記「2026-08-09セッションのまとめ」参照)
 
 ## 次にやるべきこと(優先順)
 
-0a. **v0.3.1リリースを削除するかどうかユーザーに確認する**(誤った修正を含んだまま公開されている、上記参照)——最優先、次にこのリポジトリを触るセッションの冒頭で確認すること
+-1. **2026-08-09セッションで実装した機能の実地確認**(すべて`gradlew build`成功のみでGUI未確認)——最優先:
+    - ホワイトリスト編集画面: カテゴリタブ切り替え、手持ち登録アイテムのShift+クリック削除、TACZ銃/弾薬箱の詳細ツールチップ表示、登録スロット/日時表示
+    - `/class editor`のナビゲーションボタンから他画面に行って閉じた時に`/class editor`へ戻ること
+    - プリセット編集でメイン等のスロットピッカーがホワイトリストに絞り込まれていること
+    - `loadout_locker`設置→右クリック→変更してもリスポームまでホットバーが変わらないこと(`loadout_station`は即時反映のまま)
+    - 両ブロックとも設置時に自分の向いている方向に正面が向くこと、隣のブロックの明かり/面が正しく描画されること、モデル形状通りの当たり判定になっていること
 0b. **弾薬同期バグ修正(v0.3.3)の実地確認**: 2人以上のプレイヤーで同じ武器をロードアウトに割り当て、片方が発砲して弾薬を消費しても、もう片方の弾薬数が変わらないことを`runClient`(2クライアント同時起動可能、`client`/`client2`のrun設定あり)で確認する。あわせてMod一覧画面でバージョンが`0.3.3`と表示されることも確認(`${file.jarVersion}`が実際に解決されるかの実地確認、上記参照)——優先度最高(今回のセッションの主目的)
 1. 上記の補給パック誰でも破壊可能化の実地確認(GUI操作を伴うため`runClient`でのユーザー確認待ち)
 1v. 上記の遮蔽物(誰でも破壊可能化+HP config化)の実地確認(GUI操作を伴うため`runClient`でのユーザー確認待ち)

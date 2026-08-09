@@ -31,13 +31,27 @@ public final class ModRegistry {
 
     // --- loadout station (right-click to open the loadout screen without dying) ---
 
+    /** Model is a desk shape (legs + tabletop, not a full cube) - noOcclusion() stops it from culling neighboring blocks' faces and from blocking light like a solid cube would; {@link LoadoutStationBlock} gives it a matching (non-full-cube) hitbox. */
     public static final RegistryObject<Block> LOADOUT_STATION = BLOCKS.register("loadout_station",
-            () -> new Block(BlockBehaviour.Properties.of()
+            () -> new LoadoutStationBlock(BlockBehaviour.Properties.of()
                     .mapColor(MapColor.WOOD)
                     .strength(2.5F)
-                    .sound(SoundType.WOOD)));
+                    .sound(SoundType.WOOD)
+                    .noOcclusion()));
     public static final RegistryObject<Item> LOADOUT_STATION_ITEM = ITEMS.register("loadout_station",
             () -> new BlockItem(LOADOUT_STATION.get(), new Item.Properties()));
+
+    // --- loadout locker (right-click to open the loadout screen, but changes only apply on next respawn) ---
+
+    /** Model is a 16x14x16 box, not a full cube - noOcclusion() stops it from culling neighboring blocks' faces and from blocking light like a solid cube would; {@link LoadoutLockerBlock} gives it a matching (non-full-cube) hitbox. */
+    public static final RegistryObject<Block> LOADOUT_LOCKER = BLOCKS.register("loadout_locker",
+            () -> new LoadoutLockerBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .strength(2.5F)
+                    .sound(SoundType.METAL)
+                    .noOcclusion()));
+    public static final RegistryObject<Item> LOADOUT_LOCKER_ITEM = ITEMS.register("loadout_locker",
+            () -> new BlockItem(LOADOUT_LOCKER.get(), new Item.Properties()));
 
     // --- placed resupply packs (right-click to place, stronger, combat-destroyable - see AbstractResupplyPackEntity) ---
 
