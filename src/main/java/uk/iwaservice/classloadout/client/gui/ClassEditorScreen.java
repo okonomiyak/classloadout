@@ -178,14 +178,24 @@ public class ClassEditorScreen extends Screen {
         this.init(this.minecraft, this.width, this.height);
     }
 
+    /**
+     * Sent as one command per field (name, then each of the six slots) rather than a single
+     * command carrying all of them - a held-item variant id is long enough (~58 chars) that
+     * six of them plus the name in one command could exceed the 256-character limit vanilla
+     * enforces on chat/command packets, disconnecting the client. See {@code ClassCommand
+     * #saveName}/{@code #saveSlot}.
+     */
     private void save() {
         if (pendingName.isBlank()) {
             return;
         }
-        String cmd = "class save " + pendingId + " "
-                + rl(pendingIcon) + " " + rl(pendingMain) + " " + rl(pendingSidearm) + " "
-                + rl(pendingThrowable) + " " + rl(pendingGadget) + " " + rl(pendingMelee) + " " + pendingName;
-        command(cmd);
+        command("class save " + pendingId + " " + pendingName);
+        command("class save_slot " + pendingId + " icon " + rl(pendingIcon));
+        command("class save_slot " + pendingId + " main " + rl(pendingMain));
+        command("class save_slot " + pendingId + " sidearm " + rl(pendingSidearm));
+        command("class save_slot " + pendingId + " throwable " + rl(pendingThrowable));
+        command("class save_slot " + pendingId + " gadget " + rl(pendingGadget));
+        command("class save_slot " + pendingId + " melee " + rl(pendingMelee));
         editing = false;
         this.init(this.minecraft, this.width, this.height);
     }

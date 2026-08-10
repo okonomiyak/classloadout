@@ -6,6 +6,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
@@ -96,10 +97,30 @@ public class HammerBlocksEditorScreen extends Screen {
         gridTop = searchY + SEARCH_H + 6;
         gridHeight = panelTop + panelHeight - PAD - 24 - gridTop;
 
+        int closeWidth = (panelWidth - 2 * PAD - 4) * 2 / 3;
+        int addHeldWidth = panelWidth - 2 * PAD - 4 - closeWidth;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
-                .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, panelWidth - 2 * PAD, 20).build());
+                .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, closeWidth, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_add_held"),
+                        b -> addHeldBlock())
+                .bounds(panelLeft + PAD + closeWidth + 4, panelTop + panelHeight - PAD - 20, addHeldWidth, 20).build());
 
         updateShown();
+    }
+
+    /** Blocks have no NBT-variant system (unlike items) - this just adds the block behind the held BlockItem, if any. */
+    private void addHeldBlock() {
+        if (minecraft == null || minecraft.player == null) {
+            return;
+        }
+        ItemStack held = minecraft.player.getMainHandItem();
+        if (!(held.getItem() instanceof BlockItem blockItem)) {
+            return;
+        }
+        ResourceLocation block = ForgeRegistries.BLOCKS.getKey(blockItem.getBlock());
+        if (block != null && !LoadoutClientData.getHammerBlocks().contains(block)) {
+            command("class hammerblocks add " + block);
+        }
     }
 
     @Override
@@ -129,6 +150,9 @@ public class HammerBlocksEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (HotbarBar.mouseClicked(minecraft, mouseX, mouseY)) {
+            return true;
+        }
         int index = cellIndexAt(mouseX, mouseY);
         if (index >= 0) {
             ResourceLocation block = shown.get(index);
@@ -146,6 +170,15 @@ public class HammerBlocksEditorScreen extends Screen {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Don't hijack digit keys while the search box is focused.
+        if (!search.isFocused() && HotbarBar.keyPressed(minecraft, keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private void command(String cmd) {
@@ -231,6 +264,8 @@ public class HammerBlocksEditorScreen extends Screen {
             int thumbY = gridTop + (gridHeight - thumbHeight) * scrollOffset / Math.max(1, maxScroll);
             graphics.fill(trackX, thumbY, trackX + 2, thumbY + thumbHeight, 0xB0FFFFFF);
         }
+
+        HotbarBar.render(graphics, this.minecraft);
     }
 
     @Override

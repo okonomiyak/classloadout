@@ -46,6 +46,11 @@ public final class ClassCommand {
 
     private static final SuggestionProvider<CommandSourceStack> SLOT_KEYS = (ctx, builder) ->
             SharedSuggestionProvider.suggest(Arrays.stream(LoadoutSlot.values()).map(LoadoutSlot::key), builder);
+    private static final SuggestionProvider<CommandSourceStack> CLASS_SLOT_KEYS = (ctx, builder) ->
+            SharedSuggestionProvider.suggest(
+                    java.util.stream.Stream.concat(java.util.stream.Stream.of("icon"),
+                            Arrays.stream(LoadoutSlot.values()).map(LoadoutSlot::key)),
+                    builder);
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("class")
@@ -55,14 +60,14 @@ public final class ClassCommand {
                 .then(Commands.literal("save")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("id", UuidArgument.uuid())
-                        .then(Commands.argument("icon", ResourceLocationArgument.id())
-                        .then(Commands.argument("main", ResourceLocationArgument.id())
-                        .then(Commands.argument("sidearm", ResourceLocationArgument.id())
-                        .then(Commands.argument("throwable", ResourceLocationArgument.id())
-                        .then(Commands.argument("gadget", ResourceLocationArgument.id())
-                        .then(Commands.argument("melee", ResourceLocationArgument.id())
                         .then(Commands.argument("name", StringArgumentType.greedyString())
-                                .executes(ctx -> save(ctx)))))))))))
+                                .executes(ctx -> saveName(ctx)))))
+                .then(Commands.literal("save_slot")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.argument("id", UuidArgument.uuid())
+                        .then(Commands.argument("slot", StringArgumentType.word()).suggests(CLASS_SLOT_KEYS)
+                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .executes(ctx -> saveSlot(ctx))))))
                 .then(Commands.literal("delete")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("id", UuidArgument.uuid()).executes(ctx -> delete(ctx))))
@@ -140,20 +145,59 @@ public final class ClassCommand {
         return 1;
     }
 
-    /** Creates or (if the id already exists) overwrites a preset definition in one atomic command. */
-    private static int save(CommandContext<CommandSourceStack> ctx) {
+    /**
+     * Creates (with all slots empty) or renames a preset, keeping its existing slots if it
+     * already exists. Split from slot assignment (see {@link #saveSlot}) because the editor
+     * used to send id+icon+all five slots+name as a single command - fine for bare item ids,
+     * but an OP-registered held-item variant id (~58 chars each) across six slots easily built
+     * a command longer than the 256-character limit vanilla enforces on chat/command packets,
+     * disconnecting the client with an EncoderException. Six small commands instead of one big
+     * one sidesteps that ceiling entirely (matches how every other multi-value edit in this mod
+     * - whitelist/spawn kit/hammer blocks - is already one command per item, never a batch).
+     */
+    private static int saveName(CommandContext<CommandSourceStack> ctx) {
         UUID id = UuidArgument.getUuid(ctx, "id");
-        ResourceLocation icon = noneIfAir(ResourceLocationArgument.getId(ctx, "icon"));
-        ResourceLocation main = noneIfAir(ResourceLocationArgument.getId(ctx, "main"));
-        ResourceLocation sidearm = noneIfAir(ResourceLocationArgument.getId(ctx, "sidearm"));
-        ResourceLocation throwable = noneIfAir(ResourceLocationArgument.getId(ctx, "throwable"));
-        ResourceLocation gadget = noneIfAir(ResourceLocationArgument.getId(ctx, "gadget"));
-        ResourceLocation melee = noneIfAir(ResourceLocationArgument.getId(ctx, "melee"));
         String name = StringArgumentType.getString(ctx, "name");
-
-        ClassDefinition def = new ClassDefinition(id, name, icon, main, sidearm, throwable, gadget, melee);
-        LoadoutManager.get(ctx.getSource().getServer()).saveOrUpdate(ctx.getSource().getServer(), def);
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        ClassDefinition existing = manager.get(id);
+        ClassDefinition def = existing != null
+                ? new ClassDefinition(id, name, existing.icon(), existing.main(), existing.sidearm(),
+                        existing.throwable(), existing.gadget(), existing.melee())
+                : new ClassDefinition(id, name, null, null, null, null, null, null);
+        manager.saveOrUpdate(ctx.getSource().getServer(), def);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.class_saved", name), true);
+        return 1;
+    }
+
+    /** Sets one slot (or {@code icon}) of an already-created preset - see {@link #saveName}. */
+    private static int saveSlot(CommandContext<CommandSourceStack> ctx) {
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        String slotKey = StringArgumentType.getString(ctx, "slot");
+        ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        ClassDefinition existing = manager.get(id);
+        if (existing == null) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        ClassDefinition def = switch (slotKey) {
+            case "icon" -> new ClassDefinition(id, existing.name(), item, existing.main(), existing.sidearm(),
+                    existing.throwable(), existing.gadget(), existing.melee());
+            case "main" -> new ClassDefinition(id, existing.name(), existing.icon(), item, existing.sidearm(),
+                    existing.throwable(), existing.gadget(), existing.melee());
+            case "sidearm" -> new ClassDefinition(id, existing.name(), existing.icon(), existing.main(), item,
+                    existing.throwable(), existing.gadget(), existing.melee());
+            case "throwable" -> new ClassDefinition(id, existing.name(), existing.icon(), existing.main(),
+                    existing.sidearm(), item, existing.gadget(), existing.melee());
+            case "gadget" -> new ClassDefinition(id, existing.name(), existing.icon(), existing.main(),
+                    existing.sidearm(), existing.throwable(), item, existing.melee());
+            case "melee" -> new ClassDefinition(id, existing.name(), existing.icon(), existing.main(),
+                    existing.sidearm(), existing.throwable(), existing.gadget(), item);
+            default -> null;
+        };
+        if (def == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", slotKey);
+        }
+        manager.saveOrUpdate(ctx.getSource().getServer(), def);
         return 1;
     }
 

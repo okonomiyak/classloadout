@@ -19,7 +19,8 @@ GNU General Public License v3.0 (GPL-3.0-only). Full text in [`LICENSE`](LICENSE
 | `/class select <id>` | Apply a preset's five items into your own loadout as a starting point | - |
 | `/class clear` | Clear your entire personal loadout | - |
 | `/class editor` | Open the preset editor GUI | OP (level 2+) |
-| `/class save <id> <icon> <main> <sidearm> <throwable> <gadget> <melee> <name...>` | Create or overwrite a preset (sent by the editor's Save button, not typed by hand) | OP (level 2+) |
+| `/class save <id> <name...>` | Create a preset (empty slots) or rename an existing one, keeping its slots | OP (level 2+) |
+| `/class save_slot <id> <icon\|main\|sidearm\|throwable\|gadget\|melee> <item>` | Set one slot (or the icon) of an already-created preset; `minecraft:air` clears it. The editor's Save button sends one `save` plus six `save_slot` commands rather than one big command, since a held-item variant id across six slots could exceed the 256-character limit on chat/command packets | OP (level 2+) |
 | `/class delete <id>` | Delete a preset | OP (level 2+) |
 | `/class whitelist` | Open the slot-whitelist editor GUI | OP (level 2+) |
 | `/class whitelist add <slot> <item>` | Add an item to a slot's whitelist (sent by the whitelist editor, not typed by hand) | OP (level 2+) |

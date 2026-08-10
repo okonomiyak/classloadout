@@ -19,7 +19,8 @@ GNU General Public License v3.0 (GPL-3.0-only)。全文は [`LICENSE`](LICENSE) 
 | `/class select <id>` | プリセットの5アイテムを自分のロードアウトへ出発点として反映 | - |
 | `/class clear` | 自分のロードアウト全体をクリア | - |
 | `/class editor` | プリセットエディタGUIを開く | OP (レベル2+) |
-| `/class save <id> <icon> <main> <sidearm> <throwable> <gadget> <melee> <name...>` | プリセットの作成/上書き(エディタの[保存]ボタンが送信、手打ち不要) | OP (レベル2+) |
+| `/class save <id> <name...>` | プリセットを作成(スロットは空)、または既存プリセットの名前だけ変更(スロットは維持) | OP (レベル2+) |
+| `/class save_slot <id> <icon\|main\|sidearm\|throwable\|gadget\|melee> <item>` | 作成済みプリセットの1スロット(またはアイコン)を設定。`minecraft:air`で解除。エディタの[保存]ボタンは`save`1回+`save_slot`6回に分けて送信する(手持ち登録アイテムのIDは長く、6スロット分を1コマンドにまとめるとチャット/コマンドパケットの256文字制限を超えてしまうため) | OP (レベル2+) |
 | `/class delete <id>` | プリセットを削除 | OP (レベル2+) |
 | `/class whitelist` | スロット別ホワイトリストエディタGUIを開く | OP (レベル2+) |
 | `/class whitelist add <slot> <item>` | あるスロットのホワイトリストにアイテムを追加(エディタが送信、手打ち不要) | OP (レベル2+) |

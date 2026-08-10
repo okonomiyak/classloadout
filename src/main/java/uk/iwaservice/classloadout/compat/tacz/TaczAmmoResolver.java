@@ -2,6 +2,7 @@ package uk.iwaservice.classloadout.compat.tacz;
 
 import com.tacz.guns.api.DefaultAssets;
 import com.tacz.guns.api.TimelessAPI;
+import com.tacz.guns.api.item.IAmmo;
 import com.tacz.guns.api.item.IAmmoBox;
 import com.tacz.guns.api.item.builder.AmmoItemBuilder;
 import net.minecraft.network.chat.Component;
@@ -52,6 +53,23 @@ public final class TaczAmmoResolver {
             return List.of(Component.literal("Ammo: (not loaded yet)"));
         }
         return List.of(Component.literal("Ammo: " + ammoId + " x" + box.getAmmoCount(stack)));
+    }
+
+    /**
+     * Extra tooltip line for a standalone loose ammo stack, always showing the raw ammo id.
+     * TACZ's own {@code AmmoItem#getName} looks up a display name from its client-side ammo
+     * resource index and silently falls back to the item's generic registered name (the same
+     * for every caliber) when that lookup misses - which happens for at least some ammo ids in
+     * practice, making otherwise-identical-looking entries impossible to tell apart in a
+     * picker. This line is independent of that lookup, so it's always there as a fallback.
+     * Empty if {@code stack} isn't a TACZ ammo item.
+     */
+    public static List<Component> describeAmmoTooltip(ItemStack stack) {
+        IAmmo ammo = IAmmo.getIAmmoOrNull(stack);
+        if (ammo == null) {
+            return List.of();
+        }
+        return List.of(Component.literal("Ammo: " + ammo.getAmmoId(stack)));
     }
 
     private TaczAmmoResolver() {}

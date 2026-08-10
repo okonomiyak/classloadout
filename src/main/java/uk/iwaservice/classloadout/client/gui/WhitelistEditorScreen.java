@@ -192,6 +192,9 @@ public class WhitelistEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (HotbarBar.mouseClicked(minecraft, mouseX, mouseY)) {
+            return true;
+        }
         int index = cellIndexAt(mouseX, mouseY);
         if (index >= 0) {
             ResourceLocation item = shown.get(index);
@@ -222,6 +225,15 @@ public class WhitelistEditorScreen extends Screen {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Don't hijack digit keys while the search box is focused (e.g. typing "9x19").
+        if (!search.isFocused() && HotbarBar.keyPressed(minecraft, keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     /** Every slot key this variant id is currently whitelisted under, comma-joined ("-" if none). */
@@ -320,6 +332,7 @@ public class WhitelistEditorScreen extends Screen {
                     this.minecraft.player, TooltipFlag.Default.NORMAL));
             lines.addAll(TaczCompat.describeGunTooltip(hoveredStack));
             lines.addAll(TaczCompat.describeAmmoBoxTooltip(hoveredStack));
+            lines.addAll(TaczCompat.describeAmmoTooltip(hoveredStack));
             lines.add(hoveredWhitelisted
                     ? Component.translatable("classloadout.gui.whitelist_on")
                     : Component.translatable("classloadout.gui.whitelist_off"));
@@ -342,6 +355,8 @@ public class WhitelistEditorScreen extends Screen {
             int thumbY = gridTop + (gridHeight - thumbHeight) * scrollOffset / Math.max(1, maxScroll);
             graphics.fill(trackX, thumbY, trackX + 2, thumbY + thumbHeight, 0xB0FFFFFF);
         }
+
+        HotbarBar.render(graphics, this.minecraft);
     }
 
     @Override

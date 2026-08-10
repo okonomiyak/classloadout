@@ -151,6 +151,23 @@ public class AmmoGrantScreen extends Screen {
     }
 
     @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (HotbarBar.mouseClicked(minecraft, mouseX, mouseY)) {
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Don't hijack digit keys while the count box is focused.
+        if (!countBox.isFocused() && HotbarBar.keyPressed(minecraft, keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
 
@@ -177,6 +194,8 @@ public class AmmoGrantScreen extends Screen {
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        HotbarBar.render(graphics, this.minecraft);
     }
 
     @Override

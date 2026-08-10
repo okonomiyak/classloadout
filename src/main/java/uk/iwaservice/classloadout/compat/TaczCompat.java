@@ -98,5 +98,13 @@ public final class TaczCompat {
         return uk.iwaservice.classloadout.compat.tacz.TaczAmmoResolver.describeAmmoBoxTooltip(stack);
     }
 
+    /** Extra tooltip line (raw ammo id, a reliable fallback for TACZ's own sometimes-generic display name) for a standalone TACZ ammo stack; empty if TACZ isn't installed or the stack isn't ammo. */
+    public static List<Component> describeAmmoTooltip(ItemStack stack) {
+        if (!isLoaded()) {
+            return List.of();
+        }
+        return uk.iwaservice.classloadout.compat.tacz.TaczAmmoResolver.describeAmmoTooltip(stack);
+    }
+
     private TaczCompat() {}
 }

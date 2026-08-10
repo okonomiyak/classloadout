@@ -8,28 +8,46 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.TooltipFlag;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
+import uk.iwaservice.classloadout.compat.TaczCompat;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
  * Generic item-grid picker used for icon/slot assignment. With no
  * restriction it lists the full {@link ItemCatalog} (used by the OP-only
- * preset editor, which is trusted with any item); when constructed with a
- * {@code restrictTo} set it shows only those items (used by the player-facing
- * loadout screen, restricted to that slot's OP-curated whitelist - an empty
- * set means nothing is assignable yet). No server round trip either way:
- * the item registry is already fully populated on the client after login.
- * Cell 0 is a fixed "none" entry that reports {@code minecraft:air}, the
- * sentinel the save/assign commands treat as "unset".
+ * preset editor, which is trusted with any item, and the ammo grant popup's
+ * ammo picker) - and, unrestricted only, shows the same mod-category tabs as
+ * {@link WhitelistEditorScreen}, plus an "Add Held Item" button (registers
+ * the OP's held item as a reusable variant via {@code /class whitelist
+ * register_held}, OP-only server-side, and immediately picks it - same idea
+ * as {@link WhitelistEditorScreen}'s and {@link AmmoGrantScreen}'s own Add
+ * Held Item buttons), so a specific TACZ ammo type or an exact NBT-bearing
+ * item is easy to find or add among everything else; when constructed with a
+ * {@code restrictTo} set it shows only those items with no category tabs or
+ * Add Held Item button (used by the player-facing loadout screen, restricted
+ * to that slot's OP-curated whitelist - an empty set means nothing is
+ * assignable yet; letting a non-OP player self-register a variant here would
+ * be pointless since the server-side command is OP-gated and the resulting
+ * id wouldn't be whitelisted anyway). No server round trip for browsing
+ * either way: the item registry is already fully populated on the client
+ * after login. Cell 0 is a fixed "none" entry that reports
+ * {@code minecraft:air}, the sentinel the save/assign commands treat as
+ * "unset".
  */
 public class ItemPickerScreen extends Screen {
 
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
+    private static final int CAT_H = 20;
     private static final int SEARCH_H = 20;
     private static final int CELL = 20;
     private static final int COLS = 9;
@@ -44,6 +62,8 @@ public class ItemPickerScreen extends Screen {
     private final Consumer<ResourceLocation> onPick;
     @Nullable
     private final List<ResourceLocation> restrictTo;
+    @Nullable
+    private ItemCatalog.Category selectedCategory = null;
 
     private List<ResourceLocation> allItems = List.of();
     private List<ResourceLocation> shown = List.of();
@@ -74,33 +94,91 @@ public class ItemPickerScreen extends Screen {
 
     @Override
     protected void init() {
-        panelWidth = PAD * 2 + COLS * CELL;
-        panelHeight = Math.min(280, this.height - 32);
+        boolean showCategories = restrictTo == null;
+        panelWidth = Math.max(PAD * 2 + COLS * CELL, showCategories ? 260 : 0);
+        panelHeight = Math.min(showCategories ? 306 : 280, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
 
         allItems = restrictTo != null ? restrictTo : ItemCatalog.all();
 
-        search = new EditBox(this.font, panelLeft + PAD, panelTop + HEADER_H + 4,
+        int searchY = panelTop + HEADER_H + 4;
+        if (showCategories) {
+            int catCount = ItemCatalog.Category.values().length + 1; // +1 for the "all" tab
+            int catWidth = (panelWidth - 2 * PAD) / catCount;
+            int cx = panelLeft + PAD;
+            Button allBtn = Button.builder(Component.translatable("classloadout.gui.category_all"), b -> selectCategory(null))
+                    .bounds(cx, searchY, catWidth, CAT_H).build();
+            allBtn.active = selectedCategory != null;
+            addRenderableWidget(allBtn);
+            cx += catWidth;
+            for (ItemCatalog.Category category : ItemCatalog.Category.values()) {
+                ItemCatalog.Category captured = category;
+                Button b = Button.builder(Component.translatable("classloadout.gui.category_" + category.name().toLowerCase(Locale.ROOT)),
+                                btn -> selectCategory(captured))
+                        .bounds(cx, searchY, catWidth, CAT_H).build();
+                b.active = selectedCategory != category;
+                addRenderableWidget(b);
+                cx += catWidth;
+            }
+            searchY += CAT_H + 6;
+        }
+
+        String previousQuery = search != null ? search.getValue() : "";
+        search = new EditBox(this.font, panelLeft + PAD, searchY,
                 panelWidth - 2 * PAD, SEARCH_H, Component.translatable("classloadout.gui.item_search"));
         search.setHint(Component.translatable("classloadout.gui.item_search"));
+        search.setValue(previousQuery);
         search.setResponder(s -> updateShown());
         addRenderableWidget(search);
         setInitialFocus(search);
 
         gridLeft = panelLeft + PAD;
-        gridTop = panelTop + HEADER_H + 4 + SEARCH_H + 6;
+        gridTop = searchY + SEARCH_H + 6;
         gridHeight = panelTop + panelHeight - PAD - 24 - gridTop;
 
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.cancel"),
-                        b -> minecraft.setScreen(parent))
-                .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, panelWidth - 2 * PAD, 20).build());
+        int bottomY = panelTop + panelHeight - PAD - 20;
+        if (showCategories) {
+            int cancelWidth = (panelWidth - 2 * PAD - 4) * 2 / 3;
+            int addHeldWidth = panelWidth - 2 * PAD - 4 - cancelWidth;
+            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.cancel"),
+                            b -> minecraft.setScreen(parent))
+                    .bounds(panelLeft + PAD, bottomY, cancelWidth, 20).build());
+            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_add_held"),
+                            b -> addHeldItem())
+                    .bounds(panelLeft + PAD + cancelWidth + 4, bottomY, addHeldWidth, 20).build());
+        } else {
+            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.cancel"),
+                            b -> minecraft.setScreen(parent))
+                    .bounds(panelLeft + PAD, bottomY, panelWidth - 2 * PAD, 20).build());
+        }
 
         updateShown();
     }
 
+    /** Registers the OP's held item as a reusable variant and immediately picks it, same as clicking a catalog cell. */
+    private void addHeldItem() {
+        UUID id = UUID.randomUUID();
+        command("class whitelist register_held " + id);
+        onPick.accept(new ResourceLocation("classloadout", "variant_" + id));
+        minecraft.setScreen(parent);
+    }
+
+    private void command(String cmd) {
+        if (minecraft != null && minecraft.player != null) {
+            minecraft.player.connection.sendCommand(cmd);
+        }
+    }
+
+    private void selectCategory(@Nullable ItemCatalog.Category category) {
+        if (category != selectedCategory) {
+            selectedCategory = category;
+            this.init(this.minecraft, this.width, this.height);
+        }
+    }
+
     private void updateShown() {
-        shown = ItemCatalog.search(allItems, search.getValue());
+        shown = ItemCatalog.search(ItemCatalog.byCategory(allItems, selectedCategory), search.getValue());
         int rows = (shown.size() + 1 + COLS - 1) / COLS; // +1 for the "none" cell
         int contentHeight = rows * CELL;
         maxScroll = Math.max(0, contentHeight - gridHeight);
@@ -120,6 +198,9 @@ public class ItemPickerScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (restrictTo == null && HotbarBar.mouseClicked(minecraft, mouseX, mouseY)) {
+            return true;
+        }
         int index = cellIndexAt(mouseX, mouseY);
         if (index == 0) {
             onPick.accept(new ResourceLocation("minecraft", "air"));
@@ -140,6 +221,15 @@ public class ItemPickerScreen extends Screen {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Don't hijack digit keys while the search box is focused (e.g. typing "9x19").
+        if (restrictTo == null && !search.isFocused() && HotbarBar.keyPressed(minecraft, keyCode, scanCode)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
@@ -193,10 +283,16 @@ public class ItemPickerScreen extends Screen {
         graphics.disableScissor();
 
         if (hoveredStack != null) {
-            Component name = hoveredStack.getItem() == Items.BARRIER
-                    ? Component.translatable("classloadout.gui.item_none")
-                    : hoveredStack.getHoverName();
-            graphics.renderTooltip(this.font, name, hoveredX, hoveredY);
+            if (hoveredStack.getItem() == Items.BARRIER) {
+                graphics.renderTooltip(this.font, Component.translatable("classloadout.gui.item_none"), hoveredX, hoveredY);
+            } else {
+                List<Component> lines = new ArrayList<>(hoveredStack.getTooltipLines(
+                        this.minecraft.player, TooltipFlag.Default.NORMAL));
+                lines.addAll(TaczCompat.describeGunTooltip(hoveredStack));
+                lines.addAll(TaczCompat.describeAmmoBoxTooltip(hoveredStack));
+                lines.addAll(TaczCompat.describeAmmoTooltip(hoveredStack));
+                graphics.renderTooltip(this.font, lines, Optional.empty(), hoveredX, hoveredY);
+            }
         }
 
         if (maxScroll > 0) {
@@ -205,6 +301,10 @@ public class ItemPickerScreen extends Screen {
             int thumbHeight = Math.max(10, gridHeight * gridHeight / Math.max(1, gridHeight + maxScroll));
             int thumbY = gridTop + (gridHeight - thumbHeight) * scrollOffset / Math.max(1, maxScroll);
             graphics.fill(trackX, thumbY, trackX + 2, thumbY + thumbHeight, 0xB0FFFFFF);
+        }
+
+        if (restrictTo == null) {
+            HotbarBar.render(graphics, this.minecraft);
         }
     }
 
