@@ -35,6 +35,9 @@ GNU General Public License v3.0 (GPL-3.0-only). Full text in [`LICENSE`](LICENSE
 | `/class hammerblocks` | Open the hammer AOE block-whitelist editor GUI | OP (level 2+) |
 | `/class hammerblocks add <block>` | Add a block type to the hammer AOE whitelist (sent by the editor, not typed by hand) | OP (level 2+) |
 | `/class hammerblocks remove <block>` | Remove a block type from the hammer AOE whitelist | OP (level 2+) |
+| `/class guardspawner config <x> <y> <z> <entityType> <delaySeconds>` | Configure the guard spawner block at that position: entity type to (re)spawn and respawn delay in seconds (sent by the editor, not typed by hand) | OP (level 2+) |
+| `/class guardspawner add_item <x> <y> <z> <item>` | Add an item to that guard spawner's item list (given to the spawned entity's item-handler capability on spawn) | OP (level 2+) |
+| `/class guardspawner remove_item <x> <y> <z> <item>` | Remove an item from that guard spawner's item list | OP (level 2+) |
 
 Item arguments accept any registered item id; `minecraft:air` is the "unset" sentinel.
 
@@ -70,6 +73,10 @@ The **spawn kit** (`/class spawnkit`) is a flat list of item/count pairs that ge
 ## Hammer Area-of-Effect
 
 Breaking a whitelisted block (`/class hammerblocks`) with a **SuperbWarfare hammer** (any tier - matched via the generic `#forge:tools/hammer` item tag, not a hard SuperbWarfare dependency) also destroys every other whitelisted block within `hammer.hammerAoeRadius` blocks, like a small explosion - but limited to block types an OP has explicitly approved, so it can't be turned into a terrain-griefing tool.
+
+### Guard Spawner
+
+The `classloadout:guard_spawner` block watches for a specific entity type near itself and respawns it on top of the block after a configurable delay if it goes missing (dies, despawns, etc.) - useful for keeping a SuperbWarfare vehicle guard post populated without manual intervention. Right-clicking it (OP only) opens a config GUI: entity type (any registered entity id), respawn delay in seconds, and a list of items given to the spawned entity via its Forge item-handler capability (e.g. a vehicle's battery/ammo slots) if it exposes one. Every player is notified in chat when a guard respawns. Breaking the block drops itself and clears its configuration. Config isn't broadcast to every client like the other OP editors - only the player who right-clicks the block ever needs its data.
 
 - The block actually being broken must **also** be on the whitelist, or nothing extra happens at all - the hammer just behaves like a normal tool against anything not on the list.
 - Bonus blocks are destroyed with normal drops (respecting the hammer's own enchantments, e.g. Fortune/Silk Touch), not skipped or voided.

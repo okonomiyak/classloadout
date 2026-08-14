@@ -51,6 +51,7 @@ public class ClassLoadoutMod {
         } else if (event.getTabKey() == net.minecraft.world.item.CreativeModeTabs.FUNCTIONAL_BLOCKS) {
             event.accept(ModRegistry.LOADOUT_STATION_ITEM.get());
             event.accept(ModRegistry.LOADOUT_LOCKER_ITEM.get());
+            event.accept(ModRegistry.GUARD_SPAWNER_ITEM.get());
         }
     }
 }

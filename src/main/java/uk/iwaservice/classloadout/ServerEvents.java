@@ -1,27 +1,39 @@
 package uk.iwaservice.classloadout;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.NonNullList;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import uk.iwaservice.classloadout.command.ClassCommand;
 import uk.iwaservice.classloadout.loadout.AmmoGrant;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /** Forge-bus event handlers: command registration, respawn equip, login sync, hammer AOE breaking. */
 public final class ServerEvents {
@@ -35,6 +47,9 @@ public final class ServerEvents {
      */
     private static final TagKey<Item> HAMMER_TAG = ItemTags.create(new ResourceLocation("forge", "tools/hammer"));
 
+    /** How far a guard spawner looks for its own tagged entity before assuming it's gone and starting the respawn countdown. */
+    private static final double GUARD_SPAWNER_SCAN_RADIUS = 48.0;
+
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         ClassCommand.register(event.getDispatcher());
@@ -45,6 +60,88 @@ public final class ServerEvents {
         if (event.getEntity() instanceof ServerPlayer player) {
             LoadoutManager.get(player.server).sendTo(player.server, player);
         }
+    }
+
+    /** Throttled to once a second - a per-tick full scan of every guard spawner isn't worth the precision. */
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null || server.getTickCount() % 20 != 0) {
+            return;
+        }
+        tickGuardSpawners(server);
+    }
+
+    /**
+     * For each configured guard spawner: if its tagged entity is present nearby, clear the
+     * missing-timer; if it's been missing for at least the configured delay, respawn it on top
+     * of the block. A fresh server start simply re-observes each spawner's state on the next
+     * tick - the missing-timer itself isn't persisted, unlike the config.
+     */
+    private static void tickGuardSpawners(MinecraftServer server) {
+        LoadoutManager manager = LoadoutManager.get(server);
+        for (GlobalPos gpos : List.copyOf(manager.getGuardSpawnerPositions())) {
+            ResourceLocation entityTypeId = manager.getGuardSpawnerEntity(gpos);
+            ServerLevel level = server.getLevel(gpos.dimension());
+            if (entityTypeId == null || level == null || !level.isLoaded(gpos.pos())) {
+                continue;
+            }
+            String tag = guardSpawnerTag(gpos.pos());
+            boolean present = !level.getEntities((Entity) null, new AABB(gpos.pos()).inflate(GUARD_SPAWNER_SCAN_RADIUS),
+                    e -> e.getTags().contains(tag)).isEmpty();
+            if (present) {
+                manager.setGuardSpawnerMissingSince(gpos, -1);
+                continue;
+            }
+            long missingSince = manager.getGuardSpawnerMissingSince(gpos);
+            if (missingSince < 0) {
+                manager.setGuardSpawnerMissingSince(gpos, server.getTickCount());
+                continue;
+            }
+            if (server.getTickCount() - missingSince >= manager.getGuardSpawnerDelaySeconds(gpos) * 20L) {
+                spawnGuard(level, gpos.pos(), entityTypeId, tag, manager.getGuardSpawnerItems(gpos), manager);
+                manager.setGuardSpawnerMissingSince(gpos, -1);
+            }
+        }
+    }
+
+    private static String guardSpawnerTag(BlockPos pos) {
+        return "classloadout_guard_" + pos.asLong();
+    }
+
+    /** Spawns on top of the block, tags it so the next tick recognizes it as this spawner's guard, and fills any item-handler capability it exposes (e.g. a SuperbWarfare vehicle's battery/ammo slots) with the configured items. */
+    private static void spawnGuard(ServerLevel level, BlockPos pos, ResourceLocation entityTypeId, String tag,
+            List<ResourceLocation> items, LoadoutManager manager) {
+        EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(entityTypeId);
+        if (type == null) {
+            return;
+        }
+        Entity entity = type.create(level);
+        if (entity == null) {
+            return;
+        }
+        entity.moveTo(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 0, 0);
+        entity.addTag(tag);
+        entity.getCapability(ForgeCapabilities.ITEM_HANDLER).ifPresent(handler -> {
+            int slot = 0;
+            for (ResourceLocation itemId : items) {
+                if (slot >= handler.getSlots()) {
+                    break;
+                }
+                ItemStack stack = ItemResolver.resolve(itemId, manager.getItemVariants());
+                if (stack != null && !stack.isEmpty()) {
+                    handler.insertItem(slot, stack.copy(), false);
+                }
+                slot++;
+            }
+        });
+        level.addFreshEntity(entity);
+        level.getServer().getPlayerList().broadcastSystemMessage(Component.translatable(
+                "classloadout.msg.guardspawner_respawned", entityTypeId.toString(), pos.getX(), pos.getY(), pos.getZ()),
+                false);
     }
 
     /**

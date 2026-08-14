@@ -53,6 +53,16 @@ public final class ModRegistry {
     public static final RegistryObject<Item> LOADOUT_LOCKER_ITEM = ITEMS.register("loadout_locker",
             () -> new BlockItem(LOADOUT_LOCKER.get(), new Item.Properties()));
 
+    // --- guard spawner (right-click to configure, OP only: entity type, respawn delay, spawned items) ---
+
+    public static final RegistryObject<Block> GUARD_SPAWNER = BLOCKS.register("guard_spawner",
+            () -> new GuardSpawnerBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .strength(3.5F)
+                    .sound(SoundType.METAL)));
+    public static final RegistryObject<Item> GUARD_SPAWNER_ITEM = ITEMS.register("guard_spawner",
+            () -> new BlockItem(GUARD_SPAWNER.get(), new Item.Properties()));
+
     // --- placed resupply packs (right-click to place, stronger, combat-destroyable - see AbstractResupplyPackEntity) ---
 
     public static final RegistryObject<EntityType<HealthPackEntity>> HEALTH_PACK = ENTITY_TYPES.register(

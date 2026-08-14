@@ -11,6 +11,9 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.commands.arguments.UuidArgument;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -125,6 +128,21 @@ public final class ClassCommand {
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("block", ResourceLocationArgument.id())
                                         .executes(ctx -> hammerBlocksRemove(ctx)))))
+                .then(Commands.literal("guardspawner")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.literal("config")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .then(Commands.argument("entityType", ResourceLocationArgument.id())
+                                .then(Commands.argument("delaySeconds", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> guardSpawnerConfig(ctx))))))
+                        .then(Commands.literal("add_item")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> guardSpawnerAddItem(ctx)))))
+                        .then(Commands.literal("remove_item")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> guardSpawnerRemoveItem(ctx))))))
                 .then(Commands.literal("assign")
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -386,6 +404,35 @@ public final class ClassCommand {
         ResourceLocation block = ResourceLocationArgument.getId(ctx, "block");
         LoadoutManager.get(ctx.getSource().getServer()).removeHammerBlock(ctx.getSource().getServer(), block);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.hammerblocks_removed", block.toString()), true);
+        return 1;
+    }
+
+    private static int guardSpawnerConfig(CommandContext<CommandSourceStack> ctx) {
+        BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
+        ResourceLocation entityType = ResourceLocationArgument.getId(ctx, "entityType");
+        int delaySeconds = IntegerArgumentType.getInteger(ctx, "delaySeconds");
+        GlobalPos gpos = GlobalPos.of(ctx.getSource().getLevel().dimension(), pos);
+        LoadoutManager.get(ctx.getSource().getServer()).setGuardSpawnerConfig(gpos, entityType, delaySeconds);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_configured",
+                entityType.toString(), delaySeconds), true);
+        return 1;
+    }
+
+    private static int guardSpawnerAddItem(CommandContext<CommandSourceStack> ctx) {
+        BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        GlobalPos gpos = GlobalPos.of(ctx.getSource().getLevel().dimension(), pos);
+        LoadoutManager.get(ctx.getSource().getServer()).addGuardSpawnerItem(gpos, item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_item_added", item.toString()), true);
+        return 1;
+    }
+
+    private static int guardSpawnerRemoveItem(CommandContext<CommandSourceStack> ctx) {
+        BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        GlobalPos gpos = GlobalPos.of(ctx.getSource().getLevel().dimension(), pos);
+        LoadoutManager.get(ctx.getSource().getServer()).removeGuardSpawnerItem(gpos, item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_item_removed", item.toString()), true);
         return 1;
     }
 

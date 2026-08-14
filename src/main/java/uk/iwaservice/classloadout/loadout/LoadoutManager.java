@@ -1,12 +1,17 @@
 package uk.iwaservice.classloadout.loadout;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import uk.iwaservice.classloadout.ClassLoadoutMod;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
@@ -15,6 +20,7 @@ import uk.iwaservice.classloadout.network.NetworkHandler;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -70,6 +76,12 @@ public class LoadoutManager extends SavedData {
     private final Map<ResourceLocation, Integer> spawnKit = new LinkedHashMap<>();
     /** OP-curated: block types (registry names, not items) a SuperbWarfare hammer's area-of-effect break can also destroy - see {@code Config.HAMMER_AOE_RADIUS}. */
     private final Set<ResourceLocation> hammerBlocks = new LinkedHashSet<>();
+    /** Guard spawner block config, keyed by world position - see {@code GuardSpawnerBlock}/{@code ServerEvents#tickGuardSpawners}. Absent entity type = block placed but not configured yet, so it never spawns anything. */
+    private final Map<GlobalPos, ResourceLocation> guardSpawnerEntity = new LinkedHashMap<>();
+    private final Map<GlobalPos, Integer> guardSpawnerDelaySeconds = new LinkedHashMap<>();
+    private final Map<GlobalPos, List<ResourceLocation>> guardSpawnerItems = new LinkedHashMap<>();
+    /** Tick the guarded entity was last observed missing; not persisted (a fresh server start just re-observes on its own). -1 = currently present (or never checked). */
+    private final Map<GlobalPos, Long> guardSpawnerMissingSince = new HashMap<>();
 
     public static LoadoutManager get(MinecraftServer server) {
         return server.overworld().getDataStorage()
@@ -302,6 +314,68 @@ public class LoadoutManager extends SavedData {
         }
     }
 
+    // --- guard spawners (OP-curated, per-block; not synced to clients - only the editing OP ever needs one block's config) ---
+
+    @Nullable
+    public ResourceLocation getGuardSpawnerEntity(GlobalPos pos) {
+        return guardSpawnerEntity.get(pos);
+    }
+
+    public int getGuardSpawnerDelaySeconds(GlobalPos pos) {
+        return guardSpawnerDelaySeconds.getOrDefault(pos, 60);
+    }
+
+    public List<ResourceLocation> getGuardSpawnerItems(GlobalPos pos) {
+        return guardSpawnerItems.getOrDefault(pos, List.of());
+    }
+
+    public Set<GlobalPos> getGuardSpawnerPositions() {
+        return guardSpawnerEntity.keySet();
+    }
+
+    public long getGuardSpawnerMissingSince(GlobalPos pos) {
+        return guardSpawnerMissingSince.getOrDefault(pos, -1L);
+    }
+
+    public void setGuardSpawnerMissingSince(GlobalPos pos, long tick) {
+        if (tick < 0) {
+            guardSpawnerMissingSince.remove(pos);
+        } else {
+            guardSpawnerMissingSince.put(pos, tick);
+        }
+    }
+
+    public void setGuardSpawnerConfig(GlobalPos pos, ResourceLocation entityType, int delaySeconds) {
+        guardSpawnerEntity.put(pos, entityType);
+        guardSpawnerDelaySeconds.put(pos, Math.max(1, delaySeconds));
+        guardSpawnerItems.computeIfAbsent(pos, p -> new ArrayList<>());
+        setDirty();
+    }
+
+    public void addGuardSpawnerItem(GlobalPos pos, ResourceLocation item) {
+        List<ResourceLocation> items = guardSpawnerItems.computeIfAbsent(pos, p -> new ArrayList<>());
+        if (!items.contains(item)) {
+            items.add(item);
+            setDirty();
+        }
+    }
+
+    public void removeGuardSpawnerItem(GlobalPos pos, ResourceLocation item) {
+        List<ResourceLocation> items = guardSpawnerItems.get(pos);
+        if (items != null && items.remove(item)) {
+            setDirty();
+        }
+    }
+
+    /** Called when the block itself is removed from the world - drops its config entirely rather than leaving it orphaned forever. */
+    public void removeGuardSpawner(GlobalPos pos) {
+        guardSpawnerEntity.remove(pos);
+        guardSpawnerDelaySeconds.remove(pos);
+        guardSpawnerItems.remove(pos);
+        guardSpawnerMissingSince.remove(pos);
+        setDirty();
+    }
+
     // --- personal loadout (player self-service) ---
 
     /** Null means the player has never touched their loadout - equip-on-respawn leaves their inventory alone. */
@@ -449,6 +523,20 @@ public class LoadoutManager extends SavedData {
         for (Tag t : hammerBlockList) {
             manager.hammerBlocks.add(new ResourceLocation(t.getAsString()));
         }
+        ListTag guardSpawnerList = tag.getList("GuardSpawners", Tag.TAG_COMPOUND);
+        for (int i = 0; i < guardSpawnerList.size(); i++) {
+            CompoundTag g = guardSpawnerList.getCompound(i);
+            ResourceKey<Level> dim = ResourceKey.create(Registries.DIMENSION, new ResourceLocation(g.getString("Dim")));
+            GlobalPos pos = GlobalPos.of(dim, BlockPos.of(g.getLong("Pos")));
+            manager.guardSpawnerEntity.put(pos, new ResourceLocation(g.getString("Entity")));
+            manager.guardSpawnerDelaySeconds.put(pos, g.getInt("Delay"));
+            List<ResourceLocation> items = new ArrayList<>();
+            ListTag itemsList = g.getList("Items", Tag.TAG_STRING);
+            for (Tag t : itemsList) {
+                items.add(new ResourceLocation(t.getAsString()));
+            }
+            manager.guardSpawnerItems.put(pos, items);
+        }
         return manager;
     }
 
@@ -525,6 +613,24 @@ public class LoadoutManager extends SavedData {
             hammerBlockList.add(net.minecraft.nbt.StringTag.valueOf(loc.toString()));
         }
         tag.put("HammerBlocks", hammerBlockList);
+
+        ListTag guardSpawnerList = new ListTag();
+        for (Map.Entry<GlobalPos, ResourceLocation> e : guardSpawnerEntity.entrySet()) {
+            GlobalPos pos = e.getKey();
+            CompoundTag g = new CompoundTag();
+            g.putString("Dim", pos.dimension().location().toString());
+            g.putLong("Pos", pos.pos().asLong());
+            g.putString("Entity", e.getValue().toString());
+            g.putInt("Delay", guardSpawnerDelaySeconds.getOrDefault(pos, 60));
+            ListTag itemsList = new ListTag();
+            for (ResourceLocation item : guardSpawnerItems.getOrDefault(pos, List.of())) {
+                itemsList.add(net.minecraft.nbt.StringTag.valueOf(item.toString()));
+            }
+            g.put("Items", itemsList);
+            guardSpawnerList.add(g);
+        }
+        tag.put("GuardSpawners", guardSpawnerList);
+
         return tag;
     }
 }

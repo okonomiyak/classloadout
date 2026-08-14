@@ -54,6 +54,11 @@ public final class NetworkHandler {
                 .decoder(OpenHammerBlocksEditorPacket::decode)
                 .consumerMainThread(OpenHammerBlocksEditorPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(OpenGuardSpawnerEditorPacket.class, 6, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenGuardSpawnerEditorPacket::encode)
+                .decoder(OpenGuardSpawnerEditorPacket::decode)
+                .consumerMainThread(OpenGuardSpawnerEditorPacket::handle)
+                .add();
     }
 
     public static void sendLoadoutSync(ServerPlayer player, LoadoutSyncPacket packet) {
@@ -78,6 +83,13 @@ public final class NetworkHandler {
 
     public static void sendOpenHammerBlocksEditor(ServerPlayer player) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenHammerBlocksEditorPacket());
+    }
+
+    public static void sendOpenGuardSpawnerEditor(ServerPlayer player, net.minecraft.core.BlockPos pos,
+            @javax.annotation.Nullable ResourceLocation entityType, int delaySeconds,
+            java.util.List<ResourceLocation> items) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new OpenGuardSpawnerEditorPacket(pos, entityType, delaySeconds, items));
     }
 
     private NetworkHandler() {}
