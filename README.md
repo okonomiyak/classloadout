@@ -55,7 +55,7 @@ Item arguments accept any registered item id; `minecraft:air` is the "unset" sen
 
 ## Death Behavior
 
-If `death.clearInventoryOnDeath` is on (default), a player's **entire inventory** (main inventory, armor, offhand) is wiped on every respawn, except items on the OP-curated **protected-items list** (`/class protect`, matched by base item type - enchantments/NBT/count don't matter). This runs before the personal loadout is re-equipped into hotbar slots 0-4, so loadout gear always comes back regardless of this setting - it only affects everything else the player was carrying.
+If `death.clearInventoryOnDeath` is on (default), a player's **entire inventory** (main inventory, armor, offhand) is wiped on every respawn, except items on the OP-curated **protected-items list** (`/class protect`, matched by base item type - enchantments/NBT/count don't matter). This runs before the personal loadout is re-equipped into hotbar slots 0-4, so loadout gear always comes back regardless of this setting - it only affects everything else the player was carrying. The same clear also runs on the loadout station/locker's **immediate** equip (assigning/selecting/clearing while alive) - re-visiting one behaves exactly like a respawn, not just a five-slot swap over whatever else is in the inventory.
 
 This is meant to pair with the vanilla **`keepInventory` gamerule turned on**: with it on, nothing is lost to death drops, but without this feature loot would otherwise just pile up across deaths forever. With `keepInventory` off, vanilla already drops (and permanently loses) the player's items - protected or not - before this mod's own respawn handling ever runs, so the protected list has no effect in that setup.
 

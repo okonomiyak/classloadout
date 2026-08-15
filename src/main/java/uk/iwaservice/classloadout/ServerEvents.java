@@ -278,9 +278,18 @@ public final class ServerEvents {
         return slots;
     }
 
-    /** Equips immediately (see {@link #equipLoadout(ServerPlayer, LoadoutManager)}) and, per-slot, grants that slot's configured ammo too - same as respawn. */
+    /**
+     * Equips immediately (see {@link #equipLoadout(ServerPlayer, LoadoutManager)}) and, per-slot,
+     * grants that slot's configured ammo too - same as respawn. Also runs the same
+     * clear-except-protected step as respawn first, when {@code death.clearInventoryOnDeath} is
+     * on, so re-visiting the loadout station/locker while alive behaves exactly like a respawn
+     * instead of just swapping the five loadout slots over whatever else is in the inventory.
+     */
     public static void equipLoadout(ServerPlayer player) {
         LoadoutManager manager = LoadoutManager.get(player.server);
+        if (Config.CLEAR_INVENTORY_ON_DEATH.get()) {
+            clearInventoryExceptProtected(player, manager);
+        }
         ResourceLocation[] slots = equipLoadout(player, manager);
         if (slots != null) {
             grantAmmoForSlots(player, slots, manager);
