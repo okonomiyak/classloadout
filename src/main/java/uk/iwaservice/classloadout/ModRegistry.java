@@ -55,10 +55,11 @@ public final class ModRegistry {
 
     // --- guard spawner (right-click to configure, OP only: entity type, respawn delay, spawned items) ---
 
+    /** Unbreakable in survival, same as bedrock (negative hardness, huge blast resistance) - only removable in creative. */
     public static final RegistryObject<Block> GUARD_SPAWNER = BLOCKS.register("guard_spawner",
             () -> new GuardSpawnerBlock(BlockBehaviour.Properties.of()
                     .mapColor(MapColor.METAL)
-                    .strength(3.5F)
+                    .strength(-1.0F, 3600000.8F)
                     .sound(SoundType.METAL)));
     public static final RegistryObject<Item> GUARD_SPAWNER_ITEM = ITEMS.register("guard_spawner",
             () -> new BlockItem(GUARD_SPAWNER.get(), new Item.Properties()));

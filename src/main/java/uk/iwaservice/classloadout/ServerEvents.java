@@ -198,18 +198,22 @@ public final class ServerEvents {
             if (Config.CLEAR_INVENTORY_ON_DEATH.get()) {
                 clearInventoryExceptProtected(player, manager);
             }
-            ResourceLocation[] slots = equipLoadout(player, manager);
-            LoadoutSlot[] slotKeys = LoadoutSlot.values();
-            for (int i = 0; i < slots.length; i++) {
-                if (slots[i] != null) {
-                    AmmoGrant grant = manager.getAmmoGrant(slotKeys[i], slots[i]);
-                    if (grant != null) {
-                        grantAmmo(player, grant, manager);
-                    }
+            grantAmmoForSlots(player, equipLoadout(player, manager), manager);
+        }
+        grantSpawnKit(player, manager);
+    }
+
+    /** Shared by respawn and the immediate-equip path below - grants each slot's configured ammo, if any. */
+    private static void grantAmmoForSlots(ServerPlayer player, ResourceLocation[] slots, LoadoutManager manager) {
+        LoadoutSlot[] slotKeys = LoadoutSlot.values();
+        for (int i = 0; i < slots.length; i++) {
+            if (slots[i] != null) {
+                AmmoGrant grant = manager.getAmmoGrant(slotKeys[i], slots[i]);
+                if (grant != null) {
+                    grantAmmo(player, grant, manager);
                 }
             }
         }
-        grantSpawnKit(player, manager);
     }
 
     /** Gives every OP-curated spawn kit entry to the player, unconditionally, on every respawn. */
@@ -255,13 +259,11 @@ public final class ServerEvents {
      * their loadout (no assign/select/clear yet) is left alone entirely
      * (returns null).
      *
-     * <p>Called on respawn (see below, which also grants ammo there), but
-     * also directly from {@code ClassCommand}'s assign/select/clear
-     * handlers so a player's gear takes effect immediately while alive
-     * (e.g. via the loadout station), not only the next time they die.
-     * Deliberately does <b>not</b> grant ammo itself: ammo grants stay
-     * respawn-only so repeatedly re-assigning the same item while alive
-     * can't be used to farm free ammo with no cooldown or death cost.
+     * <p>Called on respawn (see below), but also directly from {@code
+     * ClassCommand}'s assign/select/clear handlers so a player's gear takes
+     * effect immediately while alive (e.g. via the loadout station), not
+     * only the next time they die. Doesn't grant ammo itself - callers pass
+     * the returned slot array into {@link #grantAmmoForSlots} for that.
      */
     public static ResourceLocation[] equipLoadout(ServerPlayer player, LoadoutManager manager) {
         PersonalLoadout loadout = manager.getPersonalLoadout(player.getUUID());
@@ -276,8 +278,13 @@ public final class ServerEvents {
         return slots;
     }
 
+    /** Equips immediately (see {@link #equipLoadout(ServerPlayer, LoadoutManager)}) and, per-slot, grants that slot's configured ammo too - same as respawn. */
     public static void equipLoadout(ServerPlayer player) {
-        equipLoadout(player, LoadoutManager.get(player.server));
+        LoadoutManager manager = LoadoutManager.get(player.server);
+        ResourceLocation[] slots = equipLoadout(player, manager);
+        if (slots != null) {
+            grantAmmoForSlots(player, slots, manager);
+        }
     }
 
     private static void grantAmmo(ServerPlayer player, AmmoGrant grant, LoadoutManager manager) {
