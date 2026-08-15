@@ -6,10 +6,10 @@
 
 ## プロジェクト基本情報
 
-- パス: `C:\Users\tomip\program\java\classloadout`
+- パス: squadtp/squadtp-conquestと兄弟ディレクトリ(Windows機)、または`/home/iwa/projects/java/classloadout`(Linux機)
 - GitHub: `git@github-okonomiyak:okonomiyak/classloadout.git`(Public)
 - 対象: Minecraft 1.20.1 + Forge 47.3.12(ModDevGradle legacyforge 2.0.141 / Gradle 8.8)
-- **Gradle実行にはJDK21が必須**(`gradle.properties`の`org.gradle.java.home`で指定済み、既定Java25では動かない)
+- **Gradle実行にはJDK21が必須**(ユーザー global設定の`~/.gradle/gradle.properties`の`org.gradle.java.home`で指定、既定Java25では動かない。マシン依存のためプロジェクトの`gradle.properties`には書かない)
 - ソフト依存: TACZ(`tacz`)、SuperbWarfare(`superbwarfare`)。`compat/`パッケージで`ModList.isLoaded`ガード、未導入でもクラッシュしない設計
 
 ## 現在のgit状態(★重要★)
@@ -22,7 +22,7 @@
 
 詳細は下記「2026-08-15セッションのまとめ」節を参照。以後の変更は再びこのセクションで追跡すること。
 
-このセッションはLinux機(`/home/iwa/projects/java/classloadout`)で実施。従来のWindows機(`C:\Users\tomip\program\java\classloadout`)とは別PC。**Claude Codeのメモリ(`~/.claude/projects/.../memory/`)はマシンごとに独立していてgit管理外のため、PCを跨ぐと自動では引き継がれない**——このHANDOVER.md(gitでpushされる)が唯一の確実な引継ぎ手段。別PCで作業を再開する際は、まずこのファイルを読むこと。
+このセッションはLinux機(`/home/iwa/projects/java/classloadout`)で実施。従来のWindows機とは別PC。**Claude Codeのメモリ(`~/.claude/projects/.../memory/`)はマシンごとに独立していてgit管理外のため、PCを跨ぐと自動では引き継がれない**——このHANDOVER.md(gitでpushされる)が唯一の確実な引継ぎ手段。別PCで作業を再開する際は、まずこのファイルを読むこと。
 
 **⚠️未解決の判断待ち事項**: `v0.3.1`リリース(2026-08-08作成)は、後に誤りと判明した修正(`stripVolatileGunState`、根本原因ではなかった)を含んだままGitHub上に残っている。2026-08-09セッションでユーザーに確認したところ「残しといて」との回答で、削除しない方針が確定した。以後この項目は対応不要。
 
@@ -394,4 +394,4 @@ GitHub push認証がこの環境のHTTPS `origin`では通らなかった(`could
 
 - `README.md` / `README.ja.md`: 機能・コマンド・GUI・config・2人プレイテスト手順の正式ドキュメント
 - `classloadout-devlog-2026-07-21.md`: 開発経緯の詳細ログ(ハマった点・原因調査の過程を含む)
-- メモリ: `C:\Users\tomip\.claude\projects\C--Users-tomip-program-java\memory\classloadout-project.md`(Claude Code用、次回セッション以降に自動参照される)
+- メモリ: Claude Codeのユーザーごとのプロジェクトメモリ内`classloadout-project.md`(Windows機のみ、次回セッション以降に自動参照される)
