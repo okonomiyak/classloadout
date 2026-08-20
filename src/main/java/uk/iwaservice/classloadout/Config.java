@@ -107,7 +107,7 @@ public final class Config {
         CLEAR_INVENTORY_ON_DEATH = b
                 .comment("If true, a player's entire inventory (main inventory, armor, offhand) is wiped on",
                         "respawn, except items on the OP-curated protected-items list (/class protect). Runs",
-                        "before the personal loadout is re-equipped into hotbar slots 0-4, so loadout gear",
+                        "before the personal loadout is re-equipped into hotbar slots 0-5, so loadout gear",
                         "always reappears regardless of this setting. Intended for use with the keepInventory",
                         "gamerule turned on - if it's off, vanilla already drops (and permanently loses) items,",
                         "protected or not, before this ever runs.")

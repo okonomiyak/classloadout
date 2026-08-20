@@ -59,6 +59,11 @@ public final class NetworkHandler {
                 .decoder(OpenGuardSpawnerEditorPacket::decode)
                 .consumerMainThread(OpenGuardSpawnerEditorPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(OpenForceLoadoutEditorPacket.class, 7, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenForceLoadoutEditorPacket::encode)
+                .decoder(OpenForceLoadoutEditorPacket::decode)
+                .consumerMainThread(OpenForceLoadoutEditorPacket::handle)
+                .add();
     }
 
     public static void sendLoadoutSync(ServerPlayer player, LoadoutSyncPacket packet) {
@@ -90,6 +95,10 @@ public final class NetworkHandler {
             java.util.List<ResourceLocation> items) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new OpenGuardSpawnerEditorPacket(pos, entityType, delaySeconds, items));
+    }
+
+    public static void sendOpenForceLoadoutEditor(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenForceLoadoutEditorPacket());
     }
 
     private NetworkHandler() {}

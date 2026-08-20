@@ -20,6 +20,7 @@ import uk.iwaservice.classloadout.network.NetworkHandler;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -53,10 +54,12 @@ public class LoadoutManager extends SavedData {
     private final Map<UUID, ClassDefinition> classes = new LinkedHashMap<>();
     /** Absent entry = player has never touched their loadout; present (even if all-empty) = they have. */
     private final Map<UUID, PersonalLoadout> personalLoadouts = new java.util.HashMap<>();
+    /** OP-forced slots (via {@code /class forceassign}/{@code forceselect} and their all/team variants): the player can't self-service-change these until an OP frees them (assigning {@code minecraft:air} to a forced slot unlocks it - see {@code ClassCommand}). */
+    private final Map<UUID, Set<LoadoutSlot>> lockedSlots = new java.util.HashMap<>();
     /** Insertion order preserved for a stable whitelist-editor grid; empty (or absent) = nothing assignable yet. */
     private final Map<LoadoutSlot, Set<ResourceLocation>> whitelists = new EnumMap<>(LoadoutSlot.class);
-    /** Optional per-whitelist-entry ammo grant (see {@link AmmoGrant}); absent = that item grants no ammo. */
-    private final Map<LoadoutSlot, Map<ResourceLocation, AmmoGrant>> ammoGrants = new EnumMap<>(LoadoutSlot.class);
+    /** Optional per-whitelist-entry ammo grants: slot -> whitelisted item -> (ammo item -> count). A whitelist entry can grant any number of distinct ammo item types; absent/empty = that item grants no ammo. */
+    private final Map<LoadoutSlot, Map<ResourceLocation, Map<ResourceLocation, Integer>>> ammoGrants = new EnumMap<>(LoadoutSlot.class);
     /**
      * OP-registered "exact held item" whitelist entries: a synthetic
      * {@code classloadout:variant_<uuid>} id mapped to the full saved NBT of
@@ -82,6 +85,8 @@ public class LoadoutManager extends SavedData {
     private final Map<GlobalPos, List<ResourceLocation>> guardSpawnerItems = new LinkedHashMap<>();
     /** Tick the guarded entity was last observed missing; not persisted (a fresh server start just re-observes on its own). -1 = currently present (or never checked). */
     private final Map<GlobalPos, Long> guardSpawnerMissingSince = new HashMap<>();
+    /** Global OP kill-switch for every guard spawner's watch/respawn tick (see {@code /class guardspawner pause|resume}) - individual block config is untouched, just not acted on while true. */
+    private boolean guardSpawningPaused = false;
 
     public static LoadoutManager get(MinecraftServer server) {
         return server.overworld().getDataStorage()
@@ -137,7 +142,7 @@ public class LoadoutManager extends SavedData {
     public void removeFromWhitelist(MinecraftServer server, LoadoutSlot slot, ResourceLocation item) {
         Set<ResourceLocation> set = whitelists.get(slot);
         boolean changed = set != null && set.remove(item);
-        Map<ResourceLocation, AmmoGrant> grants = ammoGrants.get(slot);
+        Map<ResourceLocation, Map<ResourceLocation, Integer>> grants = ammoGrants.get(slot);
         if (grants != null && grants.remove(item) != null) {
             changed = true;
         }
@@ -172,7 +177,7 @@ public class LoadoutManager extends SavedData {
     /**
      * Same idea as {@link #addHeldItemToWhitelist}, but registers the variant without adding
      * it to any slot's whitelist - used by the ammo grant popup, which just needs a specific
-     * NBT-bearing item id to store as an {@link AmmoGrant#ammoItem()}, not a whitelist entry.
+     * NBT-bearing item id to store as an ammo grant's ammo item, not a whitelist entry.
      * {@code id} is client-generated (not server-generated like the whitelist flow above)
      * because the ammo grant screen needs to know the resulting id immediately, before the
      * next sync round-trip, to fill in its own pending state.
@@ -215,28 +220,32 @@ public class LoadoutManager extends SavedData {
         return variantRegisteredAt;
     }
 
-    // --- per-whitelist-entry ammo grants (OP-curated) ---
+    // --- per-whitelist-entry ammo grants (OP-curated; a whitelisted item can grant any number of distinct ammo item types) ---
 
-    @Nullable
-    public AmmoGrant getAmmoGrant(LoadoutSlot slot, ResourceLocation item) {
-        Map<ResourceLocation, AmmoGrant> grants = ammoGrants.get(slot);
-        return grants == null ? null : grants.get(item);
+    /** Never null - an item with no ammo grants yet returns an empty map. */
+    public Map<ResourceLocation, Integer> getAmmoGrants(LoadoutSlot slot, ResourceLocation item) {
+        Map<ResourceLocation, Map<ResourceLocation, Integer>> bySlot = ammoGrants.get(slot);
+        Map<ResourceLocation, Integer> grants = bySlot == null ? null : bySlot.get(item);
+        return grants == null ? Map.of() : grants;
     }
 
-    /** A count of 0 (or less) clears the grant instead of setting one. */
-    public void setAmmoGrant(MinecraftServer server, LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
+    /** A count of 0 (or less) removes just this {@code ammoItem} entry instead of adding/updating one - other ammo grants already on {@code item} are untouched either way. */
+    public void setAmmoGrantEntry(MinecraftServer server, LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
         if (count <= 0) {
-            clearAmmoGrant(server, slot, item);
+            removeAmmoGrantEntry(server, slot, item, ammoItem);
             return;
         }
-        ammoGrants.computeIfAbsent(slot, s -> new LinkedHashMap<>()).put(item, new AmmoGrant(ammoItem, count));
+        ammoGrants.computeIfAbsent(slot, s -> new LinkedHashMap<>())
+                .computeIfAbsent(item, i -> new LinkedHashMap<>())
+                .put(ammoItem, count);
         setDirty();
         broadcastAll(server);
     }
 
-    public void clearAmmoGrant(MinecraftServer server, LoadoutSlot slot, ResourceLocation item) {
-        Map<ResourceLocation, AmmoGrant> grants = ammoGrants.get(slot);
-        if (grants != null && grants.remove(item) != null) {
+    public void removeAmmoGrantEntry(MinecraftServer server, LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem) {
+        Map<ResourceLocation, Map<ResourceLocation, Integer>> bySlot = ammoGrants.get(slot);
+        Map<ResourceLocation, Integer> grants = bySlot == null ? null : bySlot.get(item);
+        if (grants != null && grants.remove(ammoItem) != null) {
             setDirty();
             broadcastAll(server);
         }
@@ -376,6 +385,15 @@ public class LoadoutManager extends SavedData {
         setDirty();
     }
 
+    public boolean isGuardSpawningPaused() {
+        return guardSpawningPaused;
+    }
+
+    public void setGuardSpawningPaused(boolean paused) {
+        guardSpawningPaused = paused;
+        setDirty();
+    }
+
     // --- personal loadout (player self-service) ---
 
     /** Null means the player has never touched their loadout - equip-on-respawn leaves their inventory alone. */
@@ -386,10 +404,11 @@ public class LoadoutManager extends SavedData {
 
     /**
      * Sets a single slot in the player's own loadout; a null item clears
-     * that slot. The caller (the {@code /class assign} command) is
-     * responsible for checking {@link #isWhitelisted} before calling this -
-     * this method itself doesn't re-validate, so it stays usable for a
-     * possible future OP override path.
+     * that slot. The caller (the {@code /class assign} command, or an OP
+     * force-assign path) is responsible for checking {@link #isWhitelisted}
+     * and {@link #isLocked} before calling this - this method itself
+     * doesn't re-validate, so it stays usable for the OP override path
+     * (which must be able to bypass both).
      */
     public void setSlot(MinecraftServer server, ServerPlayer player, LoadoutSlot slot, @Nullable ResourceLocation item) {
         PersonalLoadout current = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
@@ -398,7 +417,7 @@ public class LoadoutManager extends SavedData {
         sendTo(server, player);
     }
 
-    /** Copies a preset's five items into the player's own loadout as a starting point. Returns false if the preset doesn't exist. */
+    /** Copies a preset's ten items into the player's own loadout as a starting point. Returns false if the preset doesn't exist. Doesn't respect locked slots - see {@link #applyPresetSelfService} for the self-service path that does. */
     public boolean applyPreset(MinecraftServer server, ServerPlayer player, UUID classId) {
         ClassDefinition def = classes.get(classId);
         if (def == null) {
@@ -410,12 +429,81 @@ public class LoadoutManager extends SavedData {
         return true;
     }
 
-    /** Resets the player back to "never touched their loadout" (equip-on-respawn stops overwriting their hotbar). */
+    /** Same as {@link #applyPreset}, but any slot the player has locked keeps its current (OP-forced) value instead of taking the preset's - see {@link #isLocked}. Used by the self-service {@code /class select}. */
+    public boolean applyPresetSelfService(MinecraftServer server, ServerPlayer player, UUID classId) {
+        ClassDefinition def = classes.get(classId);
+        if (def == null) {
+            return false;
+        }
+        PersonalLoadout current = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
+        personalLoadouts.put(player.getUUID(), keepLockedSlots(player.getUUID(), current, PersonalLoadout.fromClass(def)));
+        setDirty();
+        sendTo(server, player);
+        return true;
+    }
+
+    /** Resets the player back to "never touched their loadout" (equip-on-respawn stops overwriting their hotbar). Doesn't respect locked slots - see {@link #clearPersonalLoadoutSelfService} for the self-service path that does. */
     public void clearPersonalLoadout(MinecraftServer server, ServerPlayer player) {
         if (personalLoadouts.remove(player.getUUID()) != null) {
             setDirty();
         }
         sendTo(server, player);
+    }
+
+    /** Same as {@link #clearPersonalLoadout}, but any slot the player has locked keeps its current (OP-forced) value instead of being wiped - see {@link #isLocked}. Used by the self-service {@code /class clear}. */
+    public void clearPersonalLoadoutSelfService(MinecraftServer server, ServerPlayer player) {
+        Set<LoadoutSlot> locked = lockedSlots.get(player.getUUID());
+        if (locked == null || locked.isEmpty()) {
+            clearPersonalLoadout(server, player);
+            return;
+        }
+        PersonalLoadout current = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
+        PersonalLoadout cleared = keepLockedSlots(player.getUUID(), current, PersonalLoadout.EMPTY);
+        personalLoadouts.put(player.getUUID(), cleared);
+        setDirty();
+        sendTo(server, player);
+    }
+
+    /** Overwrites every locked slot in {@code incoming} with that slot's value from {@code current}, leaving unlocked slots as {@code incoming} set them. */
+    private PersonalLoadout keepLockedSlots(UUID playerId, PersonalLoadout current, PersonalLoadout incoming) {
+        Set<LoadoutSlot> locked = lockedSlots.get(playerId);
+        if (locked == null || locked.isEmpty()) {
+            return incoming;
+        }
+        PersonalLoadout result = incoming;
+        for (LoadoutSlot slot : locked) {
+            result = result.withSlot(slot, current.get(slot));
+        }
+        return result;
+    }
+
+    // --- per-slot locks (OP-forced slots the player can't self-service-change) ---
+
+    public boolean isLocked(UUID playerId, LoadoutSlot slot) {
+        Set<LoadoutSlot> locked = lockedSlots.get(playerId);
+        return locked != null && locked.contains(slot);
+    }
+
+    /** Never null - a player with nothing locked returns an empty set. */
+    public Set<LoadoutSlot> getLockedSlots(UUID playerId) {
+        return lockedSlots.getOrDefault(playerId, Set.of());
+    }
+
+    public void lockSlot(UUID playerId, LoadoutSlot slot) {
+        if (lockedSlots.computeIfAbsent(playerId, id -> EnumSet.noneOf(LoadoutSlot.class)).add(slot)) {
+            setDirty();
+        }
+    }
+
+    /** No-op if the slot wasn't locked. Called automatically when an OP force-assigns {@code minecraft:air} to an already-locked slot - see {@code ClassCommand}. */
+    public void unlockSlot(UUID playerId, LoadoutSlot slot) {
+        Set<LoadoutSlot> locked = lockedSlots.get(playerId);
+        if (locked != null && locked.remove(slot)) {
+            setDirty();
+            if (locked.isEmpty()) {
+                lockedSlots.remove(playerId);
+            }
+        }
     }
 
     // --- sync ---
@@ -439,10 +527,12 @@ public class LoadoutManager extends SavedData {
         }
 
         List<LoadoutSyncPacket.AmmoGrantEntry> ammoGrantEntries = new ArrayList<>();
-        for (Map.Entry<LoadoutSlot, Map<ResourceLocation, AmmoGrant>> bySlot : ammoGrants.entrySet()) {
-            for (Map.Entry<ResourceLocation, AmmoGrant> e : bySlot.getValue().entrySet()) {
-                ammoGrantEntries.add(new LoadoutSyncPacket.AmmoGrantEntry(
-                        bySlot.getKey(), e.getKey(), e.getValue().ammoItem(), e.getValue().count()));
+        for (Map.Entry<LoadoutSlot, Map<ResourceLocation, Map<ResourceLocation, Integer>>> bySlot : ammoGrants.entrySet()) {
+            for (Map.Entry<ResourceLocation, Map<ResourceLocation, Integer>> byItem : bySlot.getValue().entrySet()) {
+                for (Map.Entry<ResourceLocation, Integer> e : byItem.getValue().entrySet()) {
+                    ammoGrantEntries.add(new LoadoutSyncPacket.AmmoGrantEntry(
+                            bySlot.getKey(), byItem.getKey(), e.getKey(), e.getValue()));
+                }
             }
         }
 
@@ -460,7 +550,7 @@ public class LoadoutManager extends SavedData {
         NetworkHandler.sendLoadoutSync(player, new LoadoutSyncPacket(entries,
                 LoadoutSyncPacket.PersonalData.of(personal), LoadoutSyncPacket.Whitelists.of(whitelistsBySlot),
                 ammoGrantEntries, variantEntries, new ArrayList<>(protectedItems), spawnKitEntries,
-                new ArrayList<>(hammerBlocks)));
+                new ArrayList<>(hammerBlocks), new ArrayList<>(getLockedSlots(player.getUUID()))));
     }
 
     // --- persistence ---
@@ -476,6 +566,22 @@ public class LoadoutManager extends SavedData {
         for (int i = 0; i < personalList.size(); i++) {
             CompoundTag p = personalList.getCompound(i);
             manager.personalLoadouts.put(p.getUUID("Player"), PersonalLoadout.load(p.getCompound("Loadout")));
+        }
+        ListTag lockedSlotList = tag.getList("LockedSlots", Tag.TAG_COMPOUND);
+        for (int i = 0; i < lockedSlotList.size(); i++) {
+            CompoundTag l = lockedSlotList.getCompound(i);
+            UUID playerId = l.getUUID("Player");
+            Set<LoadoutSlot> slots = EnumSet.noneOf(LoadoutSlot.class);
+            ListTag slotList = l.getList("Slots", Tag.TAG_STRING);
+            for (Tag t : slotList) {
+                LoadoutSlot slot = LoadoutSlot.byKey(t.getAsString());
+                if (slot != null) {
+                    slots.add(slot);
+                }
+            }
+            if (!slots.isEmpty()) {
+                manager.lockedSlots.put(playerId, slots);
+            }
         }
         ListTag whitelistList = tag.getList("Whitelists", Tag.TAG_COMPOUND);
         for (int i = 0; i < whitelistList.size(); i++) {
@@ -501,7 +607,9 @@ public class LoadoutManager extends SavedData {
             ResourceLocation item = new ResourceLocation(g.getString("Item"));
             ResourceLocation ammoItem = new ResourceLocation(g.getString("AmmoItem"));
             int count = g.getInt("Count");
-            manager.ammoGrants.computeIfAbsent(slot, s -> new LinkedHashMap<>()).put(item, new AmmoGrant(ammoItem, count));
+            manager.ammoGrants.computeIfAbsent(slot, s -> new LinkedHashMap<>())
+                    .computeIfAbsent(item, key -> new LinkedHashMap<>())
+                    .put(ammoItem, count);
         }
         ListTag variantList = tag.getList("ItemVariants", Tag.TAG_COMPOUND);
         for (int i = 0; i < variantList.size(); i++) {
@@ -537,6 +645,7 @@ public class LoadoutManager extends SavedData {
             }
             manager.guardSpawnerItems.put(pos, items);
         }
+        manager.guardSpawningPaused = tag.getBoolean("GuardSpawningPaused");
         return manager;
     }
 
@@ -557,6 +666,19 @@ public class LoadoutManager extends SavedData {
         }
         tag.put("PersonalLoadouts", personalList);
 
+        ListTag lockedSlotList = new ListTag();
+        for (Map.Entry<UUID, Set<LoadoutSlot>> e : lockedSlots.entrySet()) {
+            CompoundTag l = new CompoundTag();
+            l.putUUID("Player", e.getKey());
+            ListTag slotList = new ListTag();
+            for (LoadoutSlot slot : e.getValue()) {
+                slotList.add(net.minecraft.nbt.StringTag.valueOf(slot.key()));
+            }
+            l.put("Slots", slotList);
+            lockedSlotList.add(l);
+        }
+        tag.put("LockedSlots", lockedSlotList);
+
         ListTag whitelistList = new ListTag();
         for (Map.Entry<LoadoutSlot, Set<ResourceLocation>> e : whitelists.entrySet()) {
             CompoundTag w = new CompoundTag();
@@ -571,14 +693,16 @@ public class LoadoutManager extends SavedData {
         tag.put("Whitelists", whitelistList);
 
         ListTag ammoGrantList = new ListTag();
-        for (Map.Entry<LoadoutSlot, Map<ResourceLocation, AmmoGrant>> bySlot : ammoGrants.entrySet()) {
-            for (Map.Entry<ResourceLocation, AmmoGrant> e : bySlot.getValue().entrySet()) {
-                CompoundTag g = new CompoundTag();
-                g.putString("Slot", bySlot.getKey().key());
-                g.putString("Item", e.getKey().toString());
-                g.putString("AmmoItem", e.getValue().ammoItem().toString());
-                g.putInt("Count", e.getValue().count());
-                ammoGrantList.add(g);
+        for (Map.Entry<LoadoutSlot, Map<ResourceLocation, Map<ResourceLocation, Integer>>> bySlot : ammoGrants.entrySet()) {
+            for (Map.Entry<ResourceLocation, Map<ResourceLocation, Integer>> byItem : bySlot.getValue().entrySet()) {
+                for (Map.Entry<ResourceLocation, Integer> e : byItem.getValue().entrySet()) {
+                    CompoundTag g = new CompoundTag();
+                    g.putString("Slot", bySlot.getKey().key());
+                    g.putString("Item", byItem.getKey().toString());
+                    g.putString("AmmoItem", e.getKey().toString());
+                    g.putInt("Count", e.getValue());
+                    ammoGrantList.add(g);
+                }
             }
         }
         tag.put("AmmoGrants", ammoGrantList);
@@ -630,6 +754,7 @@ public class LoadoutManager extends SavedData {
             guardSpawnerList.add(g);
         }
         tag.put("GuardSpawners", guardSpawnerList);
+        tag.putBoolean("GuardSpawningPaused", guardSpawningPaused);
 
         return tag;
     }

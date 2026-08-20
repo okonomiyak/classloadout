@@ -19,7 +19,7 @@ import java.util.List;
 /**
  * Player-facing loadout screen, reachable only from the death screen's
  * "Loadout" button (see {@link uk.iwaservice.classloadout.ClientEvents}).
- * Two independent things: "My Loadout" - five slots the player assigns
+ * Two independent things: "My Loadout" - ten slots the player assigns
  * directly by clicking an {@link ItemPickerScreen} - and "Presets", a
  * read-only list of admin-defined classes each of which can be applied as a
  * starting point for the player's own loadout (still freely editable after).
@@ -40,6 +40,7 @@ public class LoadoutScreen extends Screen {
     private static final int COLOR_TEXT_DIM = 0xA0A8C0;
     private static final int COLOR_SLOT_BG = 0x60000000;
     private static final int COLOR_SEPARATOR = 0x28FFFFFF;
+    private static final int COLOR_LOCKED_OUTLINE = 0xFFFF5555;
 
     private record PresetRow(LoadoutSyncPacket.Entry entry, int y) {}
 
@@ -54,8 +55,10 @@ public class LoadoutScreen extends Screen {
     private int panelHeight;
     private int dataRevision = -1;
 
-    private final int[] slotX = new int[5];
+    private final int[] slotX = new int[6];
     private int slotY;
+    private final int[] armorX = new int[4];
+    private int armorY;
 
     /** Immediate mode (regular loadout station / death screen). */
     public LoadoutScreen(Screen returnTo) {
@@ -73,7 +76,7 @@ public class LoadoutScreen extends Screen {
         List<LoadoutSyncPacket.Entry> classes = LoadoutClientData.getClasses();
         int presetShown = Math.min(classes.size(), MAX_PRESET_ROWS);
         panelWidth = Math.min(360, this.width - 16);
-        panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + SLOT + 34 + 16 + presetShown * PRESET_ROW_H + 30,
+        panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + 2 * SLOT + 8 + 34 + 16 + presetShown * PRESET_ROW_H + 30,
                 this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
@@ -81,7 +84,7 @@ public class LoadoutScreen extends Screen {
 
         int y = panelTop + HEADER_H + PAD + 14;
         int startX = panelLeft + PAD;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < slotX.length; i++) {
             slotX[i] = startX + i * (SLOT + 8);
         }
         slotY = y;
@@ -89,7 +92,18 @@ public class LoadoutScreen extends Screen {
         addRenderableWidget(slotButton(slotX[1], slotY, LoadoutSlot.SIDEARM));
         addRenderableWidget(slotButton(slotX[2], slotY, LoadoutSlot.THROWABLE));
         addRenderableWidget(slotButton(slotX[3], slotY, LoadoutSlot.GADGET));
-        addRenderableWidget(slotButton(slotX[4], slotY, LoadoutSlot.MELEE));
+        addRenderableWidget(slotButton(slotX[4], slotY, LoadoutSlot.GADGET2));
+        addRenderableWidget(slotButton(slotX[5], slotY, LoadoutSlot.MELEE));
+        y += SLOT + 8;
+
+        for (int i = 0; i < armorX.length; i++) {
+            armorX[i] = startX + i * (SLOT + 8);
+        }
+        armorY = y;
+        addRenderableWidget(slotButton(armorX[0], armorY, LoadoutSlot.HELMET));
+        addRenderableWidget(slotButton(armorX[1], armorY, LoadoutSlot.CHESTPLATE));
+        addRenderableWidget(slotButton(armorX[2], armorY, LoadoutSlot.LEGGINGS));
+        addRenderableWidget(slotButton(armorX[3], armorY, LoadoutSlot.BOOTS));
         y += SLOT + 34;
 
         presetRows.clear();
@@ -153,13 +167,18 @@ public class LoadoutScreen extends Screen {
                 l + PAD, t + HEADER_H + PAD, COLOR_TEXT_DIM);
 
         LoadoutSyncPacket.PersonalData personal = LoadoutClientData.getPersonal();
-        drawSlotIcon(graphics, slotX[0], slotY, personal.main(), "classloadout.gui.slot_main");
-        drawSlotIcon(graphics, slotX[1], slotY, personal.sidearm(), "classloadout.gui.slot_sidearm");
-        drawSlotIcon(graphics, slotX[2], slotY, personal.throwable(), "classloadout.gui.slot_throwable");
-        drawSlotIcon(graphics, slotX[3], slotY, personal.gadget(), "classloadout.gui.slot_gadget");
-        drawSlotIcon(graphics, slotX[4], slotY, personal.melee(), "classloadout.gui.slot_melee");
+        drawSlotIcon(graphics, slotX[0], slotY, personal.main(), LoadoutSlot.MAIN, "classloadout.gui.slot_main");
+        drawSlotIcon(graphics, slotX[1], slotY, personal.sidearm(), LoadoutSlot.SIDEARM, "classloadout.gui.slot_sidearm");
+        drawSlotIcon(graphics, slotX[2], slotY, personal.throwable(), LoadoutSlot.THROWABLE, "classloadout.gui.slot_throwable");
+        drawSlotIcon(graphics, slotX[3], slotY, personal.gadget(), LoadoutSlot.GADGET, "classloadout.gui.slot_gadget");
+        drawSlotIcon(graphics, slotX[4], slotY, personal.gadget2(), LoadoutSlot.GADGET2, "classloadout.gui.slot_gadget2");
+        drawSlotIcon(graphics, slotX[5], slotY, personal.melee(), LoadoutSlot.MELEE, "classloadout.gui.slot_melee");
+        drawSlotIcon(graphics, armorX[0], armorY, personal.helmet(), LoadoutSlot.HELMET, "classloadout.gui.slot_helmet");
+        drawSlotIcon(graphics, armorX[1], armorY, personal.chestplate(), LoadoutSlot.CHESTPLATE, "classloadout.gui.slot_chestplate");
+        drawSlotIcon(graphics, armorX[2], armorY, personal.leggings(), LoadoutSlot.LEGGINGS, "classloadout.gui.slot_leggings");
+        drawSlotIcon(graphics, armorX[3], armorY, personal.boots(), LoadoutSlot.BOOTS, "classloadout.gui.slot_boots");
 
-        int sepY = slotY + SLOT + 20;
+        int sepY = armorY + SLOT + 20;
         graphics.fill(l + PAD, sepY, r - PAD, sepY + 1, COLOR_SEPARATOR);
         graphics.drawString(this.font, Component.translatable("classloadout.gui.presets_section"),
                 l + PAD, sepY + 6, COLOR_TEXT_DIM);
@@ -171,7 +190,8 @@ public class LoadoutScreen extends Screen {
         for (PresetRow row : presetRows) {
             graphics.drawString(this.font, row.entry().name(), l + PAD, row.y(), COLOR_TEXT);
             ResourceLocation[] slots = {row.entry().main(), row.entry().sidearm(), row.entry().throwable(),
-                    row.entry().gadget(), row.entry().melee()};
+                    row.entry().gadget(), row.entry().gadget2(), row.entry().melee(),
+                    row.entry().helmet(), row.entry().chestplate(), row.entry().leggings(), row.entry().boots()};
             for (int i = 0; i < slots.length; i++) {
                 int x = l + PAD + i * (ICON + 4);
                 int y = row.y() + 14;
@@ -182,8 +202,21 @@ public class LoadoutScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
-    private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, String labelKey) {
+    /**
+     * A saved item no longer on {@code slot}'s whitelist (an OP edit or a deleted variant, since
+     * the assignment) renders as empty here too, matching {@code ServerEvents#equipLoadout} - it
+     * won't actually be equipped, so showing its icon here would be misleading. That whitelist
+     * check is skipped for a locked slot (OP force-assigned, bypasses the whitelist by design -
+     * see {@code LoadoutManager#lockSlot}), which instead gets a red outline so the player can
+     * see at a glance which slots they can't self-service-change.
+     */
+    private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, LoadoutSlot slot,
+            String labelKey) {
+        boolean locked = LoadoutClientData.isLocked(slot);
         graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
+        if (loc != null && !locked && !LoadoutClientData.getWhitelist(slot).contains(loc)) {
+            loc = null;
+        }
         if (loc != null) {
             ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             if (stack != null) {
@@ -191,6 +224,9 @@ public class LoadoutScreen extends Screen {
             } else {
                 graphics.drawCenteredString(this.font, "?", x + SLOT / 2, y + SLOT / 2 - 4, 0xFFFF5555);
             }
+        }
+        if (locked) {
+            graphics.renderOutline(x - 1, y - 1, SLOT + 2, SLOT + 2, COLOR_LOCKED_OUTLINE);
         }
         graphics.drawCenteredString(this.font, Component.translatable(labelKey), x + SLOT / 2, y + SLOT + 3, COLOR_TEXT_DIM);
     }

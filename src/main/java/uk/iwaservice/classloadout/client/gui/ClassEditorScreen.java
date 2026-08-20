@@ -67,12 +67,24 @@ public class ClassEditorScreen extends Screen {
     @Nullable
     private ResourceLocation pendingGadget;
     @Nullable
+    private ResourceLocation pendingGadget2;
+    @Nullable
     private ResourceLocation pendingMelee;
+    @Nullable
+    private ResourceLocation pendingHelmet;
+    @Nullable
+    private ResourceLocation pendingChestplate;
+    @Nullable
+    private ResourceLocation pendingLeggings;
+    @Nullable
+    private ResourceLocation pendingBoots;
 
     private int iconX;
     private int iconY;
-    private final int[] slotX = new int[5];
+    private final int[] slotX = new int[6];
     private int slotY;
+    private final int[] armorX = new int[4];
+    private int armorY;
     private EditBox nameBox;
 
     public ClassEditorScreen() {
@@ -82,7 +94,7 @@ public class ClassEditorScreen extends Screen {
     @Override
     protected void init() {
         panelWidth = Math.min(520, this.width - 16);
-        panelHeight = Math.min(300, this.height - 32);
+        panelHeight = Math.min(364, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
         dataRevision = LoadoutClientData.getRevision();
@@ -101,6 +113,9 @@ public class ClassEditorScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.hammerblocks_button"),
                         b -> minecraft.setScreen(new HammerBlocksEditorScreen(this)))
                 .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 4 + navGap, panelTop + 2, navW, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.force_button"),
+                        b -> minecraft.setScreen(new ForceLoadoutScreen(this)))
+                .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 5 + navGap, panelTop + 2, navW, 20).build());
 
         buildLeftColumn();
         if (editing) {
@@ -147,7 +162,12 @@ public class ClassEditorScreen extends Screen {
         pendingSidearm = null;
         pendingThrowable = null;
         pendingGadget = null;
+        pendingGadget2 = null;
         pendingMelee = null;
+        pendingHelmet = null;
+        pendingChestplate = null;
+        pendingLeggings = null;
+        pendingBoots = null;
         this.init(this.minecraft, this.width, this.height);
     }
 
@@ -161,7 +181,12 @@ public class ClassEditorScreen extends Screen {
         pendingSidearm = entry.sidearm();
         pendingThrowable = entry.throwable();
         pendingGadget = entry.gadget();
+        pendingGadget2 = entry.gadget2();
         pendingMelee = entry.melee();
+        pendingHelmet = entry.helmet();
+        pendingChestplate = entry.chestplate();
+        pendingLeggings = entry.leggings();
+        pendingBoots = entry.boots();
         this.init(this.minecraft, this.width, this.height);
     }
 
@@ -179,9 +204,9 @@ public class ClassEditorScreen extends Screen {
     }
 
     /**
-     * Sent as one command per field (name, then each of the six slots) rather than a single
+     * Sent as one command per field (name, then each of the ten slots) rather than a single
      * command carrying all of them - a held-item variant id is long enough (~58 chars) that
-     * six of them plus the name in one command could exceed the 256-character limit vanilla
+     * several of them plus the name in one command could exceed the 256-character limit vanilla
      * enforces on chat/command packets, disconnecting the client. See {@code ClassCommand
      * #saveName}/{@code #saveSlot}.
      */
@@ -195,7 +220,12 @@ public class ClassEditorScreen extends Screen {
         command("class save_slot " + pendingId + " sidearm " + rl(pendingSidearm));
         command("class save_slot " + pendingId + " throwable " + rl(pendingThrowable));
         command("class save_slot " + pendingId + " gadget " + rl(pendingGadget));
+        command("class save_slot " + pendingId + " gadget2 " + rl(pendingGadget2));
         command("class save_slot " + pendingId + " melee " + rl(pendingMelee));
+        command("class save_slot " + pendingId + " helmet " + rl(pendingHelmet));
+        command("class save_slot " + pendingId + " chestplate " + rl(pendingChestplate));
+        command("class save_slot " + pendingId + " leggings " + rl(pendingLeggings));
+        command("class save_slot " + pendingId + " boots " + rl(pendingBoots));
         editing = false;
         this.init(this.minecraft, this.width, this.height);
     }
@@ -221,7 +251,7 @@ public class ClassEditorScreen extends Screen {
         addRenderableWidget(slotButton(iconX, iconY, loc -> pendingIcon = loc, null));
         y += SLOT + 22;
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < slotX.length; i++) {
             slotX[i] = rightX + i * (SLOT + 8);
         }
         slotY = y;
@@ -229,7 +259,18 @@ public class ClassEditorScreen extends Screen {
         addRenderableWidget(slotButton(slotX[1], slotY, loc -> pendingSidearm = loc, LoadoutClientData.getWhitelist(LoadoutSlot.SIDEARM)));
         addRenderableWidget(slotButton(slotX[2], slotY, loc -> pendingThrowable = loc, LoadoutClientData.getWhitelist(LoadoutSlot.THROWABLE)));
         addRenderableWidget(slotButton(slotX[3], slotY, loc -> pendingGadget = loc, LoadoutClientData.getWhitelist(LoadoutSlot.GADGET)));
-        addRenderableWidget(slotButton(slotX[4], slotY, loc -> pendingMelee = loc, LoadoutClientData.getWhitelist(LoadoutSlot.MELEE)));
+        addRenderableWidget(slotButton(slotX[4], slotY, loc -> pendingGadget2 = loc, LoadoutClientData.getWhitelist(LoadoutSlot.GADGET2)));
+        addRenderableWidget(slotButton(slotX[5], slotY, loc -> pendingMelee = loc, LoadoutClientData.getWhitelist(LoadoutSlot.MELEE)));
+        y += SLOT + 22;
+
+        for (int i = 0; i < armorX.length; i++) {
+            armorX[i] = rightX + i * (SLOT + 8);
+        }
+        armorY = y;
+        addRenderableWidget(slotButton(armorX[0], armorY, loc -> pendingHelmet = loc, LoadoutClientData.getWhitelist(LoadoutSlot.HELMET)));
+        addRenderableWidget(slotButton(armorX[1], armorY, loc -> pendingChestplate = loc, LoadoutClientData.getWhitelist(LoadoutSlot.CHESTPLATE)));
+        addRenderableWidget(slotButton(armorX[2], armorY, loc -> pendingLeggings = loc, LoadoutClientData.getWhitelist(LoadoutSlot.LEGGINGS)));
+        addRenderableWidget(slotButton(armorX[3], armorY, loc -> pendingBoots = loc, LoadoutClientData.getWhitelist(LoadoutSlot.BOOTS)));
         y += SLOT + 30;
 
         int bw = (rightWidth - 8) / (editingExisting ? 3 : 2);
@@ -247,7 +288,7 @@ public class ClassEditorScreen extends Screen {
                 .bounds(bx, y, bw, 20).build());
     }
 
-    /** {@code restrictTo} null means unrestricted (only used for the icon slot, which isn't a real loadout slot); the five gear slots pass that slot's whitelist so a preset can't be built from items players couldn't otherwise be assigned. */
+    /** {@code restrictTo} null means unrestricted (only used for the icon slot, which isn't a real loadout slot); the ten gear/armor slots pass that slot's whitelist so a preset can't be built from items players couldn't otherwise be assigned. */
     private Button slotButton(int x, int y, Consumer<ResourceLocation> setter, @Nullable List<ResourceLocation> restrictTo) {
         return Button.builder(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this,
                         loc -> setter.accept(isAir(loc) ? null : loc), restrictTo)))
@@ -298,7 +339,12 @@ public class ClassEditorScreen extends Screen {
             drawSlotIcon(graphics, slotX[1], slotY, pendingSidearm, "classloadout.gui.slot_sidearm");
             drawSlotIcon(graphics, slotX[2], slotY, pendingThrowable, "classloadout.gui.slot_throwable");
             drawSlotIcon(graphics, slotX[3], slotY, pendingGadget, "classloadout.gui.slot_gadget");
-            drawSlotIcon(graphics, slotX[4], slotY, pendingMelee, "classloadout.gui.slot_melee");
+            drawSlotIcon(graphics, slotX[4], slotY, pendingGadget2, "classloadout.gui.slot_gadget2");
+            drawSlotIcon(graphics, slotX[5], slotY, pendingMelee, "classloadout.gui.slot_melee");
+            drawSlotIcon(graphics, armorX[0], armorY, pendingHelmet, "classloadout.gui.slot_helmet");
+            drawSlotIcon(graphics, armorX[1], armorY, pendingChestplate, "classloadout.gui.slot_chestplate");
+            drawSlotIcon(graphics, armorX[2], armorY, pendingLeggings, "classloadout.gui.slot_leggings");
+            drawSlotIcon(graphics, armorX[3], armorY, pendingBoots, "classloadout.gui.slot_boots");
         } else {
             graphics.drawString(this.font, Component.translatable("classloadout.gui.class_editor_hint"),
                     l + LEFT_W + PAD, t + HEADER_H + PAD, COLOR_TEXT_DIM);

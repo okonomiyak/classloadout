@@ -12,7 +12,6 @@ import net.minecraft.world.item.TooltipFlag;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
-import uk.iwaservice.classloadout.loadout.AmmoGrant;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 
 import javax.annotation.Nullable;
@@ -296,7 +295,7 @@ public class WhitelistEditorScreen extends Screen {
             }
             ResourceLocation loc = shown.get(index);
             boolean whitelisted = whitelist.contains(loc);
-            AmmoGrant grant = LoadoutClientData.getAmmoGrant(selectedSlot, loc);
+            boolean hasAmmoGrant = !LoadoutClientData.getAmmoGrants(selectedSlot, loc).isEmpty();
             boolean hovered = mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL
                     && mouseY >= gridTop && mouseY < gridTop + gridHeight;
             if (whitelisted) {
@@ -309,7 +308,7 @@ public class WhitelistEditorScreen extends Screen {
             ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
-            if (grant != null) {
+            if (hasAmmoGrant) {
                 graphics.fill(x + CELL - 5, y + 1, x + CELL - 1, y + 5, 0xFFFFAA00);
             }
             if (LoadoutClientData.getItemVariants().containsKey(loc)) {
@@ -321,7 +320,7 @@ public class WhitelistEditorScreen extends Screen {
                 hoveredX = mouseX;
                 hoveredY = mouseY;
                 hoveredWhitelisted = whitelisted;
-                hoveredHasAmmoGrant = grant != null;
+                hoveredHasAmmoGrant = hasAmmoGrant;
                 hoveredIsVariant = LoadoutClientData.getItemVariants().containsKey(loc);
             }
         }

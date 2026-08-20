@@ -13,7 +13,7 @@ import uk.iwaservice.classloadout.network.NetworkHandler;
 /**
  * Standalone loadout-class mod: no dependency on any squad/party mod. Admins
  * define classes via a GUI editor; players pick one from the death screen
- * and it is auto-equipped into hotbar slots 0-4 on every respawn.
+ * and it is auto-equipped into hotbar slots 0-5 on every respawn.
  */
 @Mod(ClassLoadoutMod.MODID)
 public class ClassLoadoutMod {

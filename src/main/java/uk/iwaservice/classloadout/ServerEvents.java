@@ -12,6 +12,7 @@ import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
@@ -27,13 +28,13 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.server.ServerLifecycleHooks;
 import uk.iwaservice.classloadout.command.ClassCommand;
-import uk.iwaservice.classloadout.loadout.AmmoGrant;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /** Forge-bus event handlers: command registration, respawn equip, login sync, hammer AOE breaking. */
 public final class ServerEvents {
@@ -83,6 +84,9 @@ public final class ServerEvents {
      */
     private static void tickGuardSpawners(MinecraftServer server) {
         LoadoutManager manager = LoadoutManager.get(server);
+        if (manager.isGuardSpawningPaused()) {
+            return;
+        }
         for (GlobalPos gpos : List.copyOf(manager.getGuardSpawnerPositions())) {
             ResourceLocation entityTypeId = manager.getGuardSpawnerEntity(gpos);
             ServerLevel level = server.getLevel(gpos.dimension());
@@ -90,10 +94,14 @@ public final class ServerEvents {
                 continue;
             }
             String tag = guardSpawnerTag(gpos.pos());
-            boolean present = !level.getEntities((Entity) null, new AABB(gpos.pos()).inflate(GUARD_SPAWNER_SCAN_RADIUS),
-                    e -> e.getTags().contains(tag)).isEmpty();
-            if (present) {
+            List<Entity> found = level.getEntities((Entity) null, new AABB(gpos.pos()).inflate(GUARD_SPAWNER_SCAN_RADIUS),
+                    e -> e.getTags().contains(tag));
+            if (!found.isEmpty()) {
                 manager.setGuardSpawnerMissingSince(gpos, -1);
+                List<ResourceLocation> items = manager.getGuardSpawnerItems(gpos);
+                for (Entity guard : found) {
+                    provisionGuardItems(guard, items, manager);
+                }
                 continue;
             }
             long missingSince = manager.getGuardSpawnerMissingSince(gpos);
@@ -108,8 +116,24 @@ public final class ServerEvents {
         }
     }
 
+    private static final String GUARD_SPAWNER_TAG_PREFIX = "classloadout_guard_";
+
     private static String guardSpawnerTag(BlockPos pos) {
-        return "classloadout_guard_" + pos.asLong();
+        return GUARD_SPAWNER_TAG_PREFIX + pos.asLong();
+    }
+
+    /** Discards every currently-loaded entity any guard spawner has ever spawned (see {@code /class guardspawner clear}), across every dimension. Doesn't touch spawner config or pause state - a paused spawner won't replace what's cleared here until resumed. */
+    public static int clearGuardSpawnerEntities(MinecraftServer server) {
+        int count = 0;
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getEntities().getAll()) {
+                if (entity.getTags().stream().anyMatch(t -> t.startsWith(GUARD_SPAWNER_TAG_PREFIX))) {
+                    entity.discard();
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     /** Spawns on top of the block, tags it so the next tick recognizes it as this spawner's guard, and fills any item-handler capability it exposes (e.g. a SuperbWarfare vehicle's battery/ammo slots) with the configured items. */
@@ -125,23 +149,38 @@ public final class ServerEvents {
         }
         entity.moveTo(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 0, 0);
         entity.addTag(tag);
+        provisionGuardItems(entity, items, manager);
+        level.addFreshEntity(entity);
+        level.getServer().getPlayerList().broadcastSystemMessage(Component.translatable(
+                "classloadout.msg.guardspawner_respawned", entityTypeId.toString(), pos.getX(), pos.getY(), pos.getZ()),
+                false);
+    }
+
+    /**
+     * Fills any item-handler capability the entity exposes (e.g. a SuperbWarfare vehicle's
+     * battery/ammo slots) with the configured items, one per slot in order - but only into slots
+     * that are currently empty. Called both right after spawning and on every subsequent watch
+     * tick while the guard is still alive, so a slot a player emptied out via the vehicle's own
+     * inventory GUI gets topped back up within one tick (up to 20 ticks) instead of the guard
+     * staying disarmed. Skipping already-occupied slots (rather than always inserting) avoids
+     * stacking duplicates into a slot that already has its item.
+     */
+    private static void provisionGuardItems(Entity entity, List<ResourceLocation> items, LoadoutManager manager) {
         entity.getCapability(ForgeCapabilities.ITEM_HANDLER).ifPresent(handler -> {
             int slot = 0;
             for (ResourceLocation itemId : items) {
                 if (slot >= handler.getSlots()) {
                     break;
                 }
-                ItemStack stack = ItemResolver.resolve(itemId, manager.getItemVariants());
-                if (stack != null && !stack.isEmpty()) {
-                    handler.insertItem(slot, stack.copy(), false);
+                if (handler.getStackInSlot(slot).isEmpty()) {
+                    ItemStack stack = ItemResolver.resolve(itemId, manager.getItemVariants());
+                    if (stack != null && !stack.isEmpty()) {
+                        handler.insertItem(slot, stack.copy(), false);
+                    }
                 }
                 slot++;
             }
         });
-        level.addFreshEntity(entity);
-        level.getServer().getPlayerList().broadcastSystemMessage(Component.translatable(
-                "classloadout.msg.guardspawner_respawned", entityTypeId.toString(), pos.getX(), pos.getY(), pos.getZ()),
-                false);
     }
 
     /**
@@ -203,14 +242,13 @@ public final class ServerEvents {
         grantSpawnKit(player, manager);
     }
 
-    /** Shared by respawn and the immediate-equip path below - grants each slot's configured ammo, if any. */
+    /** Shared by respawn and the immediate-equip path below - grants each slot's configured ammo (any number of distinct ammo item types), if any. */
     private static void grantAmmoForSlots(ServerPlayer player, ResourceLocation[] slots, LoadoutManager manager) {
         LoadoutSlot[] slotKeys = LoadoutSlot.values();
         for (int i = 0; i < slots.length; i++) {
             if (slots[i] != null) {
-                AmmoGrant grant = manager.getAmmoGrant(slotKeys[i], slots[i]);
-                if (grant != null) {
-                    grantAmmo(player, grant, manager);
+                for (Map.Entry<ResourceLocation, Integer> grant : manager.getAmmoGrants(slotKeys[i], slots[i]).entrySet()) {
+                    giveItem(player, grant.getKey(), grant.getValue(), manager);
                 }
             }
         }
@@ -251,29 +289,59 @@ public final class ServerEvents {
     }
 
     /**
-     * Overwrites hotbar slots 0-4 with the player's own loadout's
-     * main/sidearm/throwable/gadget/melee items (in that fixed order),
-     * clearing any slot they've left unset. Overwriting rather than adding
-     * keeps the icon-row order deterministic and avoids duplicate gear if
-     * the keepInventory gamerule is on. A player who has never touched
-     * their loadout (no assign/select/clear yet) is left alone entirely
-     * (returns null).
+     * Overwrites hotbar slots 0-5 with the player's own loadout's
+     * main/sidearm/throwable/gadget/gadget2/melee items, and the four armor
+     * slots with helmet/chestplate/leggings/boots (via {@link
+     * LoadoutSlot#equipmentSlot()} instead of a hotbar index - see {@link
+     * LoadoutSlot}), clearing any slot they've left unset. Overwriting
+     * rather than adding keeps the icon-row order deterministic and avoids
+     * duplicate gear if the keepInventory gamerule is on. A player who has
+     * never touched their loadout (no assign/select/clear yet) is left
+     * alone entirely (returns null).
      *
      * <p>Called on respawn (see below), but also directly from {@code
      * ClassCommand}'s assign/select/clear handlers so a player's gear takes
      * effect immediately while alive (e.g. via the loadout station), not
      * only the next time they die. Doesn't grant ammo itself - callers pass
      * the returned slot array into {@link #grantAmmoForSlots} for that.
+     *
+     * <p>A slot whose saved item has since been removed from that slot's
+     * whitelist (an OP edit after the player picked it, or a deleted "add
+     * held item" variant) is treated the same as an empty slot - equips
+     * nothing and grants no ammo - rather than keeping the stale item
+     * equipped forever. The saved assignment itself isn't touched, so it
+     * comes back on its own if the item is re-whitelisted later. This
+     * whitelist gate is skipped for a slot the player has locked (see
+     * {@code LoadoutManager#isLocked}) - an OP force-assign is allowed to
+     * bypass the whitelist by design, and that has to stay true on every
+     * later equip (including future respawns), not just the instant the
+     * force command ran, or the item would quietly vanish again the next
+     * time this method runs.
      */
     public static ResourceLocation[] equipLoadout(ServerPlayer player, LoadoutManager manager) {
         PersonalLoadout loadout = manager.getPersonalLoadout(player.getUUID());
         if (loadout == null) {
             return null;
         }
-        ResourceLocation[] slots = {loadout.main(), loadout.sidearm(), loadout.throwable(), loadout.gadget(), loadout.melee()};
-        for (int i = 0; i < slots.length; i++) {
-            ItemStack stack = slots[i] == null ? null : ItemResolver.resolve(slots[i], manager.getItemVariants());
-            player.getInventory().setItem(i, stack == null ? ItemStack.EMPTY : stack);
+        LoadoutSlot[] slotKeys = LoadoutSlot.values();
+        ResourceLocation[] slots = new ResourceLocation[slotKeys.length];
+        for (int i = 0; i < slotKeys.length; i++) {
+            LoadoutSlot slot = slotKeys[i];
+            ResourceLocation id = loadout.get(slot);
+            if (id != null && !manager.isLocked(player.getUUID(), slot) && !manager.isWhitelisted(slot, id)) {
+                id = null;
+            }
+            slots[i] = id;
+            ItemStack stack = id == null ? null : ItemResolver.resolve(id, manager.getItemVariants());
+            if (stack == null) {
+                stack = ItemStack.EMPTY;
+            }
+            EquipmentSlot eq = slot.equipmentSlot();
+            if (eq != null) {
+                player.setItemSlot(eq, stack);
+            } else {
+                player.getInventory().setItem(slot.hotbarIndex(), stack);
+            }
         }
         return slots;
     }
@@ -283,7 +351,7 @@ public final class ServerEvents {
      * grants that slot's configured ammo too - same as respawn. Also runs the same
      * clear-except-protected step as respawn first, when {@code death.clearInventoryOnDeath} is
      * on, so re-visiting the loadout station/locker while alive behaves exactly like a respawn
-     * instead of just swapping the five loadout slots over whatever else is in the inventory.
+     * instead of just swapping the six loadout slots over whatever else is in the inventory.
      */
     public static void equipLoadout(ServerPlayer player) {
         LoadoutManager manager = LoadoutManager.get(player.server);
@@ -294,10 +362,6 @@ public final class ServerEvents {
         if (slots != null) {
             grantAmmoForSlots(player, slots, manager);
         }
-    }
-
-    private static void grantAmmo(ServerPlayer player, AmmoGrant grant, LoadoutManager manager) {
-        giveItem(player, grant.ammoItem(), grant.count(), manager);
     }
 
     /**

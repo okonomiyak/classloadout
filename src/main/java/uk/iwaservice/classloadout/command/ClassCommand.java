@@ -9,7 +9,9 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.TeamArgument;
 import net.minecraft.commands.arguments.UuidArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
@@ -19,14 +21,18 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.scores.PlayerTeam;
 import uk.iwaservice.classloadout.ServerEvents;
 import uk.iwaservice.classloadout.loadout.ClassDefinition;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
+import uk.iwaservice.classloadout.loadout.PersonalLoadout;
 import uk.iwaservice.classloadout.network.NetworkHandler;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -40,7 +46,7 @@ import java.util.UUID;
  * loadout</b> (assign/select/clear) - the personal loadout, not any preset,
  * is what actually gets equipped, immediately (via {@link ServerEvents#equipLoadout})
  * as well as on every respawn. {@code select} applies a
- * preset's five items into the player's own loadout as a starting point.
+ * preset's six items into the player's own loadout as a starting point.
  * {@code assign} is checked against that slot's whitelist server-side -
  * the item picker only ever offers whitelisted items, but this is the
  * actual enforcement boundary (a hand-typed command can't bypass it).
@@ -60,6 +66,9 @@ public final class ClassCommand {
                 .then(Commands.literal("editor")
                         .requires(src -> src.hasPermission(2))
                         .executes(ctx -> editor(ctx)))
+                .then(Commands.literal("force")
+                        .requires(src -> src.hasPermission(2))
+                        .executes(ctx -> forceEditor(ctx)))
                 .then(Commands.literal("save")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("id", UuidArgument.uuid())
@@ -142,7 +151,10 @@ public final class ClassCommand {
                         .then(Commands.literal("remove_item")
                                 .then(Commands.argument("pos", BlockPosArgument.blockPos())
                                 .then(Commands.argument("item", ResourceLocationArgument.id())
-                                        .executes(ctx -> guardSpawnerRemoveItem(ctx))))))
+                                        .executes(ctx -> guardSpawnerRemoveItem(ctx)))))
+                        .then(Commands.literal("pause").executes(ctx -> guardSpawnerPause(ctx)))
+                        .then(Commands.literal("resume").executes(ctx -> guardSpawnerResume(ctx)))
+                        .then(Commands.literal("clear").executes(ctx -> guardSpawnerClear(ctx))))
                 .then(Commands.literal("assign")
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -154,7 +166,38 @@ public final class ClassCommand {
                                 .then(Commands.literal("defer").executes(ctx -> select(ctx, false)))))
                 .then(Commands.literal("clear")
                         .executes(ctx -> clear(ctx, true))
-                        .then(Commands.literal("defer").executes(ctx -> clear(ctx, false)))));
+                        .then(Commands.literal("defer").executes(ctx -> clear(ctx, false))))
+                .then(Commands.literal("forceselect")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("id", UuidArgument.uuid())
+                                .executes(ctx -> forceSelect(ctx)))))
+                .then(Commands.literal("forceassign")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
+                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .executes(ctx -> forceAssign(ctx))))))
+                .then(Commands.literal("forceselectall")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.argument("id", UuidArgument.uuid())
+                                .executes(ctx -> forceSelectAll(ctx))))
+                .then(Commands.literal("forceassignall")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
+                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .executes(ctx -> forceAssignAll(ctx)))))
+                .then(Commands.literal("forceselectteam")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.argument("team", TeamArgument.team())
+                        .then(Commands.argument("id", UuidArgument.uuid())
+                                .executes(ctx -> forceSelectTeam(ctx)))))
+                .then(Commands.literal("forceassignteam")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.argument("team", TeamArgument.team())
+                        .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
+                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .executes(ctx -> forceAssignTeam(ctx)))))));
     }
 
     /** Opens the OP-only preset editor client-side; permission already enforced by the command node. */
@@ -163,13 +206,19 @@ public final class ClassCommand {
         return 1;
     }
 
+    /** Opens the OP-only force-loadout editor client-side (GUI front end for {@code forceselect}/{@code forceassign}); permission already enforced by the command node. */
+    private static int forceEditor(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NetworkHandler.sendOpenForceLoadoutEditor(ctx.getSource().getPlayerOrException());
+        return 1;
+    }
+
     /**
      * Creates (with all slots empty) or renames a preset, keeping its existing slots if it
      * already exists. Split from slot assignment (see {@link #saveSlot}) because the editor
-     * used to send id+icon+all five slots+name as a single command - fine for bare item ids,
-     * but an OP-registered held-item variant id (~58 chars each) across six slots easily built
+     * used to send id+icon+all six slots+name as a single command - fine for bare item ids,
+     * but an OP-registered held-item variant id (~58 chars each) across seven slots easily built
      * a command longer than the 256-character limit vanilla enforces on chat/command packets,
-     * disconnecting the client with an EncoderException. Six small commands instead of one big
+     * disconnecting the client with an EncoderException. Seven small commands instead of one big
      * one sidesteps that ceiling entirely (matches how every other multi-value edit in this mod
      * - whitelist/spawn kit/hammer blocks - is already one command per item, never a batch).
      */
@@ -179,9 +228,8 @@ public final class ClassCommand {
         LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
         ClassDefinition existing = manager.get(id);
         ClassDefinition def = existing != null
-                ? new ClassDefinition(id, name, existing.icon(), existing.main(), existing.sidearm(),
-                        existing.throwable(), existing.gadget(), existing.melee())
-                : new ClassDefinition(id, name, null, null, null, null, null, null);
+                ? existing.withName(name)
+                : new ClassDefinition(id, name, null, null, null, null, null, null, null, null, null, null, null);
         manager.saveOrUpdate(ctx.getSource().getServer(), def);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.class_saved", name), true);
         return 1;
@@ -197,23 +245,15 @@ public final class ClassCommand {
         if (existing == null) {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
-        ClassDefinition def = switch (slotKey) {
-            case "icon" -> new ClassDefinition(id, existing.name(), item, existing.main(), existing.sidearm(),
-                    existing.throwable(), existing.gadget(), existing.melee());
-            case "main" -> new ClassDefinition(id, existing.name(), existing.icon(), item, existing.sidearm(),
-                    existing.throwable(), existing.gadget(), existing.melee());
-            case "sidearm" -> new ClassDefinition(id, existing.name(), existing.icon(), existing.main(), item,
-                    existing.throwable(), existing.gadget(), existing.melee());
-            case "throwable" -> new ClassDefinition(id, existing.name(), existing.icon(), existing.main(),
-                    existing.sidearm(), item, existing.gadget(), existing.melee());
-            case "gadget" -> new ClassDefinition(id, existing.name(), existing.icon(), existing.main(),
-                    existing.sidearm(), existing.throwable(), item, existing.melee());
-            case "melee" -> new ClassDefinition(id, existing.name(), existing.icon(), existing.main(),
-                    existing.sidearm(), existing.throwable(), existing.gadget(), item);
-            default -> null;
-        };
-        if (def == null) {
-            return fail(ctx, "classloadout.msg.unknown_slot", slotKey);
+        ClassDefinition def;
+        if ("icon".equals(slotKey)) {
+            def = existing.withIcon(item);
+        } else {
+            LoadoutSlot slot = LoadoutSlot.byKey(slotKey);
+            if (slot == null) {
+                return fail(ctx, "classloadout.msg.unknown_slot", slotKey);
+            }
+            def = existing.withSlot(slot, item);
         }
         manager.saveOrUpdate(ctx.getSource().getServer(), def);
         return 1;
@@ -318,9 +358,12 @@ public final class ClassCommand {
     }
 
     /**
-     * Attaches (or, with count 0, clears) an ammo grant to an already-whitelisted
-     * (slot, item) pair: equipping that item on respawn will also give the
-     * player {@code count} of {@code ammoItem} into their general inventory.
+     * Adds (or, with count 0, removes) one ammo-grant entry on an already-whitelisted (slot,
+     * item) pair: equipping that item (on respawn, or immediately via the loadout
+     * station/locker) also gives the player {@code count} of {@code ammoItem} into their general
+     * inventory. An item can have any number of these, one per distinct {@code ammoItem} - this
+     * only ever touches the single (item, ammoItem) pair given, leaving any other ammo grants
+     * already on {@code item} alone.
      */
     private static int whitelistAmmo(CommandContext<CommandSourceStack> ctx) {
         LoadoutSlot slot = parseSlot(ctx);
@@ -335,10 +378,11 @@ public final class ClassCommand {
         ResourceLocation ammoItem = ResourceLocationArgument.getId(ctx, "ammoItem");
         int count = IntegerArgumentType.getInteger(ctx, "count");
         if (count <= 0) {
-            manager.clearAmmoGrant(ctx.getSource().getServer(), slot, item);
-            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.ammo_grant_cleared", item.toString()), true);
+            manager.removeAmmoGrantEntry(ctx.getSource().getServer(), slot, item, ammoItem);
+            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.ammo_grant_cleared",
+                    ammoItem.toString(), item.toString()), true);
         } else {
-            manager.setAmmoGrant(ctx.getSource().getServer(), slot, item, ammoItem, count);
+            manager.setAmmoGrantEntry(ctx.getSource().getServer(), slot, item, ammoItem, count);
             ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.ammo_grant_set",
                     item.toString(), count, ammoItem.toString()), true);
         }
@@ -436,14 +480,37 @@ public final class ClassCommand {
         return 1;
     }
 
+    /** Stops every guard spawner's watch/respawn tick globally, without touching per-block config. Existing spawned guards are left alone - see {@link #guardSpawnerClear}. */
+    private static int guardSpawnerPause(CommandContext<CommandSourceStack> ctx) {
+        LoadoutManager.get(ctx.getSource().getServer()).setGuardSpawningPaused(true);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_paused"), true);
+        return 1;
+    }
+
+    private static int guardSpawnerResume(CommandContext<CommandSourceStack> ctx) {
+        LoadoutManager.get(ctx.getSource().getServer()).setGuardSpawningPaused(false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_resumed"), true);
+        return 1;
+    }
+
+    /** Despawns every entity any guard spawner has ever spawned (identified by its tag), everywhere. Doesn't pause or otherwise change spawner config - pair with {@code /class guardspawner pause} first if they shouldn't just come back. */
+    private static int guardSpawnerClear(CommandContext<CommandSourceStack> ctx) {
+        int removed = ServerEvents.clearGuardSpawnerEntities(ctx.getSource().getServer());
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_cleared", removed), true);
+        return 1;
+    }
+
     /**
      * Player self-service: assigns (or, with minecraft:air, clears) one slot
      * of their own loadout. The item must be on that slot's OP-curated
      * whitelist - this is the actual enforcement, not just the GUI filter.
-     * {@code immediate} equips the change into the hotbar right away (the
-     * regular loadout station); with {@code false} (the "defer" command
-     * variant, sent by the deferred loadout locker) only the saved data
-     * changes and the hotbar is left alone until the next respawn.
+     * Fails if an OP has locked this slot via {@code forceassign} (see
+     * {@code LoadoutManager#isLocked}) - it stays fixed to whatever the OP
+     * set until they free it. {@code immediate} equips the change into the
+     * hotbar right away (the regular loadout station); with {@code false}
+     * (the "defer" command variant, sent by the deferred loadout locker)
+     * only the saved data changes and the hotbar is left alone until the
+     * next respawn.
      */
     private static int assign(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
@@ -453,6 +520,10 @@ public final class ClassCommand {
         }
         ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
         LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        if (manager.isLocked(player.getUUID(), slot)) {
+            return fail(ctx, "classloadout.msg.slot_locked",
+                    Component.translatable("classloadout.gui.slot_" + slot.key()));
+        }
         if (item != null && !manager.isWhitelisted(slot, item)) {
             return fail(ctx, "classloadout.msg.not_whitelisted", item.toString());
         }
@@ -465,7 +536,12 @@ public final class ClassCommand {
         return 1;
     }
 
-    /** Applies a preset to the player's own loadout as a starting point (they can keep tweaking individual slots afterward). See {@link #assign} for {@code immediate}. */
+    /**
+     * Applies a preset to the player's own loadout as a starting point (they can keep tweaking
+     * individual slots afterward). Any slot the player has locked (see {@code
+     * LoadoutManager#isLocked}) keeps its OP-forced value instead of taking the preset's. See
+     * {@link #assign} for {@code immediate}.
+     */
     private static int select(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         UUID id = UuidArgument.getUuid(ctx, "id");
@@ -474,7 +550,7 @@ public final class ClassCommand {
         if (def == null) {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
-        manager.applyPreset(ctx.getSource().getServer(), player, id);
+        manager.applyPresetSelfService(ctx.getSource().getServer(), player, id);
         if (immediate) {
             ServerEvents.equipLoadout(player);
         }
@@ -482,10 +558,184 @@ public final class ClassCommand {
         return 1;
     }
 
-    /** See {@link #assign} for {@code immediate}. */
+    /**
+     * OP-only: applies a preset onto another player's personal loadout and equips it
+     * immediately (same {@link ServerEvents#equipLoadout(ServerPlayer)} path as the loadout
+     * station - inventory clear and ammo grants included, per that method's own rules) without
+     * the target needing to touch anything themselves. Unlike {@link #select}, there's no
+     * {@code defer} variant here - a target picked by an OP has no "locker" use case.
+     */
+    private static int forceSelect(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        ClassDefinition def = LoadoutManager.get(server).get(id);
+        if (def == null) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        applyForceSelect(server, target, def);
+        String targetName = target.getGameProfile().getName();
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_select_applied",
+                def.name(), targetName), true);
+        return 1;
+    }
+
+    /** Every-online-player counterpart to {@link #forceSelect} - used when the force-loadout GUI's target-name field is left blank. */
+    private static int forceSelectAll(CommandContext<CommandSourceStack> ctx) {
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        ClassDefinition def = LoadoutManager.get(server).get(id);
+        if (def == null) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        List<ServerPlayer> players = server.getPlayerList().getPlayers();
+        for (ServerPlayer target : players) {
+            applyForceSelect(server, target, def);
+        }
+        int count = players.size();
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_select_applied_all",
+                def.name(), count), true);
+        return count;
+    }
+
+    /**
+     * Also locks every slot the preset gives a value to (see {@code LoadoutManager#lockSlot}) -
+     * the player can't self-service-change it back until an OP frees it. Locks before applying
+     * the preset, not after - {@code applyPreset}'s own sync push needs the updated lock state
+     * already in place to reach the client in the same packet.
+     */
+    private static void applyForceSelect(MinecraftServer server, ServerPlayer target, ClassDefinition def) {
+        LoadoutManager manager = LoadoutManager.get(server);
+        PersonalLoadout applied = PersonalLoadout.fromClass(def);
+        for (LoadoutSlot slot : LoadoutSlot.values()) {
+            if (applied.get(slot) != null) {
+                manager.lockSlot(target.getUUID(), slot);
+            }
+        }
+        manager.applyPreset(server, target, def.id());
+        ServerEvents.equipLoadout(target);
+        target.sendSystemMessage(Component.translatable("classloadout.msg.force_select_notice", def.name()));
+    }
+
+    /** Every-currently-online-member-of-a-team counterpart to {@link #forceSelect}. */
+    private static int forceSelectTeam(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        PlayerTeam team = TeamArgument.getTeam(ctx, "team");
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        ClassDefinition def = LoadoutManager.get(server).get(id);
+        if (def == null) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        List<ServerPlayer> players = onlinePlayersOnTeam(server, team);
+        for (ServerPlayer target : players) {
+            applyForceSelect(server, target, def);
+        }
+        int count = players.size();
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_select_applied_team",
+                def.name(), team.getName(), count), true);
+        return count;
+    }
+
+    /** Online members of {@code team} (offline teammates are simply skipped - nothing to equip). */
+    private static List<ServerPlayer> onlinePlayersOnTeam(MinecraftServer server, PlayerTeam team) {
+        List<ServerPlayer> result = new ArrayList<>();
+        for (String name : team.getPlayers()) {
+            ServerPlayer player = server.getPlayerList().getPlayerByName(name);
+            if (player != null) {
+                result.add(player);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * OP-only: force-sets a single slot of another player's loadout and equips it immediately -
+     * the single-slot counterpart to {@link #forceSelect}, for touching up one item (e.g. just
+     * the helmet) without overwriting the rest of their loadout with a whole preset. Bypasses
+     * that slot's whitelist, same as {@link #forceSelect}/presets in general - an OP action, not
+     * player self-service, so the whitelist (which exists to constrain the self-service picker)
+     * doesn't apply here either.
+     */
+    private static int forceAssign(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        LoadoutSlot slot = parseSlot(ctx);
+        if (slot == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
+        }
+        ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
+        MinecraftServer server = ctx.getSource().getServer();
+        applyForceAssign(server, target, slot, item);
+        String targetName = target.getGameProfile().getName();
+        Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_assign_applied",
+                slotName, targetName), true);
+        return 1;
+    }
+
+    /** Every-online-player counterpart to {@link #forceAssign} - used when the force-loadout GUI's target-name field is left blank. */
+    private static int forceAssignAll(CommandContext<CommandSourceStack> ctx) {
+        LoadoutSlot slot = parseSlot(ctx);
+        if (slot == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
+        }
+        ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
+        MinecraftServer server = ctx.getSource().getServer();
+        List<ServerPlayer> players = server.getPlayerList().getPlayers();
+        for (ServerPlayer target : players) {
+            applyForceAssign(server, target, slot, item);
+        }
+        int count = players.size();
+        Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_assign_applied_all",
+                slotName, count), true);
+        return count;
+    }
+
+    /**
+     * A non-air item locks the slot (see {@code LoadoutManager#lockSlot}) so the player can't
+     * self-service-change it back; force-assigning {@code minecraft:air} to an already-locked
+     * slot unlocks it instead - the intended way for an OP to free one back up.
+     */
+    private static void applyForceAssign(MinecraftServer server, ServerPlayer target, LoadoutSlot slot,
+            @Nullable ResourceLocation item) {
+        LoadoutManager manager = LoadoutManager.get(server);
+        // Lock/unlock before setSlot, not after - setSlot's own sync push (see LoadoutManager#sendTo)
+        // needs the updated lock state to already be in place to reach the client in the same packet.
+        if (item != null) {
+            manager.lockSlot(target.getUUID(), slot);
+        } else {
+            manager.unlockSlot(target.getUUID(), slot);
+        }
+        manager.setSlot(server, target, slot, item);
+        ServerEvents.equipLoadout(target);
+        Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
+        target.sendSystemMessage(Component.translatable("classloadout.msg.force_assign_notice", slotName));
+    }
+
+    /** Every-currently-online-member-of-a-team counterpart to {@link #forceAssign}. */
+    private static int forceAssignTeam(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        PlayerTeam team = TeamArgument.getTeam(ctx, "team");
+        LoadoutSlot slot = parseSlot(ctx);
+        if (slot == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
+        }
+        ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
+        MinecraftServer server = ctx.getSource().getServer();
+        List<ServerPlayer> players = onlinePlayersOnTeam(server, team);
+        for (ServerPlayer target : players) {
+            applyForceAssign(server, target, slot, item);
+        }
+        int count = players.size();
+        Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_assign_applied_team",
+                slotName, team.getName(), count), true);
+        return count;
+    }
+
+    /** Locked slots (see {@code LoadoutManager#isLocked}) keep their OP-forced value instead of being wiped. See {@link #assign} for {@code immediate}. */
     private static int clear(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
-        LoadoutManager.get(ctx.getSource().getServer()).clearPersonalLoadout(ctx.getSource().getServer(), player);
+        LoadoutManager.get(ctx.getSource().getServer()).clearPersonalLoadoutSelfService(ctx.getSource().getServer(), player);
         if (immediate) {
             ServerEvents.equipLoadout(player);
         }
