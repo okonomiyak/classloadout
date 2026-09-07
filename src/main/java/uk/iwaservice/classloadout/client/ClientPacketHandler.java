@@ -11,6 +11,7 @@ import uk.iwaservice.classloadout.client.gui.PriceEditorScreen;
 import uk.iwaservice.classloadout.client.gui.ProtectedItemsEditorScreen;
 import uk.iwaservice.classloadout.client.gui.SpawnKitEditorScreen;
 import uk.iwaservice.classloadout.client.gui.WhitelistEditorScreen;
+import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
 
 import javax.annotation.Nullable;
@@ -67,10 +68,10 @@ public final class ClientPacketHandler {
 
     /** Server already checked permission level before sending this; re-check defensively anyway. */
     public static void handleOpenGuardSpawnerEditor(BlockPos pos, @Nullable ResourceLocation entityType,
-            int delaySeconds, List<ResourceLocation> items) {
+            int delaySeconds, List<ResourceLocation> items, List<GuardSpawnerTemplate> templates) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player != null && mc.player.hasPermissions(2)) {
-            mc.setScreen(new GuardSpawnerEditorScreen(pos, entityType, delaySeconds, items));
+            mc.setScreen(new GuardSpawnerEditorScreen(pos, entityType, delaySeconds, items, templates));
         }
     }
 

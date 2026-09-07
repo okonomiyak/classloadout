@@ -97,9 +97,10 @@ public final class NetworkHandler {
 
     public static void sendOpenGuardSpawnerEditor(ServerPlayer player, net.minecraft.core.BlockPos pos,
             @javax.annotation.Nullable ResourceLocation entityType, int delaySeconds,
-            java.util.List<ResourceLocation> items) {
+            java.util.List<ResourceLocation> items,
+            java.util.List<uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate> templates) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                new OpenGuardSpawnerEditorPacket(pos, entityType, delaySeconds, items));
+                new OpenGuardSpawnerEditorPacket(pos, entityType, delaySeconds, items, templates));
     }
 
     public static void sendOpenForceLoadoutEditor(ServerPlayer player) {

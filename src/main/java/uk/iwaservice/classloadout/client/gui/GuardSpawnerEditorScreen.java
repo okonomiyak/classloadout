@@ -11,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
+import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -27,8 +28,20 @@ import java.util.UUID;
  * {@code OpenGuardSpawnerEditorPacket} and then updated optimistically as
  * the OP edits - every mutation here is OP-gated server-side too, so an
  * optimistic update can't drift from reality in practice.
+ *
+ * <p>The **Templates** button opens {@link GuardSpawnerTemplateScreen}, which
+ * lets an OP save this spawner's config under a name and apply any saved
+ * template to another spawner later - so several spawners can share a setup
+ * without retyping it each time. That screen reaches back into this one's
+ * package-private {@link #parseFields()}/{@link #applyTemplate} rather than
+ * duplicating field state, since the "currently typed but not yet Saved"
+ * values only exist here (this screen's data isn't broadcast, so there's
+ * nowhere else to read them from).
  */
 public class GuardSpawnerEditorScreen extends Screen {
+
+    /** One spawner's config as currently shown in the fields/grid - used both to validate before {@link #saveConfig} and as the payload {@link GuardSpawnerTemplateScreen} saves under a name. */
+    record ParsedConfig(ResourceLocation entityType, int delaySeconds, List<ResourceLocation> items) {}
 
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
@@ -48,6 +61,8 @@ public class GuardSpawnerEditorScreen extends Screen {
     private ResourceLocation entityType;
     private int delaySeconds;
     private final List<ResourceLocation> items;
+    /** This client's local copy of the template roster - mutated optimistically by {@link GuardSpawnerTemplateScreen}, same pattern as {@link #items} above. */
+    private final List<GuardSpawnerTemplate> templates;
 
     private List<ResourceLocation> allItems = List.of();
     private List<ResourceLocation> shown = List.of();
@@ -66,18 +81,19 @@ public class GuardSpawnerEditorScreen extends Screen {
     private int maxScroll;
 
     public GuardSpawnerEditorScreen(BlockPos pos, @Nullable ResourceLocation entityType, int delaySeconds,
-            List<ResourceLocation> items) {
+            List<ResourceLocation> items, List<GuardSpawnerTemplate> templates) {
         super(Component.translatable("classloadout.gui.guardspawner_editor_title"));
         this.pos = pos;
         this.entityType = entityType;
         this.delaySeconds = delaySeconds;
         this.items = new ArrayList<>(items);
+        this.templates = new ArrayList<>(templates);
     }
 
     @Override
     protected void init() {
         panelWidth = Math.max(PAD * 2 + COLS * CELL, 260);
-        panelHeight = Math.min(340, this.height - 32);
+        panelHeight = Math.min(364, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
 
@@ -107,7 +123,12 @@ public class GuardSpawnerEditorScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.guardspawner_save"), b -> saveConfig())
                 .bounds(panelLeft + PAD, saveY, panelWidth - 2 * PAD, 20).build());
 
-        int searchY = saveY + 20 + 6;
+        int templatesY = saveY + 20 + 4;
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.guardspawner_templates_button"),
+                        b -> minecraft.setScreen(new GuardSpawnerTemplateScreen(this, templates)))
+                .bounds(panelLeft + PAD, templatesY, panelWidth - 2 * PAD, 20).build());
+
+        int searchY = templatesY + 20 + 6;
         String previousQuery = search != null ? search.getValue() : "";
         search = new EditBox(this.font, panelLeft + PAD, searchY, panelWidth - 2 * PAD, SEARCH_H,
                 Component.translatable("classloadout.gui.item_search"));
@@ -131,21 +152,44 @@ public class GuardSpawnerEditorScreen extends Screen {
         updateShown();
     }
 
-    private void saveConfig() {
+    /** Parses the entity-type/delay fields (paired with the live item list), or null if either field is currently invalid - shared by {@link #saveConfig} and {@link GuardSpawnerTemplateScreen}'s "save as template". */
+    @Nullable
+    ParsedConfig parseFields() {
         String typeStr = entityTypeBox.getValue().trim();
         if (typeStr.isEmpty()) {
-            return;
+            return null;
         }
         int delay;
         try {
             delay = Math.max(1, Integer.parseInt(delayBox.getValue().trim()));
         } catch (NumberFormatException e) {
+            return null;
+        }
+        return new ParsedConfig(new ResourceLocation(typeStr), delay, items);
+    }
+
+    private String posArgs() {
+        return pos.getX() + " " + pos.getY() + " " + pos.getZ();
+    }
+
+    private void saveConfig() {
+        ParsedConfig parsed = parseFields();
+        if (parsed == null) {
             return;
         }
-        entityType = new ResourceLocation(typeStr);
-        delaySeconds = delay;
-        command("class guardspawner config " + pos.getX() + " " + pos.getY() + " " + pos.getZ()
-                + " " + entityType + " " + delaySeconds);
+        entityType = parsed.entityType();
+        delaySeconds = parsed.delaySeconds();
+        command("class guardspawner config " + posArgs() + " " + entityType + " " + delaySeconds);
+    }
+
+    /** Applies a saved template to this spawner: overwrites the entity type/delay fields and replaces this spawner's item list wholesale (remove every current item, then add every template item) via {@code /class guardspawner template_apply}, a single command the server resolves against its own copy of the template. */
+    void applyTemplate(GuardSpawnerTemplate template) {
+        entityType = template.entityType();
+        delaySeconds = template.delaySeconds();
+        command("class guardspawner template_apply " + posArgs() + " " + template.id());
+        items.clear();
+        items.addAll(template.items());
+        this.init(this.minecraft, this.width, this.height);
     }
 
     /** Registers the OP's held item as a reusable variant and immediately adds it to this spawner's item list. */
@@ -154,7 +198,7 @@ public class GuardSpawnerEditorScreen extends Screen {
         command("class whitelist register_held " + id);
         ResourceLocation variant = new ResourceLocation("classloadout", "variant_" + id);
         items.add(variant);
-        command("class guardspawner add_item " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + variant);
+        command("class guardspawner add_item " + posArgs() + " " + variant);
     }
 
     private void updateShown() {
@@ -183,13 +227,12 @@ public class GuardSpawnerEditorScreen extends Screen {
         int index = cellIndexAt(mouseX, mouseY);
         if (index >= 0) {
             ResourceLocation item = shown.get(index);
-            String posArgs = pos.getX() + " " + pos.getY() + " " + pos.getZ();
             if (items.contains(item)) {
                 items.remove(item);
-                command("class guardspawner remove_item " + posArgs + " " + item);
+                command("class guardspawner remove_item " + posArgs() + " " + item);
             } else {
                 items.add(item);
-                command("class guardspawner add_item " + posArgs + " " + item);
+                command("class guardspawner add_item " + posArgs() + " " + item);
             }
             return true;
         }

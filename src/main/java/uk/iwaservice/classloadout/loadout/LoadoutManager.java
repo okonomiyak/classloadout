@@ -87,6 +87,8 @@ public class LoadoutManager extends SavedData {
     private final Map<GlobalPos, Long> guardSpawnerMissingSince = new HashMap<>();
     /** Global OP kill-switch for every guard spawner's watch/respawn tick (see {@code /class guardspawner pause|resume}) - individual block config is untouched, just not acted on while true. */
     private boolean guardSpawningPaused = false;
+    /** Named, reusable guard spawner configs an OP can apply to any spawner block - see {@link GuardSpawnerTemplate}. Not tied to any position, unlike the per-block maps above. Insertion order preserved for a stable list. */
+    private final Map<UUID, GuardSpawnerTemplate> guardSpawnerTemplates = new LinkedHashMap<>();
     /** Global OP kill-switch for whitelist enforcement (see {@code /class whitelist enable|disable}): while false, {@link #isWhitelisted} treats every item as allowed on every slot, without touching the whitelists themselves. */
     private boolean whitelistEnabled = true;
     /** OP-granted currency balance per player (see {@code /class points add|set}), spent via {@code /class buy} - independent of any vanilla scoreboard. Absent = 0. */
@@ -482,6 +484,64 @@ public class LoadoutManager extends SavedData {
         setDirty();
     }
 
+    // --- guard spawner templates (named, reusable configs an OP can apply to any spawner block) ---
+
+    public List<GuardSpawnerTemplate> listGuardSpawnerTemplates() {
+        return new ArrayList<>(guardSpawnerTemplates.values());
+    }
+
+    @Nullable
+    public GuardSpawnerTemplate getGuardSpawnerTemplate(UUID id) {
+        return guardSpawnerTemplates.get(id);
+    }
+
+    /** Creates a new template (id from the client, like presets) or renames/reconfigures an existing one - either way its item list is untouched here, see {@link #addGuardSpawnerTemplateItem}/{@link #removeGuardSpawnerTemplateItem}. */
+    public void saveGuardSpawnerTemplate(UUID id, String name, ResourceLocation entityType, int delaySeconds) {
+        GuardSpawnerTemplate existing = guardSpawnerTemplates.get(id);
+        List<ResourceLocation> items = existing != null ? existing.items() : List.of();
+        guardSpawnerTemplates.put(id, new GuardSpawnerTemplate(id, name, entityType, delaySeconds, items));
+        setDirty();
+    }
+
+    public void addGuardSpawnerTemplateItem(UUID id, ResourceLocation item) {
+        GuardSpawnerTemplate t = guardSpawnerTemplates.get(id);
+        if (t == null || t.items().contains(item)) {
+            return;
+        }
+        List<ResourceLocation> items = new ArrayList<>(t.items());
+        items.add(item);
+        guardSpawnerTemplates.put(id, new GuardSpawnerTemplate(id, t.name(), t.entityType(), t.delaySeconds(), items));
+        setDirty();
+    }
+
+    public void removeGuardSpawnerTemplateItem(UUID id, ResourceLocation item) {
+        GuardSpawnerTemplate t = guardSpawnerTemplates.get(id);
+        if (t == null) {
+            return;
+        }
+        List<ResourceLocation> items = new ArrayList<>(t.items());
+        if (items.remove(item)) {
+            guardSpawnerTemplates.put(id, new GuardSpawnerTemplate(id, t.name(), t.entityType(), t.delaySeconds(), items));
+            setDirty();
+        }
+    }
+
+    public boolean deleteGuardSpawnerTemplate(UUID id) {
+        boolean removed = guardSpawnerTemplates.remove(id) != null;
+        if (removed) {
+            setDirty();
+        }
+        return removed;
+    }
+
+    /** Overwrites a spawner block's entity/delay/items wholesale with a template's - the same three per-position maps {@code /class guardspawner config`/`add_item`/`remove_item} mutate one at a time. */
+    public void applyGuardSpawnerTemplate(GlobalPos pos, GuardSpawnerTemplate template) {
+        guardSpawnerEntity.put(pos, template.entityType());
+        guardSpawnerDelaySeconds.put(pos, template.delaySeconds());
+        guardSpawnerItems.put(pos, new ArrayList<>(template.items()));
+        setDirty();
+    }
+
     public boolean isGuardSpawningPaused() {
         return guardSpawningPaused;
     }
@@ -771,6 +831,11 @@ public class LoadoutManager extends SavedData {
             }
             manager.purchasedItems.put(p.getUUID("Player"), items);
         }
+        ListTag templateList = tag.getList("GuardSpawnerTemplates", Tag.TAG_COMPOUND);
+        for (int i = 0; i < templateList.size(); i++) {
+            GuardSpawnerTemplate t = GuardSpawnerTemplate.load(templateList.getCompound(i));
+            manager.guardSpawnerTemplates.put(t.id(), t);
+        }
         return manager;
     }
 
@@ -912,6 +977,12 @@ public class LoadoutManager extends SavedData {
             purchasedList.add(p);
         }
         tag.put("PurchasedItems", purchasedList);
+
+        ListTag templateList = new ListTag();
+        for (GuardSpawnerTemplate t : guardSpawnerTemplates.values()) {
+            templateList.add(t.save());
+        }
+        tag.put("GuardSpawnerTemplates", templateList);
 
         return tag;
     }

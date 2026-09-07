@@ -14,7 +14,44 @@
 
 ## 現在のgit状態(★重要★)
 
-**2026-08-21、v0.6.0としてコミット・push・リリース予定**。v0.5.2からの大型セッション、ロードアウトシステムに複数の新機能を追加(詳細は下記「2026-08-21セッションのまとめ」参照):
+**2026-09-04時点、未コミット**。ユーザー指示「GrandSpawnの設定を保存できるようにして」→AskUserQuestionで確認したところ意図は「他のブロックに設定をコピーしたい」と判明(既にNBTでワールド永続化されている設定を指しているのではなかった)。最初は1枠クリップボード方式(コピー/貼り付けボタン)で実装したが、ユーザーから追加指示「名前付きテンプレートの複数管理で拡張してほしい」があり、**名前付き複数テンプレート方式に置き換えた**(クリップボード版は完全に削除、両方式を併存させてはいない):
+
+- 新規`loadout/GuardSpawnerTemplate.java`(record: id・name・entityType・delaySeconds・items、`ClassDefinition`と同型のNBT save/load)。`LoadoutManager`に`Map<UUID, GuardSpawnerTemplate> guardSpawnerTemplates`を新設、NBT永続化(`GuardSpawnerTemplates`タグ)。位置に紐づく既存の`guardSpawnerEntity`/`Delay`/`Items`マップとは完全に独立(テンプレートはどのブロック位置にも属さない、名前付きの「型紙」)。
+- コマンド: `/class guardspawner template_save <id> <entityType> <delaySeconds> <name...>`(新規作成/名前・内容変更、持ち物は維持)・`template_add_item`/`template_remove_item <id> <item>`・`template_delete <id>`・`template_apply <x> <y> <z> <id>`(指定座標のスポナーへ丸ごと上書き適用、`LoadoutManager.applyGuardSpawnerTemplate`が1メソッドで3つのper-positionマップを同時に書き換え)。
+- GUI: `GuardSpawnerEditorScreen`に「Templates」ボタンを追加(Save/Copy/Pasteの2ボタン行だった箇所を1ボタンに置き換え)。押すと新規`GuardSpawnerTemplateScreen`が開き、保存済みテンプレート一覧(Apply/Deleteボタン付き)+名前入力欄+「現在の設定を新規テンプレートとして保存」ボタンを表示。
+- **テンプレート一覧はグローバル同期(`LoadoutSyncPacket`)ではなく、既存の`OpenGuardSpawnerEditorPacket`(ブロックを右クリックした時だけ送られる、ガードスポナー機能全体の設計方針)に相乗りさせた**——ガードスポナーの位置別設定と同じ理由(OPが編集中の時だけ必要なデータ、常時全クライアント配信は無駄)。パケットのペイロードに`List<GuardSpawnerTemplate> templates`を追加、手動encode/decode(既存の位置別itemsリストと同じ手書きシリアライズパターン)。
+- `GuardSpawnerEditorScreen`内の入力欄未保存値を読む`parseFields()`(旧`private`→パッケージプライベートに変更)を`GuardSpawnerTemplateScreen`からも呼べるようにし、「Saveボタンを押す前の入力中の値」もテンプレートとして保存できるようにした(この画面のデータは元々ブロードキャストされない設計のため、入力中の値は`GuardSpawnerEditorScreen`インスタンス自身にしか無い——同一パッケージ内の2画面が直接メソッド呼び出しで連携する構成、コールバック/インターフェースは導入せず最小の変更に留めた)。
+- `gradlew build`成功、lang JSON構文確認済み。**実地確認は完全に未実施**(GUI操作)——次回: あるスポナーの設定を「新規テンプレートとして保存」→別のスポナーを開いて一覧からApply→両方の設定(エンティティ・遅延・持ち物)が一致すること、Deleteが一覧から消えること、テンプレートを消しても既に適用済みのスポナー自体は変わらないことを確認。
+- README.md/README.ja.mdのGuard Spawner節・コマンド表を「Copy/Paste」から「Templates」の説明に置き換え済み。
+
+**旧メモ(2026-09-02、GuardSpawner爆発破壊バグの調査)**: classloadoutリポジトリ自体には変更なし——原因は兄弟プロジェクト`squadtp-conquest`側だった。ユーザー報告「GuardSpawnの硬さを岩盤と同じに」→「でも壊せてしまう(爆発で)」を調査。classloadout側の`guard_spawner`は既に`.strength(-1.0F, 3600000.8F)`(岩盤と同値、2026-08-15対応済み)になっており、そのままではclassloadout側に直すべき箇所は無かった。真因はsquadtp-conquest側の`TerrainDestructionEvents.onDetonate`(対戦ラウンド中の爆発を独自にクレーター化する機能)が、`Config.INDESTRUCTIBLE_BLOCKS`(既定`bedrock`・チェスト類・`conquest_flag`等)に載っているブロック種類しか保護対象にせず、**それ以外は爆発ブロック自身のバニラブラスト抵抗値を一切参照せずクレーター化する**設計だったこと(この既定リストには元々`classloadout:guard_spawner`が入っていなかった)。squadtp-conquest側の`Config.java`の既定リストに`"classloadout:guard_spawner"`を追加して修正済み(README.mdの説明2箇所も追記)——詳細・既存ワールドでの注意点はsquadtp-conquest側の`HANDOFF.md`(2026-09-02追記)参照。**classloadout側のこのセッションでの変更は0件**(調査のみ)。
+
+**旧メモ(2026-08-31、ショップ機能セッション)**: 同日中の2セッション目、v0.6.0(2026-08-21)+ホワイトリスト一時無効化(同日1セッション目、下記「旧メモ」参照)に続けて、ユーザー指示「武器をポイントと交換できるようにしたい」に対応した(AskUserQuestionで段階的に仕様確定): ポイント=classloadout独自の新規通貨(バニラscoreboardとは無関係)、方向=ポイントを払って武器を購入、購入=一回限りの永久アンロック、ポイント入手=まずOP手動付与のみ、UI=コマンド+ショップGUIの両方。
+
+- **データモデル**(`LoadoutManager`): `points`(`Map<UUID,Integer>`、プレイヤーごとの残高)・`itemPrices`(`Map<ResourceLocation,Integer>`、アイテムごとの価格。0/未設定=無料=この機能導入前と同じ挙動)・`purchasedItems`(`Map<UUID,Set<ResourceLocation>>`、購入済みリスト)の3つを新設。全てNBT永続化・`LoadoutSyncPacket`経由で同期(`points`/`purchasedItems`は受信者本人の分のみ、`itemPrices`は全員共通)。
+- **根本の強制ロジック**: `LoadoutManager.canEquip(player, item)`(価格0または購入済みならtrue)を新設し、`isWhitelisted`と**並べて**(独立した2つ目のゲートとして)`/class assign`・`ServerEvents#equipLoadout`の装備時再チェックの両方でチェック。ロック済みスロット(OP強制装備)は両方のゲートを従来通りバイパス。ホワイトリストの中身・強制装備・`whitelistEnabled`トグルには一切触れていない(完全に独立した軸)。
+- **コマンド**: `/class price`(OPのみ、価格エディタGUIを開く)・`/class price set <item> <cost>`(`cost 0`で販売停止)・`/class points add|set <player> <amount>`(OPのみ、オンライン限定、残高は0未満にならない)・`/class buy <item>`(誰でも、自己サービスで購入)。
+- **GUI**: `PriceEditorScreen`+`PriceCountScreen`(OP専用、`SpawnKitEditorScreen`+`SpawnKitCountScreen`をほぼそのまま複製した価格版、`ClassEditorScreen`のナビバー6番目のボタン、パネル幅520→600に拡張)、`ShopScreen`(全員向け新規、残高表示+価格付きアイテムのグリッド+クリック購入、`LoadoutScreen`下部に3つ目のボタンとして追加)。
+  - **ユーザー追加指示で修正**: 価格エディタの選択プールを他の全ピッカー(`ItemCatalog.all()`、全アイテムカタログ)と揃えるのではなく、あえて**いずれかのスロットに既にホワイトリスト登録済みのアイテムのみ**(+既に値付け済みのアイテムも、ホワイトリスト解除後も管理可能なよう含める)に絞った。`PriceEditorScreen.init()`で毎回`LoadoutClientData.getWhitelist(slot)`(全10スロット)の和集合+`getPrices().keySet()`を再計算する方式(SpawnKit等の「一度だけ`ItemCatalog.all()`をキャッシュ」方式とは異なり、ホワイトリスト変更に追従する必要があるため毎回再計算)。プールが空の場合のヒントメッセージ(`price_pool_empty`)も追加。
+  - **さらにユーザー指示「priceでもショップでもカテゴリーがあるように」**: `WhitelistEditorScreen`が既に持っていたmodカテゴリタブ(`ItemCatalog.Category`/`byCategory`、TACZ/SW/MC/CL/手持ちの5+全部タブ)を`PriceEditorScreen`と`ShopScreen`にも複製。新規lang keyは不要(`category_*`キーは既存のものをそのまま再利用)。`PriceEditorScreen`はカテゴリタブ+検索欄+グリッドの3段(パネル高さ280→306)、`ShopScreen`はカテゴリタブ+グリッドの2段(検索欄は無し、パネル高さ260→286——ショップの品揃えはOP管理で少数想定のため検索は省略)。
+  - **さらにユーザー指示「class editorのボタンを2列にして」**: `ClassEditorScreen`のナビボタン(6個:除外/ホワイトリスト/スポーンキット/ハンマー/強制装備/価格)を1行6列→AskUserQuestionで確認の上「2行×3列」に変更。ボタン幅はパネル幅を均等3分割する方式(`WhitelistEditorScreen`のカテゴリタブと同じ考え方)、`panelWidth`も6列時代の600→3列に十分な520へ戻した。
+    - **直後にユーザー指摘「プリセットエディトの文字をうえにしてボタンと被らないように」で発覚したバグ**: 最初の実装は`HEADER_H`(タイトルバー高さ)を24→48に増やして2段のナビ行をヘッダー領域内(タイトルと同じy座標帯)に収める方式だったため、フルの幅で埋まる2段ボタンがタイトル文字(`t+8`、左端PAD開始)と完全に重なっていた——1行時代はボタンが右寄せで左側にタイトル用の余白が残っていたが、2行×3列で左端PADから埋まる方式に変えたことでこの余白が消えたのが原因。修正: `HEADER_H`はタイトル専用の24に戻し、`WhitelistEditorScreen`のタブ行と同じ考え方で**ナビ2行をヘッダーの下に**配置(`navRow1Y = panelTop + HEADER_H + 4`)。左列/右列/本文の開始位置は新設の`contentTop`フィールド1箇所に集約(以前は`panelTop + HEADER_H + PAD`をあちこちで直接計算していたのを、ナビ2行分を加味した単一の計算に統一)。`panelHeight`も412に再調整。
+  - **さらにユーザー指示「shopの方はロードアウトのガジェットとかのカテゴリに分けて選択できるようにして」**: `ShopScreen`のタブ軸をmodカテゴリ(TACZ/SW/MC/CL/手持ち)から**ロードアウトスロット**(メイン/サイドアーム/投擲物/ガジェット/ガジェット2/近接/ヘルメット/チェストプレート/レガース/ブーツ)に差し替え(`PriceEditorScreen`のmodカテゴリタブはそのまま維持——値付けプールのブラウズという別の関心事のため)。タブは`LoadoutScreen`と同じ「ギア6+防具4」の2段構成(1段目=全部+ギア6スロット計7個、2段目=防具4スロット、`ROW1_TABS = LoadoutSlot.values().length/2+2`で算出)。フィルタは`LoadoutClientData.getWhitelist(selectedSlot).contains(item)`——値付け済みアイテムがそのスロットのホワイトリストに入っていれば表示(1アイテムが複数スロットのタブに重複表示されうる、意図通り)。`panelWidth`400・`panelHeight`310に調整。新規lang keyは不要(`slot_*`・`category_all`とも既存キーを再利用)。
+- `LoadoutScreen`の`drawSlotIcon`(装備中アイコン表示)も価格未購入なら空表示になるよう更新(ホワイトリスト外の場合と同じ扱い、`ServerEvents#equipLoadout`と表示を一致させるため)。
+- `gradlew build`成功・lang JSON構文確認済み。**実地確認は完全に未実施**(GUI操作・コマンドとも)——次回最優先。
+- README.md/README.ja.mdに新セクション「Shop」/「ショップ」・コマンド表・GUI節・設計メモ・2人プレイテスト手順(15番目)を追記済み。
+
+以後の変更は再びこのセクションで追跡すること。
+
+**旧メモ(ホワイトリスト一時無効化、2026-08-31同日1セッション目)**: v0.6.0に続けて、ユーザー指示「ホワイトリストを一時的に禁止できるように」に対応した:
+- `/class whitelist disable`/`enable`(OP限定)でホワイトリスト強制を全体一括でON/OFFできるようにした。ホワイトリストの中身自体(各スロットのSet)は一切変更しない——`LoadoutManager.whitelistEnabled`という単一のグローバルboolフラグを追加し、`isWhitelisted(slot, item)`の先頭に`!whitelistEnabled ||`を足しただけ(既存の全呼び出し箇所——`/class assign`・`ServerEvents#equipLoadout`の装備時再チェック——に自動的に効く、単一箇所での根本修正)。
+- NBT永続化(`WhitelistEnabled`タグ、既定true、キー不在時も既定true扱いなので既存ワールドは無変更)・`LoadoutSyncPacket`/`LoadoutClientData`に新フィールドとして追加して全クライアントに同期。
+- クライアント側: `LoadoutScreen`のスロットピッカーは無効化中`restrictTo`に`null`(無制限カタログ、プリセットエディタと同じ表示)を渡すよう変更、スロットアイコンの「ホワイトリスト外なら空表示」ロジックも無効化中はスキップ(装備側の挙動と一致させるため)。
+- 意図的に対象外にしたもの: `/class whitelist ammo`(引き続き実際にホワイトリスト登録済みであることを要求——OP自身の入力ミス防止用チェックであり「一時的に禁止」の対象ではないと判断)、`ForceLoadoutScreen`の項目ピッカー制限(強制装備はホワイトリストの有効/無効に関わらず元々常にバイパスするため無関係)。
+- 実装前に別件(「Conquest開始時に玉を配る」)の調査も実施——結論は兄弟プロジェクト`squadtp-conquest`側で既に実装済みだったと判明、詳細は下記「未解決事項の再掲」参照。
+- README.md/README.ja.mdのコマンド表・設計メモを更新済み。
+
+**旧メモ(v0.6.0リリース時点、2026-08-21)**: v0.5.2からの大型セッション、ロードアウトシステムに複数の新機能を追加(詳細は下記「2026-08-21セッションのまとめ」参照):
 1. 弾薬付与を1アイテムに複数種類設定可能に(`AmmoGrant`レコード廃止、`item→ammoItem→count`構造へ)
 2. OP用「強制装備」機能一式: `/class forceselect`/`forceassign`(1人指定)+`forceselectall`/`forceassignall`(オンライン全員)+`forceselectteam`/`forceassignteam`(スコアボードチーム)+専用GUI(`/class force`)
 3. ロードアウトスロットを6→10に拡張: 第二ガジェット(`gadget2`)+防具4部位(`helmet`/`chestplate`/`leggings`/`boots`)
@@ -85,7 +122,7 @@ v0.5.2に続く大型セッション。ユーザーの短い日本語指示を�
 
 ### 未解決事項の再掲
 
-「Conquest開始時に玉を配る」の件は前回セッションから未着手のまま(「Conquest」が何を指すか確認待ち、拒否されて中断)。次回セッション冒頭でユーザーに確認すること。
+「Conquest開始時に玉を配る」の件は前回セッションから未着手のまま(「Conquest」が何を指すか確認待ち、拒否されて中断)。次回セッション冒頭でユーザーに確認すること。→ **2026-08-31解決**、下記「次にやるべきこと」の該当項目参照(結論: 兄弟プロジェクト`squadtp-conquest`側で2026-08-15に既に実装済みだった)。
 
 ### 検証状況
 
@@ -418,8 +455,11 @@ GitHub push認証がこの環境のHTTPS `origin`では通らなかった(`could
 
 ## 次にやるべきこと(優先順)
 
+-8. **ユーザーにコミット・push可否を確認する**(2026-09-04セッションの`GuardSpawnerTemplate`名前付きテンプレート機能は未コミット、実地確認も未実施)。実地確認: スポナーAを設定→「Templates」→名前を付けて「現在の設定を新規テンプレートとして保存」→スポナーB(未設定 or 別設定)を開いて「Templates」→一覧にAで保存した名前が表示されること→Applyを押してAとBのエンティティ種類・遅延・持ち物リストが一致すること(Bの元の持ち物が正しく全部入れ替わっている)を確認。テンプレートをDeleteすると一覧から消えること、削除しても既に適用済みのスポナー自体には影響しないことも確認。**あわせてsquadtp-conquest側の`classloadout:guard_spawner`爆発破壊修正(下記「旧メモ」参照)もまだ実地未確認**——両方とも次回まとめて確認するとよい。
+-7. **ユーザーにコミット・push可否を確認する**(2026-08-31セッションのショップ機能——ポイント・価格・購入・GUI一式——は全て未コミット、実地確認も一切未実施)。実地確認チェックリスト: OPが`/class price`で価格設定→ポイント0のプレイヤーがショップで赤字(購入不可)表示→OPが`/class points add`で付与→購入可能表示に変化→クリック購入で緑「購入済」表示・残高減少→ロードアウト画面でそのスロットに割当てて即時装備されること→再度`/class buy`が「すでに所有」で失敗すること→ホワイトリスト登録済みだが未購入の別アイテムを`/class assign`しようとして未購入メッセージで失敗すること(ホワイトリストと購入が独立した2つのゲートであることの確認)。あわせて`/class price set item 0`で販売停止したアイテムが従来通り無料で装備できることも確認。
+-6. **ユーザーにコミット・push可否を確認する**(2026-08-31セッション1つ目の`/class whitelist disable`/`enable`変更は全て未コミット)。あわせて実地確認: OPで`/class whitelist disable`→非OPプレイヤーがロードアウト画面で未ホワイトリスト登録のアイテムを選べること・ホワイトリスト外だったため空表示になっていたスロットが元のアイテムを表示するようになること→`/class whitelist enable`で元の制限に戻ること(既存の各スロットのホワイトリスト自体が変更されずに残っていること)。
 -5. **v0.6.0の大型変更(弾薬付与複数化・強制装備一式・スロット10個化・ロック機能)の実地確認**——最優先(GUI/相互作用とも一切未確認)。詳細チェックリストは上記「2026-08-21セッションのまとめ」末尾の「検証状況」参照。特にロック機能とホワイトリストバイパスの組み合わせ(今回自分で作り込んで自分で見つけたバグの再発防止)を重点的に。
--4. **「Conquest開始時に玉を配る」の要件確認**——ユーザーへの確認待ち。「Conquest」が何(別Mod/データパックの対戦モードかKubeJS自作システムか)を指すか、「開始」のタイミングをどう検知するか([[classloadout-project]]内には実装先が無いので、フック方法自体も要相談)を次回セッションの最初に確認すること。
+-4. ~~「Conquest開始時に玉を配る」の要件確認~~ **解決済み(2026-08-31判明)**: 「Conquest」はユーザーから兄弟プロジェクト`squadtp-conquest`(`uk.iwaservice.squadtpconquest`)と判明。調べたところ**classloadout側の実装は不要で、既に向こう側で実装済み**だった: `compat/ClassLoadoutCompat.equip(player)`(`ModList.isLoaded("classloadout")`ガード付き)が`ServerEvents.equipLoadout(ServerPlayer)`(このMod既存の1引数即時装備API、v0.5.1以降弾薬付与も内包)を呼ぶ形で、squadtp-conquestのラウンド開始処理(`teleportToSpawns`)・試合中チーム参加(`joinTeam`)・演習場テレポート(`teleportIntoRange`)の3箇所から呼ばれている(squadtp-conquestのコミット`0a6eb5f`、2026-08-15——classloadout側のこのHANDOVER更新と同日だが別リポジトリでの作業だったため相互参照が漏れていた)。squadtp-conquest側の`TODO.md`(113〜120行目)に実地未確認の旨が明記済みなので、確認作業自体はそちらのTODOで追跡する(classloadoutリポジトリ側の対応事項ではない)。
 -3.5. **弾薬付与+インベントリクリアの即時装備対応(v0.5.1/v0.5.2)の実地確認**: ロードアウトステーション/ロッカーで弾薬付与付きの武器を割り当てた瞬間に弾薬が付与されること、同じ武器を何度も付け直すと毎回付与される(意図した仕様)ことを確認。あわせて`death.clearInventoryOnDeath`有効時、生存中にステーション/ロッカーを操作すると除外アイテム以外の所持品がリスポーン時と同様に丸ごとクリアされること(意図した仕様)、`death.clearInventoryOnDeath`を無効にすればクリアされないことも確認。`guard_spawner`をサバイバルモードで破壊しようとして壊れないこと(クリエイティブでは撤去できること)も確認。
 -3. **ガードスポナーブロック(v0.5.0)の実地確認**——最優先(GUI/監視ロジックとも一切未確認、新規サブシステムのため):
     - `classloadout:guard_spawner`を設置→OPで右クリックしてGUIが開くこと、非OPで右クリックしても開かずメッセージが出ること

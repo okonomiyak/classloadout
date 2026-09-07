@@ -42,7 +42,8 @@ public class GuardSpawnerBlock extends Block {
         GlobalPos gpos = GlobalPos.of(level.dimension(), pos);
         LoadoutManager manager = LoadoutManager.get(serverPlayer.server);
         NetworkHandler.sendOpenGuardSpawnerEditor(serverPlayer, pos, manager.getGuardSpawnerEntity(gpos),
-                manager.getGuardSpawnerDelaySeconds(gpos), manager.getGuardSpawnerItems(gpos));
+                manager.getGuardSpawnerDelaySeconds(gpos), manager.getGuardSpawnerItems(gpos),
+                manager.listGuardSpawnerTemplates());
         return InteractionResult.CONSUME;
     }
 

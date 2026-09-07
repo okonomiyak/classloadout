@@ -24,6 +24,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.scores.PlayerTeam;
 import uk.iwaservice.classloadout.ServerEvents;
 import uk.iwaservice.classloadout.loadout.ClassDefinition;
+import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
@@ -176,7 +177,28 @@ public final class ClassCommand {
                                         .executes(ctx -> guardSpawnerRemoveItem(ctx)))))
                         .then(Commands.literal("pause").executes(ctx -> guardSpawnerPause(ctx)))
                         .then(Commands.literal("resume").executes(ctx -> guardSpawnerResume(ctx)))
-                        .then(Commands.literal("clear").executes(ctx -> guardSpawnerClear(ctx))))
+                        .then(Commands.literal("clear").executes(ctx -> guardSpawnerClear(ctx)))
+                        .then(Commands.literal("template_save")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("entityType", ResourceLocationArgument.id())
+                                .then(Commands.argument("delaySeconds", IntegerArgumentType.integer(1))
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .executes(ctx -> guardSpawnerTemplateSave(ctx)))))))
+                        .then(Commands.literal("template_add_item")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> guardSpawnerTemplateAddItem(ctx)))))
+                        .then(Commands.literal("template_remove_item")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> guardSpawnerTemplateRemoveItem(ctx)))))
+                        .then(Commands.literal("template_delete")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> guardSpawnerTemplateDelete(ctx))))
+                        .then(Commands.literal("template_apply")
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> guardSpawnerTemplateApply(ctx))))))
                 .then(Commands.literal("assign")
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -601,6 +623,55 @@ public final class ClassCommand {
     private static int guardSpawnerClear(CommandContext<CommandSourceStack> ctx) {
         int removed = ServerEvents.clearGuardSpawnerEntities(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_cleared", removed), true);
+        return 1;
+    }
+
+    /** Creates a new template (id minted client-side, like presets) or renames/reconfigures an existing one - its item list is untouched here, see {@link #guardSpawnerTemplateAddItem}/{@link #guardSpawnerTemplateRemoveItem}. */
+    private static int guardSpawnerTemplateSave(CommandContext<CommandSourceStack> ctx) {
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        ResourceLocation entityType = ResourceLocationArgument.getId(ctx, "entityType");
+        int delaySeconds = IntegerArgumentType.getInteger(ctx, "delaySeconds");
+        String name = StringArgumentType.getString(ctx, "name");
+        LoadoutManager.get(ctx.getSource().getServer()).saveGuardSpawnerTemplate(id, name, entityType, delaySeconds);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_template_saved", name), true);
+        return 1;
+    }
+
+    private static int guardSpawnerTemplateAddItem(CommandContext<CommandSourceStack> ctx) {
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).addGuardSpawnerTemplateItem(id, item);
+        return 1;
+    }
+
+    private static int guardSpawnerTemplateRemoveItem(CommandContext<CommandSourceStack> ctx) {
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).removeGuardSpawnerTemplateItem(id, item);
+        return 1;
+    }
+
+    private static int guardSpawnerTemplateDelete(CommandContext<CommandSourceStack> ctx) {
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        boolean removed = LoadoutManager.get(ctx.getSource().getServer()).deleteGuardSpawnerTemplate(id);
+        if (removed) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_template_deleted"), true);
+        }
+        return 1;
+    }
+
+    /** Overwrites the spawner block at {@code pos} with a saved template's entity/delay/items wholesale. */
+    private static int guardSpawnerTemplateApply(CommandContext<CommandSourceStack> ctx) {
+        BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        GuardSpawnerTemplate template = manager.getGuardSpawnerTemplate(id);
+        if (template == null) {
+            return fail(ctx, "classloadout.msg.guardspawner_template_not_found");
+        }
+        GlobalPos gpos = GlobalPos.of(ctx.getSource().getLevel().dimension(), pos);
+        manager.applyGuardSpawnerTemplate(gpos, template);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_template_applied", template.name()), true);
         return 1;
     }
 
