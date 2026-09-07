@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import uk.iwaservice.classloadout.client.GuiBlurFix;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -39,6 +40,17 @@ import java.util.UUID;
  * nowhere else to read them from).
  */
 public class GuardSpawnerEditorScreen extends Screen {
+    private int savedBlur = -1;
+
+    @Override
+    public void removed() {
+        if (savedBlur >= 0) {
+            GuiBlurFix.restore(savedBlur);
+            savedBlur = -1;
+        }
+        super.removed();
+    }
+
 
     /** One spawner's config as currently shown in the fields/grid - used both to validate before {@link #saveConfig} and as the payload {@link GuardSpawnerTemplateScreen} saves under a name. */
     record ParsedConfig(ResourceLocation entityType, int delaySeconds, List<ResourceLocation> items) {}
@@ -92,6 +104,7 @@ public class GuardSpawnerEditorScreen extends Screen {
 
     @Override
     protected void init() {
+        if (savedBlur < 0) savedBlur = GuiBlurFix.suppress();
         panelWidth = Math.max(PAD * 2 + COLS * CELL, 260);
         panelHeight = Math.min(364, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
@@ -267,7 +280,7 @@ public class GuardSpawnerEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
+        renderTransparentBackground(graphics);
 
         int l = panelLeft;
         int t = panelTop;

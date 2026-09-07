@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import uk.iwaservice.classloadout.client.GuiBlurFix;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -32,6 +33,17 @@ import java.util.UUID;
  * there's no separate in-place count editor here (keeps this popup small).
  */
 public class AmmoGrantScreen extends Screen {
+    private int savedBlur = -1;
+
+    @Override
+    public void removed() {
+        if (savedBlur >= 0) {
+            GuiBlurFix.restore(savedBlur);
+            savedBlur = -1;
+        }
+        super.removed();
+    }
+
 
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
@@ -89,6 +101,7 @@ public class AmmoGrantScreen extends Screen {
 
     @Override
     protected void init() {
+        if (savedBlur < 0) savedBlur = GuiBlurFix.suppress();
         dataRevision = LoadoutClientData.getRevision();
         entries = new ArrayList<>(LoadoutClientData.getAmmoGrants(slot, item).entrySet());
         gridRows = Math.max(1, (entries.size() + GRID_COLS - 1) / GRID_COLS);
@@ -203,7 +216,7 @@ public class AmmoGrantScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
+        renderTransparentBackground(graphics);
 
         int l = panelLeft;
         int t = panelTop;

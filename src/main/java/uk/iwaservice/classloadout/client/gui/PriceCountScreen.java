@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import uk.iwaservice.classloadout.client.GuiBlurFix;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -17,6 +18,17 @@ import uk.iwaservice.classloadout.client.LoadoutClientData;
  * packets. Mirrors {@link SpawnKitCountScreen}.
  */
 public class PriceCountScreen extends Screen {
+    private int savedBlur = -1;
+
+    @Override
+    public void removed() {
+        if (savedBlur >= 0) {
+            GuiBlurFix.restore(savedBlur);
+            savedBlur = -1;
+        }
+        super.removed();
+    }
+
 
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
@@ -47,6 +59,7 @@ public class PriceCountScreen extends Screen {
 
     @Override
     protected void init() {
+        if (savedBlur < 0) savedBlur = GuiBlurFix.suppress();
         panelWidth = Math.min(200, this.width - 16);
         panelHeight = Math.min(120, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
@@ -97,7 +110,7 @@ public class PriceCountScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
+        renderTransparentBackground(graphics);
 
         int l = panelLeft;
         int t = panelTop;

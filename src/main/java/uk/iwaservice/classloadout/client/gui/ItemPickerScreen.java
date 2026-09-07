@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import uk.iwaservice.classloadout.client.GuiBlurFix;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
@@ -45,6 +46,17 @@ import java.util.function.Consumer;
  * "unset".
  */
 public class ItemPickerScreen extends Screen {
+    private int savedBlur = -1;
+
+    @Override
+    public void removed() {
+        if (savedBlur >= 0) {
+            GuiBlurFix.restore(savedBlur);
+            savedBlur = -1;
+        }
+        super.removed();
+    }
+
 
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
@@ -95,6 +107,7 @@ public class ItemPickerScreen extends Screen {
 
     @Override
     protected void init() {
+        if (savedBlur < 0) savedBlur = GuiBlurFix.suppress();
         boolean showCategories = restrictTo == null;
         panelWidth = Math.max(PAD * 2 + COLS * CELL, showCategories ? 260 : 0);
         panelHeight = Math.min(showCategories ? 306 : 280, this.height - 32);
@@ -235,7 +248,7 @@ public class ItemPickerScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
+        renderTransparentBackground(graphics);
 
         int l = panelLeft;
         int t = panelTop;

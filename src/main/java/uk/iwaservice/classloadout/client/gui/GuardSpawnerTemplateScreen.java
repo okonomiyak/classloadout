@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import uk.iwaservice.classloadout.client.GuiBlurFix;
 import net.minecraft.network.chat.Component;
 import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
 
@@ -21,6 +22,17 @@ import java.util.UUID;
  * broadcast to every client either.
  */
 public class GuardSpawnerTemplateScreen extends Screen {
+    private int savedBlur = -1;
+
+    @Override
+    public void removed() {
+        if (savedBlur >= 0) {
+            GuiBlurFix.restore(savedBlur);
+            savedBlur = -1;
+        }
+        super.removed();
+    }
+
 
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
@@ -58,6 +70,7 @@ public class GuardSpawnerTemplateScreen extends Screen {
 
     @Override
     protected void init() {
+        if (savedBlur < 0) savedBlur = GuiBlurFix.suppress();
         panelWidth = Math.min(280, this.width - 16);
         int rowsHeight = Math.max(1, Math.min(templates.size(), MAX_ROWS)) * ROW_H;
         panelHeight = Math.min(HEADER_H + PAD * 2 + rowsHeight + 26 + 20 + 20, this.height - 32);
@@ -146,7 +159,7 @@ public class GuardSpawnerTemplateScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
+        renderTransparentBackground(graphics);
 
         int l = panelLeft;
         int t = panelTop;

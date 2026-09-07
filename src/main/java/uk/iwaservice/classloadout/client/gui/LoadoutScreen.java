@@ -3,6 +3,7 @@ package uk.iwaservice.classloadout.client.gui;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import uk.iwaservice.classloadout.client.GuiBlurFix;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -25,6 +26,17 @@ import java.util.List;
  * starting point for the player's own loadout (still freely editable after).
  */
 public class LoadoutScreen extends Screen {
+    private int savedBlur = -1;
+
+    @Override
+    public void removed() {
+        if (savedBlur >= 0) {
+            GuiBlurFix.restore(savedBlur);
+            savedBlur = -1;
+        }
+        super.removed();
+    }
+
 
     private static final int PAD = 12;
     private static final int HEADER_H = 24;
@@ -73,6 +85,7 @@ public class LoadoutScreen extends Screen {
 
     @Override
     protected void init() {
+        if (savedBlur < 0) savedBlur = GuiBlurFix.suppress();
         List<LoadoutSyncPacket.Entry> classes = LoadoutClientData.getClasses();
         int presetShown = Math.min(classes.size(), MAX_PRESET_ROWS);
         panelWidth = Math.min(360, this.width - 16);
@@ -155,7 +168,7 @@ public class LoadoutScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics, mouseX, mouseY, partialTick);
+        renderTransparentBackground(graphics);
 
         int l = panelLeft;
         int t = panelTop;
