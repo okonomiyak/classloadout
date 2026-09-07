@@ -40,6 +40,14 @@ public final class LoadoutClientData {
     private static List<ResourceLocation> hammerBlocks = List.of();
     /** Slots an OP has locked on the local player's own loadout (see {@code LoadoutManager#lockSlot}) - never someone else's. */
     private static Set<LoadoutSlot> lockedSlots = Set.of();
+    /** Mirrors {@code LoadoutManager#isWhitelistEnabled} - false while an OP has temporarily disabled whitelist enforcement (see {@code /class whitelist enable|disable}). */
+    private static boolean whitelistEnabled = true;
+    /** OP-curated shop prices (see {@code LoadoutManager#itemPrices}), same for everyone. Insertion order preserved for a stable shop grid. */
+    private static Map<ResourceLocation, Integer> prices = Map.of();
+    /** The local player's own point balance - see {@code /class points add|set}. */
+    private static int points;
+    /** Priced items the local player has already bought via {@code /class buy} - never someone else's. */
+    private static Set<ResourceLocation> purchasedItems = Set.of();
     /** Incremented on every sync; lets screens detect updates cheaply. */
     private static int revision;
 
@@ -55,7 +63,11 @@ public final class LoadoutClientData {
                                               List<ResourceLocation> newProtectedItems,
                                               List<LoadoutSyncPacket.SpawnKitEntry> newSpawnKit,
                                               List<ResourceLocation> newHammerBlocks,
-                                              List<LoadoutSlot> newLockedSlots) {
+                                              List<LoadoutSlot> newLockedSlots,
+                                              boolean newWhitelistEnabled,
+                                              List<LoadoutSyncPacket.PriceEntry> newPrices,
+                                              int newPoints,
+                                              List<ResourceLocation> newPurchasedItems) {
         classes = List.copyOf(newClasses);
         personal = newPersonal;
         whitelists = newWhitelists;
@@ -82,6 +94,14 @@ public final class LoadoutClientData {
         spawnKit = kit;
         hammerBlocks = List.copyOf(newHammerBlocks);
         lockedSlots = newLockedSlots.isEmpty() ? Set.of() : EnumSet.copyOf(newLockedSlots);
+        whitelistEnabled = newWhitelistEnabled;
+        Map<ResourceLocation, Integer> priceMap = new LinkedHashMap<>();
+        for (LoadoutSyncPacket.PriceEntry p : newPrices) {
+            priceMap.put(p.item(), p.cost());
+        }
+        prices = priceMap;
+        points = newPoints;
+        purchasedItems = newPurchasedItems.isEmpty() ? Set.of() : new java.util.HashSet<>(newPurchasedItems);
         revision++;
     }
 
@@ -96,6 +116,10 @@ public final class LoadoutClientData {
         spawnKit = Map.of();
         hammerBlocks = List.of();
         lockedSlots = Set.of();
+        whitelistEnabled = true;
+        prices = Map.of();
+        points = 0;
+        purchasedItems = Set.of();
         revision++;
     }
 
@@ -153,6 +177,26 @@ public final class LoadoutClientData {
     /** True if an OP has locked this slot on the local player's own loadout - see {@code LoadoutManager#lockSlot}. */
     public static synchronized boolean isLocked(LoadoutSlot slot) {
         return lockedSlots.contains(slot);
+    }
+
+    /** Mirrors {@code LoadoutManager#isWhitelistEnabled} - see {@code /class whitelist enable|disable}. */
+    public static synchronized boolean isWhitelistEnabled() {
+        return whitelistEnabled;
+    }
+
+    /** OP-curated shop prices - item -> point cost. Only items with an entry here are "for sale" (see {@code /class price set}). */
+    public static synchronized Map<ResourceLocation, Integer> getPrices() {
+        return prices;
+    }
+
+    /** The local player's own point balance. */
+    public static synchronized int getPoints() {
+        return points;
+    }
+
+    /** True if the local player has already bought this priced item via {@code /class buy}. */
+    public static synchronized boolean isPurchased(ResourceLocation item) {
+        return purchasedItems.contains(item);
     }
 
     private LoadoutClientData() {}

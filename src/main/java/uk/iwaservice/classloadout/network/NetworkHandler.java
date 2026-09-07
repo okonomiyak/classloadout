@@ -64,6 +64,11 @@ public final class NetworkHandler {
                 .decoder(OpenForceLoadoutEditorPacket::decode)
                 .consumerMainThread(OpenForceLoadoutEditorPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(OpenPriceEditorPacket.class, 8, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenPriceEditorPacket::encode)
+                .decoder(OpenPriceEditorPacket::decode)
+                .consumerMainThread(OpenPriceEditorPacket::handle)
+                .add();
     }
 
     public static void sendLoadoutSync(ServerPlayer player, LoadoutSyncPacket packet) {
@@ -99,6 +104,10 @@ public final class NetworkHandler {
 
     public static void sendOpenForceLoadoutEditor(ServerPlayer player) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenForceLoadoutEditorPacket());
+    }
+
+    public static void sendOpenPriceEditor(ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenPriceEditorPacket());
     }
 
     private NetworkHandler() {}

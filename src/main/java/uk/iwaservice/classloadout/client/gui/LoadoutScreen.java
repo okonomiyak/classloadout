@@ -118,13 +118,16 @@ public class LoadoutScreen extends Screen {
         }
 
         int bottomY = panelTop + panelHeight - PAD - 20;
-        int half = (panelWidth - 2 * PAD - 4) / 2;
+        int third = (panelWidth - 2 * PAD - 8) / 3;
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.shop_button"),
+                        b -> minecraft.setScreen(new ShopScreen(this)))
+                .bounds(panelLeft + PAD, bottomY, third, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.class_unselect"),
                         b -> command("class clear"))
-                .bounds(panelLeft + PAD, bottomY, half, 20).build());
+                .bounds(panelLeft + PAD + third + 4, bottomY, third, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"),
                         b -> minecraft.setScreen(returnTo))
-                .bounds(panelLeft + PAD + half + 4, bottomY, half, 20).build());
+                .bounds(panelLeft + PAD + (third + 4) * 2, bottomY, third, 20).build());
     }
 
     @Override
@@ -134,10 +137,11 @@ public class LoadoutScreen extends Screen {
         }
     }
 
+    /** Picker is unrestricted (full catalog) while an OP has temporarily disabled whitelist enforcement - see {@code LoadoutManager#isWhitelistEnabled}. */
     private Button slotButton(int x, int y, LoadoutSlot slot) {
         return Button.builder(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this,
                         loc -> command("class assign " + slot.key() + " " + loc),
-                        LoadoutClientData.getWhitelist(slot))))
+                        LoadoutClientData.isWhitelistEnabled() ? LoadoutClientData.getWhitelist(slot) : null)))
                 .bounds(x, y, SLOT, SLOT).build();
     }
 
@@ -204,18 +208,24 @@ public class LoadoutScreen extends Screen {
 
     /**
      * A saved item no longer on {@code slot}'s whitelist (an OP edit or a deleted variant, since
-     * the assignment) renders as empty here too, matching {@code ServerEvents#equipLoadout} - it
-     * won't actually be equipped, so showing its icon here would be misleading. That whitelist
-     * check is skipped for a locked slot (OP force-assigned, bypasses the whitelist by design -
-     * see {@code LoadoutManager#lockSlot}), which instead gets a red outline so the player can
-     * see at a glance which slots they can't self-service-change.
+     * the assignment) - or a priced item the player hasn't bought via the {@link ShopScreen} (see
+     * {@code LoadoutManager#canEquip}) - renders as empty here too, matching {@code
+     * ServerEvents#equipLoadout}: it won't actually be equipped, so showing its icon here would be
+     * misleading. Both checks are skipped for a locked slot (OP force-assigned, bypasses both by
+     * design - see {@code LoadoutManager#lockSlot}), which instead gets a red outline so the
+     * player can see at a glance which slots they can't self-service-change.
      */
     private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, LoadoutSlot slot,
             String labelKey) {
         boolean locked = LoadoutClientData.isLocked(slot);
         graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
-        if (loc != null && !locked && !LoadoutClientData.getWhitelist(slot).contains(loc)) {
-            loc = null;
+        if (loc != null && !locked) {
+            boolean whitelisted = !LoadoutClientData.isWhitelistEnabled() || LoadoutClientData.getWhitelist(slot).contains(loc);
+            int price = LoadoutClientData.getPrices().getOrDefault(loc, 0);
+            boolean purchased = price <= 0 || LoadoutClientData.isPurchased(loc);
+            if (!whitelisted || !purchased) {
+                loc = null;
+            }
         }
         if (loc != null) {
             ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());

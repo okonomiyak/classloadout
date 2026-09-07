@@ -316,7 +316,12 @@ public final class ServerEvents {
      * bypass the whitelist by design, and that has to stay true on every
      * later equip (including future respawns), not just the instant the
      * force command ran, or the item would quietly vanish again the next
-     * time this method runs.
+     * time this method runs. The same locked-slot bypass, and the same
+     * empty-slot fallback otherwise, applies to {@code manager.canEquip} -
+     * an item the player hasn't bought yet (or no longer can afford to have
+     * bought, which can't actually happen since purchases are permanent, but
+     * an OP could still price something after the player already had it
+     * equipped) is treated identically to a stale whitelist removal.
      */
     public static ResourceLocation[] equipLoadout(ServerPlayer player, LoadoutManager manager) {
         PersonalLoadout loadout = manager.getPersonalLoadout(player.getUUID());
@@ -328,7 +333,8 @@ public final class ServerEvents {
         for (int i = 0; i < slotKeys.length; i++) {
             LoadoutSlot slot = slotKeys[i];
             ResourceLocation id = loadout.get(slot);
-            if (id != null && !manager.isLocked(player.getUUID(), slot) && !manager.isWhitelisted(slot, id)) {
+            if (id != null && !manager.isLocked(player.getUUID(), slot)
+                    && (!manager.isWhitelisted(slot, id) || !manager.canEquip(player.getUUID(), id))) {
                 id = null;
             }
             slots[i] = id;

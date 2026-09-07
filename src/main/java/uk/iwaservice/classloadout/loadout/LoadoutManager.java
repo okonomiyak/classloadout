@@ -87,6 +87,14 @@ public class LoadoutManager extends SavedData {
     private final Map<GlobalPos, Long> guardSpawnerMissingSince = new HashMap<>();
     /** Global OP kill-switch for every guard spawner's watch/respawn tick (see {@code /class guardspawner pause|resume}) - individual block config is untouched, just not acted on while true. */
     private boolean guardSpawningPaused = false;
+    /** Global OP kill-switch for whitelist enforcement (see {@code /class whitelist enable|disable}): while false, {@link #isWhitelisted} treats every item as allowed on every slot, without touching the whitelists themselves. */
+    private boolean whitelistEnabled = true;
+    /** OP-granted currency balance per player (see {@code /class points add|set}), spent via {@code /class buy} - independent of any vanilla scoreboard. Absent = 0. */
+    private final Map<UUID, Integer> points = new HashMap<>();
+    /** OP-curated: item -> point cost (see {@code /class price set}). Absent/non-positive = free - see {@link #canEquip}. Insertion order preserved for a stable shop grid. */
+    private final Map<ResourceLocation, Integer> itemPrices = new LinkedHashMap<>();
+    /** Per-player set of priced items permanently unlocked via {@code /class buy} - see {@link #canEquip}. */
+    private final Map<UUID, Set<ResourceLocation>> purchasedItems = new HashMap<>();
 
     public static LoadoutManager get(MinecraftServer server) {
         return server.overworld().getDataStorage()
@@ -129,7 +137,96 @@ public class LoadoutManager extends SavedData {
     }
 
     public boolean isWhitelisted(LoadoutSlot slot, ResourceLocation item) {
-        return getWhitelist(slot).contains(item);
+        return !whitelistEnabled || getWhitelist(slot).contains(item);
+    }
+
+    public boolean isWhitelistEnabled() {
+        return whitelistEnabled;
+    }
+
+    /** Toggles the global kill-switch above; synced to every online player so the loadout screen's picker/whitelist-greyout follow suit. */
+    public void setWhitelistEnabled(MinecraftServer server, boolean enabled) {
+        whitelistEnabled = enabled;
+        setDirty();
+        broadcastAll(server);
+    }
+
+    // --- shop (points-based weapon purchase) ---
+
+    public int getPoints(UUID player) {
+        return points.getOrDefault(player, 0);
+    }
+
+    /** Adds {@code delta} (may be negative) to a player's balance, floored at 0. */
+    public void addPoints(MinecraftServer server, ServerPlayer player, int delta) {
+        points.put(player.getUUID(), Math.max(0, getPoints(player.getUUID()) + delta));
+        setDirty();
+        sendTo(server, player);
+    }
+
+    public void setPoints(MinecraftServer server, ServerPlayer player, int amount) {
+        points.put(player.getUUID(), Math.max(0, amount));
+        setDirty();
+        sendTo(server, player);
+    }
+
+    public Map<ResourceLocation, Integer> getPrices() {
+        return new LinkedHashMap<>(itemPrices);
+    }
+
+    /** 0 means free/not for sale - the item needs no purchase to equip, same as before this system existed. */
+    public int getPrice(ResourceLocation item) {
+        return itemPrices.getOrDefault(item, 0);
+    }
+
+    /** {@code cost 0} removes the item's price (free again) - same "0 clears the entry" convention as ammo grants/spawn kit entries. Global, so synced to every client. */
+    public void setPrice(MinecraftServer server, ResourceLocation item, int cost) {
+        boolean changed = cost <= 0 ? itemPrices.remove(item) != null : !Integer.valueOf(cost).equals(itemPrices.put(item, cost));
+        if (changed) {
+            setDirty();
+            broadcastAll(server);
+        }
+    }
+
+    public boolean isPurchased(UUID player, ResourceLocation item) {
+        Set<ResourceLocation> owned = purchasedItems.get(player);
+        return owned != null && owned.contains(item);
+    }
+
+    /**
+     * True if {@code item} needs no purchase (free/not priced) or the player already bought it.
+     * Checked alongside {@link #isWhitelisted} by {@code /class assign} and the equip-time
+     * re-check ({@code ServerEvents#equipLoadout}) - purchase and whitelisting are independent
+     * OP-curated axes, both must pass for a player to self-service equip an item into a slot.
+     */
+    public boolean canEquip(UUID player, ResourceLocation item) {
+        return getPrice(item) <= 0 || isPurchased(player, item);
+    }
+
+    public enum PurchaseResult { OK, NOT_FOR_SALE, ALREADY_OWNED, INSUFFICIENT_FUNDS }
+
+    /**
+     * Player self-service ({@code /class buy}): spends points to permanently unlock a priced
+     * item. Doesn't touch or require slot whitelisting - once bought, the item still has to be on
+     * a slot's whitelist (or whitelist enforcement disabled) to actually be assignable there.
+     */
+    public PurchaseResult buy(MinecraftServer server, ServerPlayer player, ResourceLocation item) {
+        int price = getPrice(item);
+        if (price <= 0) {
+            return PurchaseResult.NOT_FOR_SALE;
+        }
+        UUID uuid = player.getUUID();
+        if (isPurchased(uuid, item)) {
+            return PurchaseResult.ALREADY_OWNED;
+        }
+        if (getPoints(uuid) < price) {
+            return PurchaseResult.INSUFFICIENT_FUNDS;
+        }
+        points.put(uuid, getPoints(uuid) - price);
+        purchasedItems.computeIfAbsent(uuid, u -> new LinkedHashSet<>()).add(item);
+        setDirty();
+        sendTo(server, player);
+        return PurchaseResult.OK;
     }
 
     public void addToWhitelist(MinecraftServer server, LoadoutSlot slot, ResourceLocation item) {
@@ -547,10 +644,17 @@ public class LoadoutManager extends SavedData {
             spawnKitEntries.add(new LoadoutSyncPacket.SpawnKitEntry(e.getKey(), e.getValue()));
         }
 
+        List<LoadoutSyncPacket.PriceEntry> priceEntries = new ArrayList<>(itemPrices.size());
+        for (Map.Entry<ResourceLocation, Integer> e : itemPrices.entrySet()) {
+            priceEntries.add(new LoadoutSyncPacket.PriceEntry(e.getKey(), e.getValue()));
+        }
+        Set<ResourceLocation> purchased = purchasedItems.getOrDefault(player.getUUID(), Set.of());
+
         NetworkHandler.sendLoadoutSync(player, new LoadoutSyncPacket(entries,
                 LoadoutSyncPacket.PersonalData.of(personal), LoadoutSyncPacket.Whitelists.of(whitelistsBySlot),
                 ammoGrantEntries, variantEntries, new ArrayList<>(protectedItems), spawnKitEntries,
-                new ArrayList<>(hammerBlocks), new ArrayList<>(getLockedSlots(player.getUUID()))));
+                new ArrayList<>(hammerBlocks), new ArrayList<>(getLockedSlots(player.getUUID())), whitelistEnabled,
+                priceEntries, getPoints(player.getUUID()), new ArrayList<>(purchased)));
     }
 
     // --- persistence ---
@@ -646,6 +750,27 @@ public class LoadoutManager extends SavedData {
             manager.guardSpawnerItems.put(pos, items);
         }
         manager.guardSpawningPaused = tag.getBoolean("GuardSpawningPaused");
+        manager.whitelistEnabled = !tag.contains("WhitelistEnabled") || tag.getBoolean("WhitelistEnabled");
+        ListTag pointsList = tag.getList("Points", Tag.TAG_COMPOUND);
+        for (int i = 0; i < pointsList.size(); i++) {
+            CompoundTag p = pointsList.getCompound(i);
+            manager.points.put(p.getUUID("Player"), p.getInt("Amount"));
+        }
+        ListTag priceList = tag.getList("ItemPrices", Tag.TAG_COMPOUND);
+        for (int i = 0; i < priceList.size(); i++) {
+            CompoundTag p = priceList.getCompound(i);
+            manager.itemPrices.put(new ResourceLocation(p.getString("Item")), p.getInt("Cost"));
+        }
+        ListTag purchasedList = tag.getList("PurchasedItems", Tag.TAG_COMPOUND);
+        for (int i = 0; i < purchasedList.size(); i++) {
+            CompoundTag p = purchasedList.getCompound(i);
+            Set<ResourceLocation> items = new LinkedHashSet<>();
+            ListTag itemList = p.getList("Items", Tag.TAG_STRING);
+            for (Tag t : itemList) {
+                items.add(new ResourceLocation(t.getAsString()));
+            }
+            manager.purchasedItems.put(p.getUUID("Player"), items);
+        }
         return manager;
     }
 
@@ -755,6 +880,38 @@ public class LoadoutManager extends SavedData {
         }
         tag.put("GuardSpawners", guardSpawnerList);
         tag.putBoolean("GuardSpawningPaused", guardSpawningPaused);
+        tag.putBoolean("WhitelistEnabled", whitelistEnabled);
+
+        ListTag pointsList = new ListTag();
+        for (Map.Entry<UUID, Integer> e : points.entrySet()) {
+            CompoundTag p = new CompoundTag();
+            p.putUUID("Player", e.getKey());
+            p.putInt("Amount", e.getValue());
+            pointsList.add(p);
+        }
+        tag.put("Points", pointsList);
+
+        ListTag priceList = new ListTag();
+        for (Map.Entry<ResourceLocation, Integer> e : itemPrices.entrySet()) {
+            CompoundTag p = new CompoundTag();
+            p.putString("Item", e.getKey().toString());
+            p.putInt("Cost", e.getValue());
+            priceList.add(p);
+        }
+        tag.put("ItemPrices", priceList);
+
+        ListTag purchasedList = new ListTag();
+        for (Map.Entry<UUID, Set<ResourceLocation>> e : purchasedItems.entrySet()) {
+            CompoundTag p = new CompoundTag();
+            p.putUUID("Player", e.getKey());
+            ListTag itemList = new ListTag();
+            for (ResourceLocation item : e.getValue()) {
+                itemList.add(net.minecraft.nbt.StringTag.valueOf(item.toString()));
+            }
+            p.put("Items", itemList);
+            purchasedList.add(p);
+        }
+        tag.put("PurchasedItems", purchasedList);
 
         return tag;
     }

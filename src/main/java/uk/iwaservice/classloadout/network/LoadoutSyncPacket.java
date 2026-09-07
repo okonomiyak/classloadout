@@ -32,7 +32,9 @@ import java.util.UUID;
 public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whitelists whitelists,
                                 List<AmmoGrantEntry> ammoGrants, List<VariantEntry> variants,
                                 List<ResourceLocation> protectedItems, List<SpawnKitEntry> spawnKit,
-                                List<ResourceLocation> hammerBlocks, List<LoadoutSlot> lockedSlots) {
+                                List<ResourceLocation> hammerBlocks, List<LoadoutSlot> lockedSlots,
+                                boolean whitelistEnabled, List<PriceEntry> prices, int points,
+                                List<ResourceLocation> purchasedItems) {
 
     /** One OP-configured ammo grant: equipping {@code item} in {@code slot} also gives {@code count} of {@code ammoItem}. */
     public record AmmoGrantEntry(LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
@@ -40,6 +42,10 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
 
     /** One OP-configured spawn kit entry: every player gets {@code count} of {@code item} on every respawn. */
     public record SpawnKitEntry(ResourceLocation item, int count) {
+    }
+
+    /** One OP-configured shop entry: {@code item} costs {@code cost} points to permanently unlock via {@code /class buy} - see {@code LoadoutManager#canEquip}. */
+    public record PriceEntry(ResourceLocation item, int cost) {
     }
 
     /** One OP-registered "exact held item" whitelist entry - see {@link uk.iwaservice.classloadout.loadout.LoadoutManager#addHeldItemToWhitelist}. {@code registeredAt} is an epoch-millis timestamp, shown in the whitelist editor's tooltip. */
@@ -182,6 +188,14 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         for (LoadoutSlot slot : msg.lockedSlots) {
             buf.writeEnum(slot);
         }
+        buf.writeBoolean(msg.whitelistEnabled);
+        buf.writeVarInt(msg.prices.size());
+        for (PriceEntry p : msg.prices) {
+            buf.writeResourceLocation(p.item());
+            buf.writeVarInt(p.cost());
+        }
+        buf.writeVarInt(msg.points);
+        writeList(buf, msg.purchasedItems);
     }
 
     public static LoadoutSyncPacket decode(FriendlyByteBuf buf) {
@@ -240,8 +254,18 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         for (int i = 0; i < lockedSlotCount; i++) {
             lockedSlots.add(buf.readEnum(LoadoutSlot.class));
         }
+        boolean whitelistEnabled = buf.readBoolean();
+        int priceCount = buf.readVarInt();
+        List<PriceEntry> prices = new ArrayList<>(priceCount);
+        for (int i = 0; i < priceCount; i++) {
+            ResourceLocation item = buf.readResourceLocation();
+            int cost = buf.readVarInt();
+            prices.add(new PriceEntry(item, cost));
+        }
+        int points = buf.readVarInt();
+        List<ResourceLocation> purchasedItems = readList(buf);
         return new LoadoutSyncPacket(classes, personal, whitelists, ammoGrants, variants, protectedItems, spawnKit,
-                hammerBlocks, lockedSlots);
+                hammerBlocks, lockedSlots, whitelistEnabled, prices, points, purchasedItems);
     }
 
     private static void writeOptional(FriendlyByteBuf buf, @Nullable ResourceLocation loc) {

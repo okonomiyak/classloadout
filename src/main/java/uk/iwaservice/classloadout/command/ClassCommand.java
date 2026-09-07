@@ -108,7 +108,9 @@ public final class ClassCommand {
                                 .then(Commands.argument("item", ResourceLocationArgument.id())
                                 .then(Commands.argument("ammoItem", ResourceLocationArgument.id())
                                 .then(Commands.argument("count", IntegerArgumentType.integer(0))
-                                        .executes(ctx -> whitelistAmmo(ctx))))))))
+                                        .executes(ctx -> whitelistAmmo(ctx)))))))
+                        .then(Commands.literal("disable").executes(ctx -> whitelistDisable(ctx)))
+                        .then(Commands.literal("enable").executes(ctx -> whitelistEnable(ctx))))
                 .then(Commands.literal("protect")
                         .requires(src -> src.hasPermission(2))
                         .executes(ctx -> protectEditor(ctx))
@@ -137,6 +139,26 @@ public final class ClassCommand {
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("block", ResourceLocationArgument.id())
                                         .executes(ctx -> hammerBlocksRemove(ctx)))))
+                .then(Commands.literal("price")
+                        .requires(src -> src.hasPermission(2))
+                        .executes(ctx -> priceEditor(ctx))
+                        .then(Commands.literal("set")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("cost", IntegerArgumentType.integer(0))
+                                        .executes(ctx -> priceSet(ctx))))))
+                .then(Commands.literal("points")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("amount", IntegerArgumentType.integer())
+                                        .executes(ctx -> pointsAdd(ctx)))))
+                        .then(Commands.literal("set")
+                                .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("amount", IntegerArgumentType.integer(0))
+                                        .executes(ctx -> pointsSet(ctx))))))
+                .then(Commands.literal("buy")
+                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .executes(ctx -> buy(ctx))))
                 .then(Commands.literal("guardspawner")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.literal("config")
@@ -389,6 +411,24 @@ public final class ClassCommand {
         return 1;
     }
 
+    /**
+     * Temporarily lets every item pass the whitelist check on every slot, without touching the
+     * whitelists themselves (see {@link LoadoutManager#isWhitelisted}) - for events/testing where
+     * OPs want to open things up for a while and flip it back after, rather than clearing and
+     * re-populating every slot's whitelist.
+     */
+    private static int whitelistDisable(CommandContext<CommandSourceStack> ctx) {
+        LoadoutManager.get(ctx.getSource().getServer()).setWhitelistEnabled(ctx.getSource().getServer(), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.whitelist_disabled"), true);
+        return 1;
+    }
+
+    private static int whitelistEnable(CommandContext<CommandSourceStack> ctx) {
+        LoadoutManager.get(ctx.getSource().getServer()).setWhitelistEnabled(ctx.getSource().getServer(), true);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.whitelist_enabled"), true);
+        return 1;
+    }
+
     /** Opens the OP-only protected-items editor client-side; permission already enforced by the command node. */
     private static int protectEditor(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         NetworkHandler.sendOpenProtectedItemsEditor(ctx.getSource().getPlayerOrException());
@@ -451,6 +491,70 @@ public final class ClassCommand {
         return 1;
     }
 
+    /** Opens the OP-only shop price editor client-side; permission already enforced by the command node. */
+    private static int priceEditor(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NetworkHandler.sendOpenPriceEditor(ctx.getSource().getPlayerOrException());
+        return 1;
+    }
+
+    /** {@code cost 0} removes the item's price (see {@link LoadoutManager#setPrice}). */
+    private static int priceSet(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        int cost = IntegerArgumentType.getInteger(ctx, "cost");
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        manager.setPrice(ctx.getSource().getServer(), item, cost);
+        if (cost <= 0) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.price_cleared", item.toString()), true);
+        } else {
+            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.price_set", item.toString(), cost), true);
+        }
+        return 1;
+    }
+
+    private static int pointsAdd(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
+        int amount = IntegerArgumentType.getInteger(ctx, "amount");
+        String name = player.getGameProfile().getName();
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        manager.addPoints(ctx.getSource().getServer(), player, amount);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.points_added",
+                amount, name, manager.getPoints(player.getUUID())), true);
+        return 1;
+    }
+
+    private static int pointsSet(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
+        int amount = IntegerArgumentType.getInteger(ctx, "amount");
+        String name = player.getGameProfile().getName();
+        LoadoutManager.get(ctx.getSource().getServer()).setPoints(ctx.getSource().getServer(), player, amount);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.points_set", name, amount), true);
+        return 1;
+    }
+
+    /**
+     * Player self-service: spends points to permanently unlock a shop item (see
+     * {@link LoadoutManager#buy}). Doesn't touch or require slot whitelisting - the item still
+     * has to be whitelisted for a slot (or whitelist enforcement disabled) to actually be
+     * assignable there afterward.
+     */
+    private static int buy(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        LoadoutManager.PurchaseResult result = manager.buy(ctx.getSource().getServer(), player, item);
+        return switch (result) {
+            case OK -> {
+                ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.purchase_ok",
+                        item.toString(), manager.getPoints(player.getUUID())), false);
+                yield 1;
+            }
+            case NOT_FOR_SALE -> fail(ctx, "classloadout.msg.not_for_sale", item.toString());
+            case ALREADY_OWNED -> fail(ctx, "classloadout.msg.already_owned", item.toString());
+            case INSUFFICIENT_FUNDS -> fail(ctx, "classloadout.msg.insufficient_funds",
+                    manager.getPrice(item), manager.getPoints(player.getUUID()));
+        };
+    }
+
     private static int guardSpawnerConfig(CommandContext<CommandSourceStack> ctx) {
         BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
         ResourceLocation entityType = ResourceLocationArgument.getId(ctx, "entityType");
@@ -504,6 +608,9 @@ public final class ClassCommand {
      * Player self-service: assigns (or, with minecraft:air, clears) one slot
      * of their own loadout. The item must be on that slot's OP-curated
      * whitelist - this is the actual enforcement, not just the GUI filter.
+     * If the item has a shop price (see {@code LoadoutManager#canEquip}), the
+     * player must have already bought it via {@code /class buy} too - a
+     * second, independent OP-curated gate on top of the whitelist.
      * Fails if an OP has locked this slot via {@code forceassign} (see
      * {@code LoadoutManager#isLocked}) - it stays fixed to whatever the OP
      * set until they free it. {@code immediate} equips the change into the
@@ -526,6 +633,9 @@ public final class ClassCommand {
         }
         if (item != null && !manager.isWhitelisted(slot, item)) {
             return fail(ctx, "classloadout.msg.not_whitelisted", item.toString());
+        }
+        if (item != null && !manager.canEquip(player.getUUID(), item)) {
+            return fail(ctx, "classloadout.msg.not_purchased", item.toString());
         }
         manager.setSlot(ctx.getSource().getServer(), player, slot, item);
         if (immediate) {

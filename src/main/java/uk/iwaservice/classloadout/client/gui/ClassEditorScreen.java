@@ -28,6 +28,7 @@ import java.util.function.Consumer;
 public class ClassEditorScreen extends Screen {
 
     private static final int PAD = 10;
+    /** Title bar only - the two nav button rows render below it (see {@link #contentTop}), not inside it, so the title text never shares space with a button. */
     private static final int HEADER_H = 24;
     private static final int LEFT_W = 150;
     private static final int ROW_H = 22;
@@ -47,6 +48,8 @@ public class ClassEditorScreen extends Screen {
     private int panelLeft;
     private int panelTop;
     private int panelHeight;
+    /** Where the left/right columns' content starts - below the title bar AND the two nav button rows (see {@link #init}). */
+    private int contentTop;
     private int dataRevision = -1;
 
     private final List<RowInfo> listRows = new ArrayList<>();
@@ -94,28 +97,41 @@ public class ClassEditorScreen extends Screen {
     @Override
     protected void init() {
         panelWidth = Math.min(520, this.width - 16);
-        panelHeight = Math.min(364, this.height - 32);
+        panelHeight = Math.min(412, this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
         dataRevision = LoadoutClientData.getRevision();
 
-        int navW = 84;
+        // Two rows of three nav buttons, evenly filling the panel width, below the title bar.
         int navGap = 4;
+        int navW = (panelWidth - 2 * PAD - 2 * navGap) / 3;
+        int navRow1Y = panelTop + HEADER_H + 4;
+        int navRow2Y = navRow1Y + 20 + navGap;
+        contentTop = navRow2Y + 20 + PAD;
+        int nx = panelLeft + PAD;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.protect_button"),
                         b -> minecraft.setScreen(new ProtectedItemsEditorScreen(this)))
-                .bounds(panelLeft + panelWidth - PAD - navW, panelTop + 2, navW, 20).build());
+                .bounds(nx, navRow1Y, navW, 20).build());
+        nx += navW + navGap;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_button"),
                         b -> minecraft.setScreen(new WhitelistEditorScreen(this)))
-                .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 2 + navGap, panelTop + 2, navW, 20).build());
+                .bounds(nx, navRow1Y, navW, 20).build());
+        nx += navW + navGap;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.spawnkit_button"),
                         b -> minecraft.setScreen(new SpawnKitEditorScreen(this)))
-                .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 3 + navGap, panelTop + 2, navW, 20).build());
+                .bounds(nx, navRow1Y, navW, 20).build());
+        nx = panelLeft + PAD;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.hammerblocks_button"),
                         b -> minecraft.setScreen(new HammerBlocksEditorScreen(this)))
-                .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 4 + navGap, panelTop + 2, navW, 20).build());
+                .bounds(nx, navRow2Y, navW, 20).build());
+        nx += navW + navGap;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.force_button"),
                         b -> minecraft.setScreen(new ForceLoadoutScreen(this)))
-                .bounds(panelLeft + panelWidth - PAD - (navW + navGap) * 5 + navGap, panelTop + 2, navW, 20).build());
+                .bounds(nx, navRow2Y, navW, 20).build());
+        nx += navW + navGap;
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.price_button"),
+                        b -> minecraft.setScreen(new PriceEditorScreen(this)))
+                .bounds(nx, navRow2Y, navW, 20).build());
 
         buildLeftColumn();
         if (editing) {
@@ -133,7 +149,7 @@ public class ClassEditorScreen extends Screen {
     private void buildLeftColumn() {
         listRows.clear();
         List<LoadoutSyncPacket.Entry> classes = LoadoutClientData.getClasses();
-        int y = panelTop + HEADER_H + PAD;
+        int y = contentTop;
         int shown = Math.min(classes.size(), MAX_ROWS);
         for (int i = 0; i < shown; i++) {
             LoadoutSyncPacket.Entry entry = classes.get(i);
@@ -237,7 +253,7 @@ public class ClassEditorScreen extends Screen {
     private void buildRightColumn() {
         int rightX = panelLeft + LEFT_W + PAD;
         int rightWidth = panelWidth - LEFT_W - 2 * PAD;
-        int y = panelTop + HEADER_H + PAD;
+        int y = contentTop;
 
         nameBox = new EditBox(this.font, rightX, y, rightWidth, 18, Component.translatable("classloadout.gui.class_name"));
         nameBox.setMaxLength(32);
@@ -319,7 +335,7 @@ public class ClassEditorScreen extends Screen {
         graphics.fill(l, t, r, b, COLOR_PANEL_BG);
         graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
         graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.fill(l + LEFT_W, t + HEADER_H, l + LEFT_W + 1, b, COLOR_OUTLINE);
+        graphics.fill(l + LEFT_W, contentTop - PAD, l + LEFT_W + 1, b, COLOR_OUTLINE);
         graphics.drawString(this.font, this.title, l + PAD, t + 8, COLOR_TEXT);
 
         for (RowInfo row : listRows) {
@@ -347,7 +363,7 @@ public class ClassEditorScreen extends Screen {
             drawSlotIcon(graphics, armorX[3], armorY, pendingBoots, "classloadout.gui.slot_boots");
         } else {
             graphics.drawString(this.font, Component.translatable("classloadout.gui.class_editor_hint"),
-                    l + LEFT_W + PAD, t + HEADER_H + PAD, COLOR_TEXT_DIM);
+                    l + LEFT_W + PAD, contentTop, COLOR_TEXT_DIM);
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
