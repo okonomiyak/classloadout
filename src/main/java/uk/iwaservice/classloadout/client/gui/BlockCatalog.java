@@ -3,7 +3,7 @@ package uk.iwaservice.classloadout.client.gui;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,8 +23,8 @@ final class BlockCatalog {
 
     static List<ResourceLocation> all() {
         List<ResourceLocation> list = new ArrayList<>();
-        for (Block block : ForgeRegistries.BLOCKS.getValues()) {
-            ResourceLocation loc = ForgeRegistries.BLOCKS.getKey(block);
+        for (Block block : BuiltInRegistries.BLOCK) {
+            ResourceLocation loc = BuiltInRegistries.BLOCK.getKey(block);
             if (loc == null || block.asItem() == Items.AIR) {
                 continue;
             }

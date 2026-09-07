@@ -6,6 +6,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.TooltipFlag;
@@ -218,12 +219,12 @@ public class WhitelistEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (maxScroll > 0) {
-            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (delta * CELL)));
+            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (scrollY * CELL)));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
@@ -261,7 +262,7 @@ public class WhitelistEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        renderBackground(graphics, mouseX, mouseY, partialTick);
 
         int l = panelLeft;
         int t = panelTop;
@@ -328,7 +329,7 @@ public class WhitelistEditorScreen extends Screen {
 
         if (hoveredStack != null) {
             List<Component> lines = new ArrayList<>(hoveredStack.getTooltipLines(
-                    this.minecraft.player, TooltipFlag.Default.NORMAL));
+                    Item.TooltipContext.of(this.minecraft.level), this.minecraft.player, TooltipFlag.Default.NORMAL));
             lines.addAll(TaczCompat.describeGunTooltip(hoveredStack));
             lines.addAll(TaczCompat.describeAmmoBoxTooltip(hoveredStack));
             lines.addAll(TaczCompat.describeAmmoTooltip(hoveredStack));

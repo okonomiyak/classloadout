@@ -3,6 +3,7 @@ package uk.iwaservice.classloadout;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.NonNullList;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -19,14 +20,13 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.event.level.BlockEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.server.ServerLifecycleHooks;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.items.IItemHandler;
 import uk.iwaservice.classloadout.command.ClassCommand;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
@@ -46,7 +46,7 @@ public final class ServerEvents {
      * under {@code compat/}. If SuperbWarfare isn't installed, the tag is simply empty and
      * this check always fails harmlessly.
      */
-    private static final TagKey<Item> HAMMER_TAG = ItemTags.create(new ResourceLocation("forge", "tools/hammer"));
+    private static final TagKey<Item> HAMMER_TAG = ItemTags.create(ResourceLocation.fromNamespaceAndPath("c", "tools/hammer"));
 
     /** How far a guard spawner looks for its own tagged entity before assuming it's gone and starting the respawn countdown. */
     private static final double GUARD_SPAWNER_SCAN_RADIUS = 48.0;
@@ -65,12 +65,9 @@ public final class ServerEvents {
 
     /** Throttled to once a second - a per-tick full scan of every guard spawner isn't worth the precision. */
     @SubscribeEvent
-    public static void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
-            return;
-        }
-        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null || server.getTickCount() % 20 != 0) {
+    public static void onServerTick(ServerTickEvent.Post event) {
+        MinecraftServer server = event.getServer();
+        if (server.getTickCount() % 20 != 0) {
             return;
         }
         tickGuardSpawners(server);
@@ -139,7 +136,7 @@ public final class ServerEvents {
     /** Spawns on top of the block, tags it so the next tick recognizes it as this spawner's guard, and fills any item-handler capability it exposes (e.g. a SuperbWarfare vehicle's battery/ammo slots) with the configured items. */
     private static void spawnGuard(ServerLevel level, BlockPos pos, ResourceLocation entityTypeId, String tag,
             List<ResourceLocation> items, LoadoutManager manager) {
-        EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(entityTypeId);
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getOptional(entityTypeId).orElse(null);
         if (type == null) {
             return;
         }
@@ -166,21 +163,23 @@ public final class ServerEvents {
      * stacking duplicates into a slot that already has its item.
      */
     private static void provisionGuardItems(Entity entity, List<ResourceLocation> items, LoadoutManager manager) {
-        entity.getCapability(ForgeCapabilities.ITEM_HANDLER).ifPresent(handler -> {
-            int slot = 0;
-            for (ResourceLocation itemId : items) {
-                if (slot >= handler.getSlots()) {
-                    break;
-                }
-                if (handler.getStackInSlot(slot).isEmpty()) {
-                    ItemStack stack = ItemResolver.resolve(itemId, manager.getItemVariants());
-                    if (stack != null && !stack.isEmpty()) {
-                        handler.insertItem(slot, stack.copy(), false);
-                    }
-                }
-                slot++;
+        IItemHandler handler = entity.getCapability(Capabilities.ItemHandler.ENTITY);
+        if (handler == null) {
+            return;
+        }
+        int slot = 0;
+        for (ResourceLocation itemId : items) {
+            if (slot >= handler.getSlots()) {
+                break;
             }
-        });
+            if (handler.getStackInSlot(slot).isEmpty()) {
+                ItemStack stack = ItemResolver.resolve(itemId, manager.getItemVariants());
+                if (stack != null && !stack.isEmpty()) {
+                    handler.insertItem(slot, stack.copy(), false);
+                }
+            }
+            slot++;
+        }
     }
 
     /**
@@ -202,7 +201,7 @@ public final class ServerEvents {
             return;
         }
         LoadoutManager manager = LoadoutManager.get(serverLevel.getServer());
-        ResourceLocation centerBlockId = ForgeRegistries.BLOCKS.getKey(event.getState().getBlock());
+        ResourceLocation centerBlockId = BuiltInRegistries.BLOCK.getKey(event.getState().getBlock());
         if (centerBlockId == null || !manager.isHammerBlock(centerBlockId)) {
             return;
         }
@@ -216,7 +215,7 @@ public final class ServerEvents {
             if (state.isAir()) {
                 continue;
             }
-            ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(state.getBlock());
+            ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
             if (blockId != null && manager.isHammerBlock(blockId)) {
                 serverLevel.destroyBlock(pos, true, player);
             }
@@ -281,7 +280,7 @@ public final class ServerEvents {
             if (stack.isEmpty()) {
                 continue;
             }
-            ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(stack.getItem());
+            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
             if (itemId == null || !manager.isProtectedItem(itemId)) {
                 slots.set(i, ItemStack.EMPTY);
             }

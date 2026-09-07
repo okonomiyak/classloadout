@@ -2,11 +2,9 @@ package uk.iwaservice.classloadout.network;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.network.NetworkEvent;
-import uk.iwaservice.classloadout.client.ClientPacketHandler;
 import uk.iwaservice.classloadout.loadout.ClassDefinition;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
@@ -34,7 +32,7 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
                                 List<ResourceLocation> protectedItems, List<SpawnKitEntry> spawnKit,
                                 List<ResourceLocation> hammerBlocks, List<LoadoutSlot> lockedSlots,
                                 boolean whitelistEnabled, List<PriceEntry> prices, int points,
-                                List<ResourceLocation> purchasedItems) {
+                                List<ResourceLocation> purchasedItems) implements CustomPacketPayload {
 
     /** One OP-configured ammo grant: equipping {@code item} in {@code slot} also gives {@code count} of {@code ammoItem}. */
     public record AmmoGrantEntry(LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
@@ -125,6 +123,17 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
                 case BOOTS -> boots;
             };
         }
+    }
+
+    public static final Type<LoadoutSyncPacket> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(uk.iwaservice.classloadout.ClassLoadoutMod.MODID, "loadout_sync"));
+
+    public static final StreamCodec<FriendlyByteBuf, LoadoutSyncPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), LoadoutSyncPacket::decode);
+
+    @Override
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
     }
 
     public static void encode(LoadoutSyncPacket msg, FriendlyByteBuf buf) {
@@ -294,10 +303,5 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
             list.add(buf.readResourceLocation());
         }
         return list;
-    }
-
-    public static void handle(LoadoutSyncPacket msg, java.util.function.Supplier<NetworkEvent.Context> ctx) {
-        ctx.get().setPacketHandled(true);
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleLoadoutSync(msg));
     }
 }

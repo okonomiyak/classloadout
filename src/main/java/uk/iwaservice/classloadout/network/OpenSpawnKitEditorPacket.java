@@ -1,10 +1,9 @@
 package uk.iwaservice.classloadout.network;
 
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.network.NetworkEvent;
-import uk.iwaservice.classloadout.client.ClientPacketHandler;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Payload-less trigger sent only after the server has verified the sender's
@@ -12,7 +11,18 @@ import uk.iwaservice.classloadout.client.ClientPacketHandler;
  * open the spawn kit editor without re-deriving permission from local
  * state. Mirrors {@link OpenWhitelistEditorPacket}.
  */
-public record OpenSpawnKitEditorPacket() {
+public record OpenSpawnKitEditorPacket() implements CustomPacketPayload {
+
+    public static final Type<OpenSpawnKitEditorPacket> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(uk.iwaservice.classloadout.ClassLoadoutMod.MODID, "open_spawn_kit_editor"));
+
+    public static final StreamCodec<FriendlyByteBuf, OpenSpawnKitEditorPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), OpenSpawnKitEditorPacket::decode);
+
+    @Override
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
 
     public static void encode(OpenSpawnKitEditorPacket msg, FriendlyByteBuf buf) {
         // no payload
@@ -20,10 +30,5 @@ public record OpenSpawnKitEditorPacket() {
 
     public static OpenSpawnKitEditorPacket decode(FriendlyByteBuf buf) {
         return new OpenSpawnKitEditorPacket();
-    }
-
-    public static void handle(OpenSpawnKitEditorPacket msg, java.util.function.Supplier<NetworkEvent.Context> ctx) {
-        ctx.get().setPacketHandled(true);
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> ClientPacketHandler::handleOpenSpawnKitEditor);
     }
 }

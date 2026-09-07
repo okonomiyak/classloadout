@@ -8,7 +8,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.context.UseOnContext;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.neoforge.registries.DeferredHolder;
 import uk.iwaservice.classloadout.Config;
 
 /**
@@ -17,7 +17,7 @@ import uk.iwaservice.classloadout.Config;
  * {@code RespawnBeaconItem} - no Block/BlockEntity/blockstate/model needed,
  * just the item's own icon (see {@link AbstractResupplyPackEntity}).
  *
- * <p>Takes the {@link RegistryObject} rather than a resolved {@link EntityType}:
+ * <p>Takes the {@link DeferredHolder} rather than a resolved {@link EntityType}:
  * items and entity types are registered via separate {@code DeferredRegister}s
  * with no ordering guarantee between them, so resolving the entity type at
  * construction time (during the items' own registration) can run before the
@@ -26,9 +26,10 @@ import uk.iwaservice.classloadout.Config;
  */
 public class ResupplyPackPlacerItem extends Item {
 
-    private final RegistryObject<? extends EntityType<? extends AbstractResupplyPackEntity>> entityType;
+    private final DeferredHolder<EntityType<?>, ? extends EntityType<? extends AbstractResupplyPackEntity>> entityType;
 
-    public ResupplyPackPlacerItem(Properties properties, RegistryObject<? extends EntityType<? extends AbstractResupplyPackEntity>> entityType) {
+    public ResupplyPackPlacerItem(Properties properties,
+            DeferredHolder<EntityType<?>, ? extends EntityType<? extends AbstractResupplyPackEntity>> entityType) {
         super(properties);
         this.entityType = entityType;
     }

@@ -2,6 +2,7 @@ package uk.iwaservice.classloadout.loadout;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -100,7 +101,7 @@ public class LoadoutManager extends SavedData {
 
     public static LoadoutManager get(MinecraftServer server) {
         return server.overworld().getDataStorage()
-                .computeIfAbsent(LoadoutManager::load, LoadoutManager::new, DATA_NAME);
+                .computeIfAbsent(new SavedData.Factory<>(LoadoutManager::new, LoadoutManager::load), DATA_NAME);
     }
 
     public LoadoutManager() {
@@ -265,7 +266,7 @@ public class LoadoutManager extends SavedData {
             return null;
         }
         ResourceLocation variantId = variantId(UUID.randomUUID());
-        itemVariants.put(variantId, held.save(new CompoundTag()));
+        itemVariants.put(variantId, (CompoundTag) held.save(server.registryAccess()));
         variantRegisteredAt.put(variantId, System.currentTimeMillis());
         whitelists.computeIfAbsent(slot, s -> new LinkedHashSet<>()).add(variantId);
         setDirty();
@@ -285,7 +286,7 @@ public class LoadoutManager extends SavedData {
         if (held.isEmpty()) {
             return;
         }
-        itemVariants.put(variantId(id), held.save(new CompoundTag()));
+        itemVariants.put(variantId(id), (CompoundTag) held.save(server.registryAccess()));
         variantRegisteredAt.put(variantId(id), System.currentTimeMillis());
         setDirty();
         broadcastAll(server);
@@ -307,7 +308,7 @@ public class LoadoutManager extends SavedData {
     }
 
     private static ResourceLocation variantId(UUID id) {
-        return new ResourceLocation(ClassLoadoutMod.MODID, "variant_" + id);
+        return ResourceLocation.fromNamespaceAndPath(ClassLoadoutMod.MODID, "variant_" + id);
     }
 
     /** Server-side counterpart of {@code LoadoutClientData.getItemVariants()}; used to resolve slot/whitelist ids back into real ItemStacks (see {@link uk.iwaservice.classloadout.ItemResolver}). */
@@ -719,7 +720,7 @@ public class LoadoutManager extends SavedData {
 
     // --- persistence ---
 
-    public static LoadoutManager load(CompoundTag tag) {
+    public static LoadoutManager load(CompoundTag tag, HolderLookup.Provider registries) {
         LoadoutManager manager = new LoadoutManager();
         ListTag classList = tag.getList("Classes", Tag.TAG_COMPOUND);
         for (int i = 0; i < classList.size(); i++) {
@@ -757,7 +758,7 @@ public class LoadoutManager extends SavedData {
             Set<ResourceLocation> items = new LinkedHashSet<>();
             ListTag itemList = w.getList("Items", Tag.TAG_STRING);
             for (Tag t : itemList) {
-                items.add(new ResourceLocation(t.getAsString()));
+                items.add(ResourceLocation.parse(t.getAsString()));
             }
             manager.whitelists.put(slot, items);
         }
@@ -768,8 +769,8 @@ public class LoadoutManager extends SavedData {
             if (slot == null) {
                 continue;
             }
-            ResourceLocation item = new ResourceLocation(g.getString("Item"));
-            ResourceLocation ammoItem = new ResourceLocation(g.getString("AmmoItem"));
+            ResourceLocation item = ResourceLocation.parse(g.getString("Item"));
+            ResourceLocation ammoItem = ResourceLocation.parse(g.getString("AmmoItem"));
             int count = g.getInt("Count");
             manager.ammoGrants.computeIfAbsent(slot, s -> new LinkedHashMap<>())
                     .computeIfAbsent(item, key -> new LinkedHashMap<>())
@@ -778,34 +779,34 @@ public class LoadoutManager extends SavedData {
         ListTag variantList = tag.getList("ItemVariants", Tag.TAG_COMPOUND);
         for (int i = 0; i < variantList.size(); i++) {
             CompoundTag v = variantList.getCompound(i);
-            ResourceLocation id = new ResourceLocation(v.getString("Id"));
+            ResourceLocation id = ResourceLocation.parse(v.getString("Id"));
             manager.itemVariants.put(id, v.getCompound("Stack"));
             manager.variantRegisteredAt.put(id, v.getLong("RegisteredAt"));
         }
         ListTag protectedList = tag.getList("ProtectedItems", Tag.TAG_STRING);
         for (Tag t : protectedList) {
-            manager.protectedItems.add(new ResourceLocation(t.getAsString()));
+            manager.protectedItems.add(ResourceLocation.parse(t.getAsString()));
         }
         ListTag spawnKitList = tag.getList("SpawnKit", Tag.TAG_COMPOUND);
         for (int i = 0; i < spawnKitList.size(); i++) {
             CompoundTag s = spawnKitList.getCompound(i);
-            manager.spawnKit.put(new ResourceLocation(s.getString("Item")), s.getInt("Count"));
+            manager.spawnKit.put(ResourceLocation.parse(s.getString("Item")), s.getInt("Count"));
         }
         ListTag hammerBlockList = tag.getList("HammerBlocks", Tag.TAG_STRING);
         for (Tag t : hammerBlockList) {
-            manager.hammerBlocks.add(new ResourceLocation(t.getAsString()));
+            manager.hammerBlocks.add(ResourceLocation.parse(t.getAsString()));
         }
         ListTag guardSpawnerList = tag.getList("GuardSpawners", Tag.TAG_COMPOUND);
         for (int i = 0; i < guardSpawnerList.size(); i++) {
             CompoundTag g = guardSpawnerList.getCompound(i);
-            ResourceKey<Level> dim = ResourceKey.create(Registries.DIMENSION, new ResourceLocation(g.getString("Dim")));
+            ResourceKey<Level> dim = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(g.getString("Dim")));
             GlobalPos pos = GlobalPos.of(dim, BlockPos.of(g.getLong("Pos")));
-            manager.guardSpawnerEntity.put(pos, new ResourceLocation(g.getString("Entity")));
+            manager.guardSpawnerEntity.put(pos, ResourceLocation.parse(g.getString("Entity")));
             manager.guardSpawnerDelaySeconds.put(pos, g.getInt("Delay"));
             List<ResourceLocation> items = new ArrayList<>();
             ListTag itemsList = g.getList("Items", Tag.TAG_STRING);
             for (Tag t : itemsList) {
-                items.add(new ResourceLocation(t.getAsString()));
+                items.add(ResourceLocation.parse(t.getAsString()));
             }
             manager.guardSpawnerItems.put(pos, items);
         }
@@ -819,7 +820,7 @@ public class LoadoutManager extends SavedData {
         ListTag priceList = tag.getList("ItemPrices", Tag.TAG_COMPOUND);
         for (int i = 0; i < priceList.size(); i++) {
             CompoundTag p = priceList.getCompound(i);
-            manager.itemPrices.put(new ResourceLocation(p.getString("Item")), p.getInt("Cost"));
+            manager.itemPrices.put(ResourceLocation.parse(p.getString("Item")), p.getInt("Cost"));
         }
         ListTag purchasedList = tag.getList("PurchasedItems", Tag.TAG_COMPOUND);
         for (int i = 0; i < purchasedList.size(); i++) {
@@ -827,7 +828,7 @@ public class LoadoutManager extends SavedData {
             Set<ResourceLocation> items = new LinkedHashSet<>();
             ListTag itemList = p.getList("Items", Tag.TAG_STRING);
             for (Tag t : itemList) {
-                items.add(new ResourceLocation(t.getAsString()));
+                items.add(ResourceLocation.parse(t.getAsString()));
             }
             manager.purchasedItems.put(p.getUUID("Player"), items);
         }
@@ -840,7 +841,7 @@ public class LoadoutManager extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag) {
+    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         ListTag classList = new ListTag();
         for (ClassDefinition def : classes.values()) {
             classList.add(def.save());

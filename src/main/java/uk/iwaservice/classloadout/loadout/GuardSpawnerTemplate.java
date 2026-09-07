@@ -40,9 +40,9 @@ public record GuardSpawnerTemplate(UUID id, String name, ResourceLocation entity
         List<ResourceLocation> items = new ArrayList<>();
         ListTag itemList = tag.getList("Items", Tag.TAG_STRING);
         for (Tag t : itemList) {
-            items.add(new ResourceLocation(t.getAsString()));
+            items.add(ResourceLocation.parse(t.getAsString()));
         }
         return new GuardSpawnerTemplate(tag.getUUID("Id"), tag.getString("Name"),
-                new ResourceLocation(tag.getString("EntityType")), tag.getInt("Delay"), items);
+                ResourceLocation.parse(tag.getString("EntityType")), tag.getInt("Delay"), items);
     }
 }

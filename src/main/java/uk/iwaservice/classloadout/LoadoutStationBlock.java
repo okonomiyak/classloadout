@@ -1,5 +1,6 @@
 package uk.iwaservice.classloadout;
 
+import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -32,6 +33,8 @@ import javax.annotation.Nullable;
  * hitbox extending into the block above would be surprising to stand near.
  */
 public class LoadoutStationBlock extends HorizontalDirectionalBlock {
+    public static final MapCodec<LoadoutStationBlock> CODEC = simpleCodec(LoadoutStationBlock::new);
+
     private static final VoxelShape SHAPE = Shapes.or(
             px(0, 14, 0, 16, 16, 16),
             px(1, 13, 11, 5, 14, 15),
@@ -66,5 +69,10 @@ public class LoadoutStationBlock extends HorizontalDirectionalBlock {
     @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return SHAPE;
+    }
+
+    @Override
+    protected MapCodec<LoadoutStationBlock> codec() {
+        return CODEC;
     }
 }

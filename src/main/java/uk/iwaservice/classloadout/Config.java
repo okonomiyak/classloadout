@@ -1,37 +1,37 @@
 package uk.iwaservice.classloadout;
 
-import net.minecraftforge.common.ForgeConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class Config {
 
-    public static final ForgeConfigSpec SPEC;
+    public static final ModConfigSpec SPEC;
 
-    public static final ForgeConfigSpec.IntValue RESUPPLY_RADIUS;
-    public static final ForgeConfigSpec.IntValue RESUPPLY_INTERVAL_SECONDS;
-    public static final ForgeConfigSpec.IntValue RESUPPLY_HEALTH_PER_TICK;
-    public static final ForgeConfigSpec.IntValue RESUPPLY_AMMO_PER_TICK;
-    public static final ForgeConfigSpec.IntValue PACK_LIFETIME_SECONDS;
-    public static final ForgeConfigSpec.IntValue MAX_ACTIVE_PACKS_PER_PLAYER;
+    public static final ModConfigSpec.IntValue RESUPPLY_RADIUS;
+    public static final ModConfigSpec.IntValue RESUPPLY_INTERVAL_SECONDS;
+    public static final ModConfigSpec.IntValue RESUPPLY_HEALTH_PER_TICK;
+    public static final ModConfigSpec.IntValue RESUPPLY_AMMO_PER_TICK;
+    public static final ModConfigSpec.IntValue PACK_LIFETIME_SECONDS;
+    public static final ModConfigSpec.IntValue MAX_ACTIVE_PACKS_PER_PLAYER;
 
-    public static final ForgeConfigSpec.IntValue THROW_PACK_RADIUS;
-    public static final ForgeConfigSpec.IntValue THROW_PACK_INTERVAL_SECONDS;
-    public static final ForgeConfigSpec.IntValue THROW_PACK_HEALTH_PER_TICK;
-    public static final ForgeConfigSpec.IntValue THROW_PACK_AMMO_PER_TICK;
-    public static final ForgeConfigSpec.IntValue THROW_PACK_LIFETIME_SECONDS;
-    public static final ForgeConfigSpec.IntValue THROW_COOLDOWN_SECONDS;
+    public static final ModConfigSpec.IntValue THROW_PACK_RADIUS;
+    public static final ModConfigSpec.IntValue THROW_PACK_INTERVAL_SECONDS;
+    public static final ModConfigSpec.IntValue THROW_PACK_HEALTH_PER_TICK;
+    public static final ModConfigSpec.IntValue THROW_PACK_AMMO_PER_TICK;
+    public static final ModConfigSpec.IntValue THROW_PACK_LIFETIME_SECONDS;
+    public static final ModConfigSpec.IntValue THROW_COOLDOWN_SECONDS;
 
-    public static final ForgeConfigSpec.IntValue BANDAGE_HEAL_AMOUNT;
+    public static final ModConfigSpec.IntValue BANDAGE_HEAL_AMOUNT;
 
-    public static final ForgeConfigSpec.IntValue COVER_LIFETIME_SECONDS;
-    public static final ForgeConfigSpec.IntValue MAX_ACTIVE_COVERS_PER_PLAYER;
-    public static final ForgeConfigSpec.IntValue COVER_MAX_HEALTH;
+    public static final ModConfigSpec.IntValue COVER_LIFETIME_SECONDS;
+    public static final ModConfigSpec.IntValue MAX_ACTIVE_COVERS_PER_PLAYER;
+    public static final ModConfigSpec.IntValue COVER_MAX_HEALTH;
 
-    public static final ForgeConfigSpec.BooleanValue CLEAR_INVENTORY_ON_DEATH;
+    public static final ModConfigSpec.BooleanValue CLEAR_INVENTORY_ON_DEATH;
 
-    public static final ForgeConfigSpec.IntValue HAMMER_AOE_RADIUS;
+    public static final ModConfigSpec.IntValue HAMMER_AOE_RADIUS;
 
     static {
-        ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
+        ModConfigSpec.Builder b = new ModConfigSpec.Builder();
 
         b.push("resupply");
         RESUPPLY_RADIUS = b

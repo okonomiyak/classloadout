@@ -1,10 +1,9 @@
 package uk.iwaservice.classloadout.network;
 
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.network.NetworkEvent;
-import uk.iwaservice.classloadout.client.ClientPacketHandler;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Payload-less trigger sent only after the server has verified the sender's
@@ -12,7 +11,18 @@ import uk.iwaservice.classloadout.client.ClientPacketHandler;
  * open the protected-items editor without re-deriving permission from local
  * state. Mirrors {@link OpenWhitelistEditorPacket}.
  */
-public record OpenProtectedItemsEditorPacket() {
+public record OpenProtectedItemsEditorPacket() implements CustomPacketPayload {
+
+    public static final Type<OpenProtectedItemsEditorPacket> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(uk.iwaservice.classloadout.ClassLoadoutMod.MODID, "open_protected_items_editor"));
+
+    public static final StreamCodec<FriendlyByteBuf, OpenProtectedItemsEditorPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), OpenProtectedItemsEditorPacket::decode);
+
+    @Override
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
 
     public static void encode(OpenProtectedItemsEditorPacket msg, FriendlyByteBuf buf) {
         // no payload
@@ -20,10 +30,5 @@ public record OpenProtectedItemsEditorPacket() {
 
     public static OpenProtectedItemsEditorPacket decode(FriendlyByteBuf buf) {
         return new OpenProtectedItemsEditorPacket();
-    }
-
-    public static void handle(OpenProtectedItemsEditorPacket msg, java.util.function.Supplier<NetworkEvent.Context> ctx) {
-        ctx.get().setPacketHandled(true);
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> ClientPacketHandler::handleOpenProtectedItemsEditor);
     }
 }

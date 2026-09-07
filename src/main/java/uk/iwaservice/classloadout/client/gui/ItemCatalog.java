@@ -4,7 +4,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
@@ -35,8 +35,8 @@ final class ItemCatalog {
 
     static List<ResourceLocation> all() {
         Set<ResourceLocation> set = new LinkedHashSet<>();
-        for (Item item : ForgeRegistries.ITEMS.getValues()) {
-            ResourceLocation loc = ForgeRegistries.ITEMS.getKey(item);
+        for (Item item : BuiltInRegistries.ITEM) {
+            ResourceLocation loc = BuiltInRegistries.ITEM.getKey(item);
             if (loc == null || item == Items.AIR || !ALLOWED_NAMESPACES.contains(loc.getNamespace())) {
                 continue;
             }

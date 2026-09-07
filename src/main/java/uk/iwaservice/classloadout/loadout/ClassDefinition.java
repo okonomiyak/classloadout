@@ -85,6 +85,6 @@ public record ClassDefinition(UUID id, String name,
 
     @Nullable
     private static ResourceLocation readIfPresent(CompoundTag tag, String key) {
-        return tag.contains(key) ? new ResourceLocation(tag.getString(key)) : null;
+        return tag.contains(key) ? ResourceLocation.parse(tag.getString(key)) : null;
     }
 }

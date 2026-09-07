@@ -2,18 +2,15 @@ package uk.iwaservice.classloadout.network;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.network.NetworkEvent;
-import uk.iwaservice.classloadout.client.ClientPacketHandler;
 import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
 
 /**
  * Sent only after the server has verified the sender's permission level for
@@ -26,7 +23,19 @@ import java.util.function.Supplier;
  * globally-broadcast sync channel).
  */
 public record OpenGuardSpawnerEditorPacket(BlockPos pos, @Nullable ResourceLocation entityType, int delaySeconds,
-                                            List<ResourceLocation> items, List<GuardSpawnerTemplate> templates) {
+                                            List<ResourceLocation> items, List<GuardSpawnerTemplate> templates)
+        implements CustomPacketPayload {
+
+    public static final Type<OpenGuardSpawnerEditorPacket> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(uk.iwaservice.classloadout.ClassLoadoutMod.MODID, "open_guard_spawner_editor"));
+
+    public static final StreamCodec<FriendlyByteBuf, OpenGuardSpawnerEditorPacket> STREAM_CODEC =
+            StreamCodec.of((buf, msg) -> encode(msg, buf), OpenGuardSpawnerEditorPacket::decode);
+
+    @Override
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
 
     public static void encode(OpenGuardSpawnerEditorPacket msg, FriendlyByteBuf buf) {
         buf.writeBlockPos(msg.pos());
@@ -52,34 +61,27 @@ public record OpenGuardSpawnerEditorPacket(BlockPos pos, @Nullable ResourceLocat
     public static OpenGuardSpawnerEditorPacket decode(FriendlyByteBuf buf) {
         BlockPos pos = buf.readBlockPos();
         String entityTypeStr = buf.readUtf();
-        ResourceLocation entityType = entityTypeStr.isEmpty() ? null : new ResourceLocation(entityTypeStr);
+        ResourceLocation entityType = entityTypeStr.isEmpty() ? null : ResourceLocation.parse(entityTypeStr);
         int delaySeconds = buf.readVarInt();
         int count = buf.readVarInt();
         List<ResourceLocation> items = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            items.add(new ResourceLocation(buf.readUtf()));
+            items.add(ResourceLocation.parse(buf.readUtf()));
         }
         int templateCount = buf.readVarInt();
         List<GuardSpawnerTemplate> templates = new ArrayList<>(templateCount);
         for (int i = 0; i < templateCount; i++) {
             UUID id = buf.readUUID();
             String name = buf.readUtf();
-            ResourceLocation tEntityType = new ResourceLocation(buf.readUtf());
+            ResourceLocation tEntityType = ResourceLocation.parse(buf.readUtf());
             int tDelay = buf.readVarInt();
             int tItemCount = buf.readVarInt();
             List<ResourceLocation> tItems = new ArrayList<>(tItemCount);
             for (int j = 0; j < tItemCount; j++) {
-                tItems.add(new ResourceLocation(buf.readUtf()));
+                tItems.add(ResourceLocation.parse(buf.readUtf()));
             }
             templates.add(new GuardSpawnerTemplate(id, name, tEntityType, tDelay, tItems));
         }
         return new OpenGuardSpawnerEditorPacket(pos, entityType, delaySeconds, items, templates);
-    }
-
-    public static void handle(OpenGuardSpawnerEditorPacket msg, Supplier<NetworkEvent.Context> ctx) {
-        ctx.get().setPacketHandled(true);
-        DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-                () -> () -> ClientPacketHandler.handleOpenGuardSpawnerEditor(msg.pos(), msg.entityType(),
-                        msg.delaySeconds(), msg.items(), msg.templates()));
     }
 }

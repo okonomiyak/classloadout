@@ -27,7 +27,7 @@ public final class TaczGunResolver {
     }
 
     public static ItemStack buildStack(ResourceLocation id) {
-        return GunItemBuilder.create().setId(id).build();
+        return GunItemBuilder.create().setId(id).build(uk.iwaservice.classloadout.ItemResolver.registryAccess());
     }
 
     public static List<ResourceLocation> allGunIds() {

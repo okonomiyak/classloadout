@@ -165,7 +165,7 @@ public class GuardSpawnerEditorScreen extends Screen {
         } catch (NumberFormatException e) {
             return null;
         }
-        return new ParsedConfig(new ResourceLocation(typeStr), delay, items);
+        return new ParsedConfig(ResourceLocation.parse(typeStr), delay, items);
     }
 
     private String posArgs() {
@@ -196,7 +196,7 @@ public class GuardSpawnerEditorScreen extends Screen {
     private void addHeldItem() {
         UUID id = UUID.randomUUID();
         command("class whitelist register_held " + id);
-        ResourceLocation variant = new ResourceLocation("classloadout", "variant_" + id);
+        ResourceLocation variant = ResourceLocation.fromNamespaceAndPath("classloadout", "variant_" + id);
         items.add(variant);
         command("class guardspawner add_item " + posArgs() + " " + variant);
     }
@@ -240,12 +240,12 @@ public class GuardSpawnerEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (maxScroll > 0) {
-            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (delta * CELL)));
+            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (scrollY * CELL)));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
@@ -267,7 +267,7 @@ public class GuardSpawnerEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        renderBackground(graphics, mouseX, mouseY, partialTick);
 
         int l = panelLeft;
         int t = panelTop;

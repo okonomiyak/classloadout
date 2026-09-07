@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="[47,)"
+loaderVersion="[1,)"
 license="GPL-3.0-only"
 
 [[mods]]
@@ -9,15 +9,15 @@ displayName="Class Loadout"
 description='''Define equipment loadout classes via a GUI editor; players pick one on the death screen and it is auto-equipped on every respawn.'''
 
 [[dependencies.classloadout]]
-    modId="forge"
-    mandatory=true
-    versionRange="[47,)"
+    modId="neoforge"
+    type="required"
+    versionRange="[21.1.244,)"
     ordering="NONE"
     side="BOTH"
 
 [[dependencies.classloadout]]
     modId="minecraft"
-    mandatory=true
-    versionRange="[1.20.1,1.21)"
+    type="required"
+    versionRange="[1.21.1]"
     ordering="NONE"
     side="BOTH"

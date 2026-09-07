@@ -11,7 +11,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.neoforge.registries.DeferredHolder;
 
 /**
  * Renders the pack's own item model - same technique as squadtp's
@@ -32,11 +32,11 @@ import net.minecraftforge.registries.RegistryObject;
  */
 public class ResupplyPackRenderer<T extends Entity> extends EntityRenderer<T> {
 
-    private static final ResourceLocation TEXTURE = new ResourceLocation("minecraft", "textures/misc/particles.png");
+    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath("minecraft", "textures/misc/particles.png");
 
-    private final RegistryObject<Item> item;
+    private final DeferredHolder<Item, ? extends Item> item;
 
-    public ResupplyPackRenderer(EntityRendererProvider.Context context, RegistryObject<Item> item) {
+    public ResupplyPackRenderer(EntityRendererProvider.Context context, DeferredHolder<Item, ? extends Item> item) {
         super(context);
         this.item = item;
         this.shadowRadius = 0.3f;

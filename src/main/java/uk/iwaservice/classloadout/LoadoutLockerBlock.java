@@ -1,5 +1,6 @@
 package uk.iwaservice.classloadout;
 
+import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -24,6 +25,8 @@ import javax.annotation.Nullable;
  * {@code blockstates/loadout_locker.json}.
  */
 public class LoadoutLockerBlock extends HorizontalDirectionalBlock {
+    public static final MapCodec<LoadoutLockerBlock> CODEC = simpleCodec(LoadoutLockerBlock::new);
+
     private static final VoxelShape SHAPE_NORTH = Shapes.or(
             Shapes.box(0, 0, 3.0 / 16, 1, 1, 1),
             Shapes.box(12.0 / 16, 4.0 / 16, 2.0 / 16, 14.0 / 16, 12.0 / 16, 3.0 / 16));
@@ -63,5 +66,10 @@ public class LoadoutLockerBlock extends HorizontalDirectionalBlock {
             case WEST -> SHAPE_WEST;
             default -> SHAPE_NORTH;
         };
+    }
+
+    @Override
+    protected MapCodec<LoadoutLockerBlock> codec() {
+        return CODEC;
     }
 }

@@ -10,7 +10,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 
 import javax.annotation.Nullable;
@@ -117,7 +117,7 @@ public class HammerBlocksEditorScreen extends Screen {
         if (!(held.getItem() instanceof BlockItem blockItem)) {
             return;
         }
-        ResourceLocation block = ForgeRegistries.BLOCKS.getKey(blockItem.getBlock());
+        ResourceLocation block = BuiltInRegistries.BLOCK.getKey(blockItem.getBlock());
         if (block != null && !LoadoutClientData.getHammerBlocks().contains(block)) {
             command("class hammerblocks add " + block);
         }
@@ -164,12 +164,12 @@ public class HammerBlocksEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (maxScroll > 0) {
-            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (delta * CELL)));
+            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (scrollY * CELL)));
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
@@ -188,7 +188,7 @@ public class HammerBlocksEditorScreen extends Screen {
     }
 
     private static ItemStack iconFor(ResourceLocation blockId) {
-        Block block = ForgeRegistries.BLOCKS.getValue(blockId);
+        Block block = BuiltInRegistries.BLOCK.getOptional(blockId).orElse(null);
         if (block == null || block.asItem() == Items.AIR) {
             return new ItemStack(Items.BARRIER);
         }
@@ -199,7 +199,7 @@ public class HammerBlocksEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        renderBackground(graphics, mouseX, mouseY, partialTick);
 
         int l = panelLeft;
         int t = panelTop;

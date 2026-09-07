@@ -154,7 +154,7 @@ public class AmmoGrantScreen extends Screen {
     private void registerHeldAsAmmo() {
         UUID id = UUID.randomUUID();
         command("class whitelist register_held " + id);
-        ResourceLocation variant = new ResourceLocation("classloadout", "variant_" + id);
+        ResourceLocation variant = ResourceLocation.fromNamespaceAndPath("classloadout", "variant_" + id);
         command("class whitelist ammo " + slot.key() + " " + item + " " + variant + " 1");
     }
 
@@ -203,7 +203,7 @@ public class AmmoGrantScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        renderBackground(graphics, mouseX, mouseY, partialTick);
 
         int l = panelLeft;
         int t = panelTop;

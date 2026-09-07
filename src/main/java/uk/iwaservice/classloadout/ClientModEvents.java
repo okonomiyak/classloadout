@@ -1,14 +1,14 @@
 package uk.iwaservice.classloadout;
 
 import net.minecraft.client.renderer.entity.ThrownItemRenderer;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.EntityRenderersEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import uk.iwaservice.classloadout.client.ResupplyPackRenderer;
 
 /** Mod-bus client events: entity renderer registration (needs the mod bus, not the Forge bus). */
-@Mod.EventBusSubscriber(modid = ClassLoadoutMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = ClassLoadoutMod.MODID, value = Dist.CLIENT)
 public final class ClientModEvents {
 
     @SubscribeEvent

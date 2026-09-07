@@ -1,12 +1,11 @@
 package uk.iwaservice.classloadout;
 
 import com.mojang.logging.LogUtils;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.neoforge.common.NeoForge;
 import org.slf4j.Logger;
 import uk.iwaservice.classloadout.network.NetworkHandler;
 
@@ -20,27 +19,22 @@ public class ClassLoadoutMod {
     public static final String MODID = "classloadout";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public ClassLoadoutMod() {
-        var modBus = FMLJavaModLoadingContext.get().getModEventBus();
-        modBus.addListener(this::commonSetup);
+    public ClassLoadoutMod(IEventBus modBus, ModContainer modContainer) {
         modBus.addListener(this::buildCreativeTabs);
         modBus.addListener(this::registerAttributes);
+        modBus.addListener(NetworkHandler::register);
         ModRegistry.register(modBus);
-        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, Config.SPEC);
-        MinecraftForge.EVENT_BUS.register(ServerEvents.class);
+        modContainer.registerConfig(ModConfig.Type.SERVER, Config.SPEC);
+        NeoForge.EVENT_BUS.register(ServerEvents.class);
     }
 
-    private void commonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(NetworkHandler::register);
-    }
-
-    private void registerAttributes(net.minecraftforge.event.entity.EntityAttributeCreationEvent event) {
+    private void registerAttributes(net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent event) {
         event.put(ModRegistry.HEALTH_PACK.get(), uk.iwaservice.classloadout.resupply.AbstractResupplyPackEntity.createAttributes().build());
         event.put(ModRegistry.AMMO_PACK.get(), uk.iwaservice.classloadout.resupply.AbstractResupplyPackEntity.createAttributes().build());
         event.put(ModRegistry.COVER.get(), uk.iwaservice.classloadout.cover.CoverEntity.createAttributes().build());
     }
 
-    private void buildCreativeTabs(net.minecraftforge.event.BuildCreativeModeTabContentsEvent event) {
+    private void buildCreativeTabs(net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == net.minecraft.world.item.CreativeModeTabs.COMBAT) {
             event.accept(ModRegistry.HEALTH_PACK_ITEM.get());
             event.accept(ModRegistry.AMMO_PACK_ITEM.get());

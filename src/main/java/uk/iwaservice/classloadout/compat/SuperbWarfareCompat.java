@@ -1,7 +1,7 @@
 package uk.iwaservice.classloadout.compat;
 
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.fml.ModList;
+import net.neoforged.fml.ModList;
 
 /**
  * Sole gateway into the SuperbWarfare (gun mod) ammo-resupply integration.

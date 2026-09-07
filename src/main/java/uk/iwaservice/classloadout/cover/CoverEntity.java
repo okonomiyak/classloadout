@@ -8,7 +8,6 @@ import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import uk.iwaservice.classloadout.Config;
 
@@ -26,7 +25,7 @@ import java.util.UUID;
  *
  * <p>Max health is config-driven ({@code Config.COVER_MAX_HEALTH}), but
  * can't be baked into {@link #createAttributes()} - that runs once at
- * mod-load time via {@link net.minecraftforge.event.entity.EntityAttributeCreationEvent},
+ * mod-load time via {@link net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent},
  * before the server config is loaded, so {@link Config} values aren't
  * readable there yet (see how the resupply packs' own 1.0 HP is likewise
  * hardcoded in their {@code createAttributes()}). Instead, the constructor -
@@ -66,7 +65,7 @@ public class CoverEntity extends PathfinderMob {
         // Intentionally no goals: it never moves or acts on its own.
     }
 
-    /** Called once, right after spawning (before addFreshEntity), so onAddedToWorld below can register it. */
+    /** Called once, right after spawning (before addFreshEntity), so onAddedToLevel below can register it. */
     public void setOwner(UUID owner) {
         this.ownerId = owner;
     }
@@ -77,8 +76,8 @@ public class CoverEntity extends PathfinderMob {
     }
 
     @Override
-    public void onAddedToWorld() {
-        super.onAddedToWorld();
+    public void onAddedToLevel() {
+        super.onAddedToLevel();
         if (!level().isClientSide && ownerId != null) {
             CoverRegistry.register(ownerId);
         }
@@ -98,7 +97,7 @@ public class CoverEntity extends PathfinderMob {
     }
 
     @Override
-    public boolean canBeLeashed(Player player) {
+    public boolean canBeLeashed() {
         return false;
     }
 

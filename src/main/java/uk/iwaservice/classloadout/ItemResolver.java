@@ -1,11 +1,13 @@
 package uk.iwaservice.classloadout;
 
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 
 import javax.annotation.Nullable;
@@ -35,7 +37,7 @@ public final class ItemResolver {
         if (ammoStack != null) {
             return ammoStack;
         }
-        Item item = ForgeRegistries.ITEMS.getValue(id);
+        Item item = BuiltInRegistries.ITEM.getOptional(id).orElse(null);
         return item == null || item == Items.AIR ? null : new ItemStack(item);
     }
 
@@ -57,11 +59,25 @@ public final class ItemResolver {
     @Nullable
     public static ItemStack resolve(ResourceLocation id, @Nullable Map<ResourceLocation, CompoundTag> variants) {
         CompoundTag saved = variants == null ? null : variants.get(id);
-        return saved != null ? ItemStack.of(saved).copy() : resolve(id);
+        return saved != null ? ItemStack.parseOptional(registryAccess(), saved).copy() : resolve(id);
+    }
+
+    /**
+     * Called from both sides: on a dedicated/integrated server (or singleplayer host) the
+     * current {@link net.minecraft.server.MinecraftServer} is non-null and authoritative; on a
+     * remote-multiplayer client it's null, so this falls back to the client's own level - which
+     * is always loaded by the time a loadout/whitelist screen (the only other caller) can render.
+     */
+    public static HolderLookup.Provider registryAccess() {
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (server != null) {
+            return server.registryAccess();
+        }
+        return net.minecraft.client.Minecraft.getInstance().level.registryAccess();
     }
 
     public static boolean isAvailable(ResourceLocation id) {
-        return TaczCompat.isGunId(id) || TaczCompat.isAmmoId(id) || ForgeRegistries.ITEMS.containsKey(id);
+        return TaczCompat.isGunId(id) || TaczCompat.isAmmoId(id) || BuiltInRegistries.ITEM.containsKey(id);
     }
 
     private ItemResolver() {}

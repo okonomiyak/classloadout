@@ -2,11 +2,10 @@ package uk.iwaservice.classloadout.network;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.network.NetworkDirection;
-import net.minecraftforge.network.NetworkRegistry;
-import net.minecraftforge.network.PacketDistributor;
-import net.minecraftforge.network.simple.SimpleChannel;
-import uk.iwaservice.classloadout.ClassLoadoutMod;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import uk.iwaservice.classloadout.client.ClientPacketHandler;
 
 /**
  * Server-to-client only channel. Clients never send loadout packets; every
@@ -17,98 +16,67 @@ public final class NetworkHandler {
 
     private static final String PROTOCOL_VERSION = "1";
 
-    public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-            new ResourceLocation(ClassLoadoutMod.MODID, "main"),
-            () -> PROTOCOL_VERSION,
-            PROTOCOL_VERSION::equals,
-            PROTOCOL_VERSION::equals);
-
-    public static void register() {
-        CHANNEL.messageBuilder(LoadoutSyncPacket.class, 0, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(LoadoutSyncPacket::encode)
-                .decoder(LoadoutSyncPacket::decode)
-                .consumerMainThread(LoadoutSyncPacket::handle)
-                .add();
-        CHANNEL.messageBuilder(OpenClassEditorPacket.class, 1, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(OpenClassEditorPacket::encode)
-                .decoder(OpenClassEditorPacket::decode)
-                .consumerMainThread(OpenClassEditorPacket::handle)
-                .add();
-        CHANNEL.messageBuilder(OpenWhitelistEditorPacket.class, 2, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(OpenWhitelistEditorPacket::encode)
-                .decoder(OpenWhitelistEditorPacket::decode)
-                .consumerMainThread(OpenWhitelistEditorPacket::handle)
-                .add();
-        CHANNEL.messageBuilder(OpenProtectedItemsEditorPacket.class, 3, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(OpenProtectedItemsEditorPacket::encode)
-                .decoder(OpenProtectedItemsEditorPacket::decode)
-                .consumerMainThread(OpenProtectedItemsEditorPacket::handle)
-                .add();
-        CHANNEL.messageBuilder(OpenSpawnKitEditorPacket.class, 4, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(OpenSpawnKitEditorPacket::encode)
-                .decoder(OpenSpawnKitEditorPacket::decode)
-                .consumerMainThread(OpenSpawnKitEditorPacket::handle)
-                .add();
-        CHANNEL.messageBuilder(OpenHammerBlocksEditorPacket.class, 5, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(OpenHammerBlocksEditorPacket::encode)
-                .decoder(OpenHammerBlocksEditorPacket::decode)
-                .consumerMainThread(OpenHammerBlocksEditorPacket::handle)
-                .add();
-        CHANNEL.messageBuilder(OpenGuardSpawnerEditorPacket.class, 6, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(OpenGuardSpawnerEditorPacket::encode)
-                .decoder(OpenGuardSpawnerEditorPacket::decode)
-                .consumerMainThread(OpenGuardSpawnerEditorPacket::handle)
-                .add();
-        CHANNEL.messageBuilder(OpenForceLoadoutEditorPacket.class, 7, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(OpenForceLoadoutEditorPacket::encode)
-                .decoder(OpenForceLoadoutEditorPacket::decode)
-                .consumerMainThread(OpenForceLoadoutEditorPacket::handle)
-                .add();
-        CHANNEL.messageBuilder(OpenPriceEditorPacket.class, 8, NetworkDirection.PLAY_TO_CLIENT)
-                .encoder(OpenPriceEditorPacket::encode)
-                .decoder(OpenPriceEditorPacket::decode)
-                .consumerMainThread(OpenPriceEditorPacket::handle)
-                .add();
+    public static void register(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION);
+        registrar.playToClient(LoadoutSyncPacket.TYPE, LoadoutSyncPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleLoadoutSync(msg));
+        registrar.playToClient(OpenClassEditorPacket.TYPE, OpenClassEditorPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleOpenClassEditor());
+        registrar.playToClient(OpenWhitelistEditorPacket.TYPE, OpenWhitelistEditorPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleOpenWhitelistEditor());
+        registrar.playToClient(OpenProtectedItemsEditorPacket.TYPE, OpenProtectedItemsEditorPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleOpenProtectedItemsEditor());
+        registrar.playToClient(OpenSpawnKitEditorPacket.TYPE, OpenSpawnKitEditorPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleOpenSpawnKitEditor());
+        registrar.playToClient(OpenHammerBlocksEditorPacket.TYPE, OpenHammerBlocksEditorPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleOpenHammerBlocksEditor());
+        registrar.playToClient(OpenGuardSpawnerEditorPacket.TYPE, OpenGuardSpawnerEditorPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleOpenGuardSpawnerEditor(msg.pos(), msg.entityType(),
+                        msg.delaySeconds(), msg.items(), msg.templates()));
+        registrar.playToClient(OpenForceLoadoutEditorPacket.TYPE, OpenForceLoadoutEditorPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleOpenForceLoadoutEditor());
+        registrar.playToClient(OpenPriceEditorPacket.TYPE, OpenPriceEditorPacket.STREAM_CODEC,
+                (msg, ctx) -> ClientPacketHandler.handleOpenPriceEditor());
     }
 
     public static void sendLoadoutSync(ServerPlayer player, LoadoutSyncPacket packet) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+        PacketDistributor.sendToPlayer(player, packet);
     }
 
     public static void sendOpenClassEditor(ServerPlayer player) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenClassEditorPacket());
+        PacketDistributor.sendToPlayer(player, new OpenClassEditorPacket());
     }
 
     public static void sendOpenWhitelistEditor(ServerPlayer player) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenWhitelistEditorPacket());
+        PacketDistributor.sendToPlayer(player, new OpenWhitelistEditorPacket());
     }
 
     public static void sendOpenProtectedItemsEditor(ServerPlayer player) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenProtectedItemsEditorPacket());
+        PacketDistributor.sendToPlayer(player, new OpenProtectedItemsEditorPacket());
     }
 
     public static void sendOpenSpawnKitEditor(ServerPlayer player) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenSpawnKitEditorPacket());
+        PacketDistributor.sendToPlayer(player, new OpenSpawnKitEditorPacket());
     }
 
     public static void sendOpenHammerBlocksEditor(ServerPlayer player) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenHammerBlocksEditorPacket());
+        PacketDistributor.sendToPlayer(player, new OpenHammerBlocksEditorPacket());
     }
 
     public static void sendOpenGuardSpawnerEditor(ServerPlayer player, net.minecraft.core.BlockPos pos,
             @javax.annotation.Nullable ResourceLocation entityType, int delaySeconds,
             java.util.List<ResourceLocation> items,
             java.util.List<uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate> templates) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+        PacketDistributor.sendToPlayer(player,
                 new OpenGuardSpawnerEditorPacket(pos, entityType, delaySeconds, items, templates));
     }
 
     public static void sendOpenForceLoadoutEditor(ServerPlayer player) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenForceLoadoutEditorPacket());
+        PacketDistributor.sendToPlayer(player, new OpenForceLoadoutEditorPacket());
     }
 
     public static void sendOpenPriceEditor(ServerPlayer player) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenPriceEditorPacket());
+        PacketDistributor.sendToPlayer(player, new OpenPriceEditorPacket());
     }
 
     private NetworkHandler() {}
