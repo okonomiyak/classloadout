@@ -23,7 +23,7 @@ public final class ClientPacketHandler {
     public static void handleLoadoutSync(LoadoutSyncPacket msg) {
         LoadoutClientData.applySync(msg.classes(), msg.personal(), msg.whitelists(), msg.ammoGrants(), msg.variants(),
                 msg.protectedItems(), msg.spawnKit(), msg.hammerBlocks(), msg.lockedSlots(), msg.whitelistEnabled(),
-                msg.prices(), msg.points(), msg.purchasedItems());
+                msg.prices(), msg.points(), msg.purchasedItems(), msg.bannedItems());
     }
 
     /** Server already checked permission level before sending this; re-check defensively anyway. */
