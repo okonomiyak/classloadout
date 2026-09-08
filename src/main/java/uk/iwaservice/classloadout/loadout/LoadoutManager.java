@@ -91,6 +91,8 @@ public class LoadoutManager extends SavedData {
     private final Map<UUID, GuardSpawnerTemplate> guardSpawnerTemplates = new LinkedHashMap<>();
     /** Global OP kill-switch for whitelist enforcement (see {@code /class whitelist enable|disable}): while false, {@link #isWhitelisted} treats every item as allowed on every slot, without touching the whitelists themselves. */
     private boolean whitelistEnabled = true;
+    /** Global OP kill-switch for the whole loadout system (see {@code /class disable|enable}): while false, respawn/immediate equip is skipped entirely (no clear, no equip, no ammo grant) - players just keep whatever they're carrying. Class definitions, personal assignments etc. are untouched, so re-enabling picks up right where it left off. */
+    private boolean loadoutsEnabled = true;
     /** OP-granted currency balance per player (see {@code /class points add|set}), spent via {@code /class buy} - independent of any vanilla scoreboard. Absent = 0. */
     private final Map<UUID, Integer> points = new HashMap<>();
     /** OP-curated: item -> point cost (see {@code /class price set}). Absent/non-positive = free - see {@link #canEquip}. Insertion order preserved for a stable shop grid. */
@@ -151,6 +153,16 @@ public class LoadoutManager extends SavedData {
         whitelistEnabled = enabled;
         setDirty();
         broadcastAll(server);
+    }
+
+    public boolean isLoadoutsEnabled() {
+        return loadoutsEnabled;
+    }
+
+    /** Toggles the global loadout-system kill-switch (see {@code /class disable|enable}). */
+    public void setLoadoutsEnabled(boolean enabled) {
+        loadoutsEnabled = enabled;
+        setDirty();
     }
 
     // --- shop (points-based weapon purchase) ---
@@ -811,6 +823,7 @@ public class LoadoutManager extends SavedData {
         }
         manager.guardSpawningPaused = tag.getBoolean("GuardSpawningPaused");
         manager.whitelistEnabled = !tag.contains("WhitelistEnabled") || tag.getBoolean("WhitelistEnabled");
+        manager.loadoutsEnabled = !tag.contains("LoadoutsEnabled") || tag.getBoolean("LoadoutsEnabled");
         ListTag pointsList = tag.getList("Points", Tag.TAG_COMPOUND);
         for (int i = 0; i < pointsList.size(); i++) {
             CompoundTag p = pointsList.getCompound(i);
@@ -946,6 +959,7 @@ public class LoadoutManager extends SavedData {
         tag.put("GuardSpawners", guardSpawnerList);
         tag.putBoolean("GuardSpawningPaused", guardSpawningPaused);
         tag.putBoolean("WhitelistEnabled", whitelistEnabled);
+        tag.putBoolean("LoadoutsEnabled", loadoutsEnabled);
 
         ListTag pointsList = new ListTag();
         for (Map.Entry<UUID, Integer> e : points.entrySet()) {

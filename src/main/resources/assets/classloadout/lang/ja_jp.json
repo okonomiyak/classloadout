@@ -38,6 +38,8 @@
   "classloadout.msg.guardspawner_resumed": "ガードスポナーを再開しました。",
   "classloadout.msg.whitelist_disabled": "ホワイトリストを一時的に無効化しました。再度有効化するまで、どのスロットにも任意のアイテムを割り当てられます。",
   "classloadout.msg.whitelist_enabled": "ホワイトリストを再度有効化しました。",
+  "classloadout.msg.loadouts_disabled": "ロードアウトを無効化しました。再度有効化するまで、リスポーン時は今持っている装備がそのまま維持されます。",
+  "classloadout.msg.loadouts_enabled": "ロードアウトを再度有効化しました。",
   "classloadout.msg.guardspawner_cleared": "%s体のガードスポナー由来エンティティを削除しました。",
   "classloadout.msg.guardspawner_template_saved": "ガードスポナーテンプレート「%s」を保存しました。",
   "classloadout.msg.guardspawner_template_deleted": "ガードスポナーテンプレートを削除しました。",

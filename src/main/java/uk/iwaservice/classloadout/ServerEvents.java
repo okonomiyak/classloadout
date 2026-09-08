@@ -232,8 +232,10 @@ public final class ServerEvents {
         // Matches equip-on-respawn's own convention: a player who has never touched their
         // loadout is left alone entirely, by both the clear and the equip below. The spawn
         // kit is deliberately outside this gate - it's not part of the loadout system at
-        // all, so it applies to every respawning player unconditionally.
-        if (manager.getPersonalLoadout(player.getUUID()) != null) {
+        // all, so it applies to every respawning player unconditionally. Same for the
+        // loadouts-enabled kill-switch (see /class disable) - a disabled system means no
+        // clear and no equip, but the spawn kit still runs.
+        if (manager.isLoadoutsEnabled() && manager.getPersonalLoadout(player.getUUID()) != null) {
             if (Config.CLEAR_INVENTORY_ON_DEATH.get()) {
                 clearInventoryExceptProtected(player, manager);
             }
@@ -361,6 +363,9 @@ public final class ServerEvents {
      */
     public static void equipLoadout(ServerPlayer player) {
         LoadoutManager manager = LoadoutManager.get(player.server);
+        if (!manager.isLoadoutsEnabled()) {
+            return;
+        }
         if (Config.CLEAR_INVENTORY_ON_DEATH.get()) {
             clearInventoryExceptProtected(player, manager);
         }

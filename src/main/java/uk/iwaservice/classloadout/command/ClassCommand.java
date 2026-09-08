@@ -84,6 +84,12 @@ public final class ClassCommand {
                 .then(Commands.literal("delete")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("id", UuidArgument.uuid()).executes(ctx -> delete(ctx))))
+                .then(Commands.literal("disable")
+                        .requires(src -> src.hasPermission(2))
+                        .executes(ctx -> loadoutsDisable(ctx)))
+                .then(Commands.literal("enable")
+                        .requires(src -> src.hasPermission(2))
+                        .executes(ctx -> loadoutsEnable(ctx)))
                 .then(Commands.literal("whitelist")
                         .requires(src -> src.hasPermission(2))
                         .executes(ctx -> whitelistEditor(ctx))
@@ -439,6 +445,18 @@ public final class ClassCommand {
      * OPs want to open things up for a while and flip it back after, rather than clearing and
      * re-populating every slot's whitelist.
      */
+    private static int loadoutsDisable(CommandContext<CommandSourceStack> ctx) {
+        LoadoutManager.get(ctx.getSource().getServer()).setLoadoutsEnabled(false);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.loadouts_disabled"), true);
+        return 1;
+    }
+
+    private static int loadoutsEnable(CommandContext<CommandSourceStack> ctx) {
+        LoadoutManager.get(ctx.getSource().getServer()).setLoadoutsEnabled(true);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.loadouts_enabled"), true);
+        return 1;
+    }
+
     private static int whitelistDisable(CommandContext<CommandSourceStack> ctx) {
         LoadoutManager.get(ctx.getSource().getServer()).setWhitelistEnabled(ctx.getSource().getServer(), false);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.whitelist_disabled"), true);

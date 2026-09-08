@@ -38,6 +38,8 @@
   "classloadout.msg.guardspawner_resumed": "Guard spawners resumed.",
   "classloadout.msg.whitelist_disabled": "Whitelist enforcement disabled - any item can be assigned to any slot until re-enabled.",
   "classloadout.msg.whitelist_enabled": "Whitelist enforcement re-enabled.",
+  "classloadout.msg.loadouts_disabled": "Loadouts disabled - players will keep whatever they're carrying on respawn until re-enabled.",
+  "classloadout.msg.loadouts_enabled": "Loadouts re-enabled.",
   "classloadout.msg.guardspawner_cleared": "Removed %s guard-spawned entities.",
   "classloadout.msg.guardspawner_template_saved": "Saved guard spawner template \"%s\".",
   "classloadout.msg.guardspawner_template_deleted": "Deleted guard spawner template.",
