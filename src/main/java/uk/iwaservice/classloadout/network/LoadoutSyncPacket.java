@@ -21,9 +21,10 @@ import java.util.UUID;
  * the full preset roster and the ten slot whitelists (same for everyone),
  * plus that one recipient's own personal loadout (never someone else's -
  * each player gets a packet built specifically for them), plus the
- * OP-curated protected-items list, spawn kit and hammer AOE block list
- * (exempt from the on-death inventory clear / granted on every respawn /
- * eligible for the hammer's area-of-effect break - same for everyone), plus
+ * OP-curated protected-items list, spawn kit, hammer AOE block list and
+ * banned-items list (exempt from the on-death inventory clear / granted on
+ * every respawn / eligible for the hammer's area-of-effect break / blocked
+ * from equipping regardless of whitelist - same for everyone), plus
  * that one recipient's own OP-locked slots (see {@code LoadoutManager#lockSlot}
  * - slots an OP force-assigned that the recipient can't self-service-change).
  */
@@ -32,7 +33,8 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
                                 List<ResourceLocation> protectedItems, List<SpawnKitEntry> spawnKit,
                                 List<ResourceLocation> hammerBlocks, List<LoadoutSlot> lockedSlots,
                                 boolean whitelistEnabled, List<PriceEntry> prices, int points,
-                                List<ResourceLocation> purchasedItems) implements CustomPacketPayload {
+                                List<ResourceLocation> purchasedItems, List<ResourceLocation> bannedItems)
+        implements CustomPacketPayload {
 
     /** One OP-configured ammo grant: equipping {@code item} in {@code slot} also gives {@code count} of {@code ammoItem}. */
     public record AmmoGrantEntry(LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
@@ -205,6 +207,7 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         }
         buf.writeVarInt(msg.points);
         writeList(buf, msg.purchasedItems);
+        writeList(buf, msg.bannedItems);
     }
 
     public static LoadoutSyncPacket decode(FriendlyByteBuf buf) {
@@ -273,8 +276,9 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         }
         int points = buf.readVarInt();
         List<ResourceLocation> purchasedItems = readList(buf);
+        List<ResourceLocation> bannedItems = readList(buf);
         return new LoadoutSyncPacket(classes, personal, whitelists, ammoGrants, variants, protectedItems, spawnKit,
-                hammerBlocks, lockedSlots, whitelistEnabled, prices, points, purchasedItems);
+                hammerBlocks, lockedSlots, whitelistEnabled, prices, points, purchasedItems, bannedItems);
     }
 
     private static void writeOptional(FriendlyByteBuf buf, @Nullable ResourceLocation loc) {

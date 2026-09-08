@@ -15,6 +15,7 @@ import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
+import org.lwjgl.glfw.GLFW;
 
 import javax.annotation.Nullable;
 import java.text.SimpleDateFormat;
@@ -31,6 +32,9 @@ import java.util.Optional;
  * follows a successful {@code /class whitelist} command. Unlike
  * {@link ItemPickerScreen}, clicking a cell here toggles membership rather
  * than picking-and-closing, so the screen stays open for repeated edits.
+ * Also doubles as the ban editor: hovering a cell and pressing B toggles
+ * that item's global ban (see {@code /class ban}), independent of slot -
+ * a ban applies everywhere, not just to {@link #selectedSlot}.
  */
 public class WhitelistEditorScreen extends Screen {
     private int savedBlur = -1;
@@ -76,6 +80,9 @@ public class WhitelistEditorScreen extends Screen {
     private int scrollOffset;
     private int maxScroll;
     private int dataRevision = -1;
+    /** Item currently under the mouse, updated every frame in {@link #render}; used by {@link #keyPressed} to toggle its ban state, since key events carry no cursor position. */
+    @Nullable
+    private ResourceLocation hoveredItem;
 
     @Nullable
     private final Screen parent;
@@ -242,9 +249,16 @@ public class WhitelistEditorScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Don't hijack digit keys while the search box is focused (e.g. typing "9x19").
-        if (!search.isFocused() && HotbarBar.keyPressed(minecraft, keyCode, scanCode)) {
-            return true;
+        // Don't hijack digit keys (or "B") while the search box is focused (e.g. typing "9x19" or "bow").
+        if (!search.isFocused()) {
+            if (HotbarBar.keyPressed(minecraft, keyCode, scanCode)) {
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_B && hoveredItem != null) {
+                String cmd = "class ban " + (LoadoutClientData.isBanned(hoveredItem) ? "remove " : "add ") + hoveredItem;
+                command(cmd);
+                return true;
+            }
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
@@ -299,6 +313,7 @@ public class WhitelistEditorScreen extends Screen {
         boolean hoveredWhitelisted = false;
         boolean hoveredHasAmmoGrant = false;
         boolean hoveredIsVariant = false;
+        boolean hoveredBanned = false;
         for (int index = 0; index < shown.size(); index++) {
             int col = index % COLS;
             int row = index / COLS;
@@ -309,12 +324,18 @@ public class WhitelistEditorScreen extends Screen {
             }
             ResourceLocation loc = shown.get(index);
             boolean whitelisted = whitelist.contains(loc);
+            boolean banned = LoadoutClientData.isBanned(loc);
             boolean hasAmmoGrant = !LoadoutClientData.getAmmoGrants(selectedSlot, loc).isEmpty();
             boolean hovered = mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL
                     && mouseY >= gridTop && mouseY < gridTop + gridHeight;
             if (whitelisted) {
                 graphics.fill(x, y, x + CELL, y + CELL, 0x4055FF55);
                 graphics.renderOutline(x, y, CELL, CELL, 0xFF55FF55);
+            }
+            // Drawn after (and overrides) the whitelist highlight - a ban is the stronger, overriding state.
+            if (banned) {
+                graphics.fill(x, y, x + CELL, y + CELL, 0x60FF3333);
+                graphics.renderOutline(x, y, CELL, CELL, 0xFFFF3333);
             }
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
@@ -336,9 +357,11 @@ public class WhitelistEditorScreen extends Screen {
                 hoveredWhitelisted = whitelisted;
                 hoveredHasAmmoGrant = hasAmmoGrant;
                 hoveredIsVariant = LoadoutClientData.getItemVariants().containsKey(loc);
+                hoveredBanned = banned;
             }
         }
         graphics.disableScissor();
+        this.hoveredItem = hoveredLoc;
 
         if (hoveredStack != null) {
             List<Component> lines = new ArrayList<>(hoveredStack.getTooltipLines(
@@ -349,6 +372,9 @@ public class WhitelistEditorScreen extends Screen {
             lines.add(hoveredWhitelisted
                     ? Component.translatable("classloadout.gui.whitelist_on")
                     : Component.translatable("classloadout.gui.whitelist_off"));
+            lines.add(hoveredBanned
+                    ? Component.translatable("classloadout.gui.ban_on")
+                    : Component.translatable("classloadout.gui.ban_off"));
             if (hoveredHasAmmoGrant) {
                 lines.add(Component.translatable("classloadout.gui.ammo_grant_marker"));
             }

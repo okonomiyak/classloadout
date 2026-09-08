@@ -76,6 +76,8 @@ public class LoadoutManager extends SavedData {
     private final Map<ResourceLocation, Long> variantRegisteredAt = new LinkedHashMap<>();
     /** OP-curated: items that survive the on-death inventory clear (see {@code clearInventoryOnDeath}). Matched by base item type, not exact NBT. */
     private final Set<ResourceLocation> protectedItems = new LinkedHashSet<>();
+    /** OP-curated: items temporarily blocked from equipping regardless of whitelist state (see {@code /class ban}, toggled in-place from the whitelist editor). Unlike whitelist, this isn't bypassed by a locked slot - a ban is a hard block, not a player-choice restriction. */
+    private final Set<ResourceLocation> bannedItems = new LinkedHashSet<>();
     /** OP-curated: item -> count given to every player on every respawn, unconditionally (not tied to the loadout system at all - see {@code ServerEvents}). Insertion order preserved for a stable editor grid. */
     private final Map<ResourceLocation, Integer> spawnKit = new LinkedHashMap<>();
     /** OP-curated: block types (registry names, not items) a SuperbWarfare hammer's area-of-effect break can also destroy - see {@code Config.HAMMER_AOE_RADIUS}. */
@@ -370,6 +372,30 @@ public class LoadoutManager extends SavedData {
 
     public void removeProtectedItem(MinecraftServer server, ResourceLocation item) {
         if (protectedItems.remove(item)) {
+            setDirty();
+            broadcastAll(server);
+        }
+    }
+
+    // --- banned items (OP-curated, hard-blocked from equipping regardless of whitelist) ---
+
+    public Set<ResourceLocation> getBannedItems() {
+        return bannedItems;
+    }
+
+    public boolean isBanned(ResourceLocation item) {
+        return bannedItems.contains(item);
+    }
+
+    public void addBannedItem(MinecraftServer server, ResourceLocation item) {
+        if (bannedItems.add(item)) {
+            setDirty();
+            broadcastAll(server);
+        }
+    }
+
+    public void removeBannedItem(MinecraftServer server, ResourceLocation item) {
+        if (bannedItems.remove(item)) {
             setDirty();
             broadcastAll(server);
         }
@@ -715,7 +741,7 @@ public class LoadoutManager extends SavedData {
                 LoadoutSyncPacket.PersonalData.of(personal), LoadoutSyncPacket.Whitelists.of(whitelistsBySlot),
                 ammoGrantEntries, variantEntries, new ArrayList<>(protectedItems), spawnKitEntries,
                 new ArrayList<>(hammerBlocks), new ArrayList<>(getLockedSlots(player.getUUID())), whitelistEnabled,
-                priceEntries, getPoints(player.getUUID()), new ArrayList<>(purchased)));
+                priceEntries, getPoints(player.getUUID()), new ArrayList<>(purchased), new ArrayList<>(bannedItems)));
     }
 
     // --- persistence ---
@@ -786,6 +812,10 @@ public class LoadoutManager extends SavedData {
         ListTag protectedList = tag.getList("ProtectedItems", Tag.TAG_STRING);
         for (Tag t : protectedList) {
             manager.protectedItems.add(ResourceLocation.parse(t.getAsString()));
+        }
+        ListTag bannedList = tag.getList("BannedItems", Tag.TAG_STRING);
+        for (Tag t : bannedList) {
+            manager.bannedItems.add(ResourceLocation.parse(t.getAsString()));
         }
         ListTag spawnKitList = tag.getList("SpawnKit", Tag.TAG_COMPOUND);
         for (int i = 0; i < spawnKitList.size(); i++) {
@@ -913,6 +943,12 @@ public class LoadoutManager extends SavedData {
             protectedList.add(net.minecraft.nbt.StringTag.valueOf(loc.toString()));
         }
         tag.put("ProtectedItems", protectedList);
+
+        ListTag bannedList = new ListTag();
+        for (ResourceLocation loc : bannedItems) {
+            bannedList.add(net.minecraft.nbt.StringTag.valueOf(loc.toString()));
+        }
+        tag.put("BannedItems", bannedList);
 
         ListTag spawnKitList = new ListTag();
         for (Map.Entry<ResourceLocation, Integer> e : spawnKit.entrySet()) {

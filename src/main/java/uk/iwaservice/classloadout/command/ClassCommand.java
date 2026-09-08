@@ -121,6 +121,14 @@ public final class ClassCommand {
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("item", ResourceLocationArgument.id())
                                         .executes(ctx -> protectRemove(ctx)))))
+                .then(Commands.literal("ban")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> banAdd(ctx))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> banRemove(ctx)))))
                 .then(Commands.literal("spawnkit")
                         .requires(src -> src.hasPermission(2))
                         .executes(ctx -> spawnKitEditor(ctx))
@@ -468,6 +476,20 @@ public final class ClassCommand {
         ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
         LoadoutManager.get(ctx.getSource().getServer()).removeProtectedItem(ctx.getSource().getServer(), item);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.protect_removed", item.toString()), true);
+        return 1;
+    }
+
+    private static int banAdd(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).addBannedItem(ctx.getSource().getServer(), item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.ban_added", item.toString()), true);
+        return 1;
+    }
+
+    private static int banRemove(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).removeBannedItem(ctx.getSource().getServer(), item);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.ban_removed", item.toString()), true);
         return 1;
     }
 

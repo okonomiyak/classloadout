@@ -38,6 +38,8 @@ public final class LoadoutClientData {
     private static List<ResourceLocation> protectedItems = List.of();
     private static Map<ResourceLocation, Integer> spawnKit = Map.of();
     private static List<ResourceLocation> hammerBlocks = List.of();
+    /** Mirrors {@code LoadoutManager#getBannedItems} - items hard-blocked from equipping regardless of whitelist (see {@code /class ban}). */
+    private static List<ResourceLocation> bannedItems = List.of();
     /** Slots an OP has locked on the local player's own loadout (see {@code LoadoutManager#lockSlot}) - never someone else's. */
     private static Set<LoadoutSlot> lockedSlots = Set.of();
     /** Mirrors {@code LoadoutManager#isWhitelistEnabled} - false while an OP has temporarily disabled whitelist enforcement (see {@code /class whitelist enable|disable}). */
@@ -67,7 +69,8 @@ public final class LoadoutClientData {
                                               boolean newWhitelistEnabled,
                                               List<LoadoutSyncPacket.PriceEntry> newPrices,
                                               int newPoints,
-                                              List<ResourceLocation> newPurchasedItems) {
+                                              List<ResourceLocation> newPurchasedItems,
+                                              List<ResourceLocation> newBannedItems) {
         classes = List.copyOf(newClasses);
         personal = newPersonal;
         whitelists = newWhitelists;
@@ -102,6 +105,7 @@ public final class LoadoutClientData {
         prices = priceMap;
         points = newPoints;
         purchasedItems = newPurchasedItems.isEmpty() ? Set.of() : new java.util.HashSet<>(newPurchasedItems);
+        bannedItems = List.copyOf(newBannedItems);
         revision++;
     }
 
@@ -115,6 +119,7 @@ public final class LoadoutClientData {
         protectedItems = List.of();
         spawnKit = Map.of();
         hammerBlocks = List.of();
+        bannedItems = List.of();
         lockedSlots = Set.of();
         whitelistEnabled = true;
         prices = Map.of();
@@ -172,6 +177,11 @@ public final class LoadoutClientData {
 
     public static synchronized List<ResourceLocation> getHammerBlocks() {
         return hammerBlocks;
+    }
+
+    /** True if an OP has temporarily banned this item (see {@code /class ban}) - blocked from equipping regardless of whitelist. */
+    public static synchronized boolean isBanned(ResourceLocation item) {
+        return bannedItems.contains(item);
     }
 
     /** True if an OP has locked this slot on the local player's own loadout - see {@code LoadoutManager#lockSlot}. */

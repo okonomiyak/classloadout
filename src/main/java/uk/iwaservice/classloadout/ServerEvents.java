@@ -321,6 +321,11 @@ public final class ServerEvents {
      * bought, which can't actually happen since purchases are permanent, but
      * an OP could still price something after the player already had it
      * equipped) is treated identically to a stale whitelist removal.
+     *
+     * <p>{@code manager.isBanned} (see {@code /class ban}) is checked first and,
+     * unlike whitelist/canEquip, is <em>not</em> skipped for a locked slot - a
+     * ban is a hard block meant to override even an OP force-assign, not a
+     * player-choice restriction the OP can bypass.
      */
     public static ResourceLocation[] equipLoadout(ServerPlayer player, LoadoutManager manager) {
         PersonalLoadout loadout = manager.getPersonalLoadout(player.getUUID());
@@ -332,7 +337,9 @@ public final class ServerEvents {
         for (int i = 0; i < slotKeys.length; i++) {
             LoadoutSlot slot = slotKeys[i];
             ResourceLocation id = loadout.get(slot);
-            if (id != null && !manager.isLocked(player.getUUID(), slot)
+            if (id != null && manager.isBanned(id)) {
+                id = null;
+            } else if (id != null && !manager.isLocked(player.getUUID(), slot)
                     && (!manager.isWhitelisted(slot, id) || !manager.canEquip(player.getUUID(), id))) {
                 id = null;
             }
