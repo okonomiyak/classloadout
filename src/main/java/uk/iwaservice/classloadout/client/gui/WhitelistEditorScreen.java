@@ -332,17 +332,19 @@ public class WhitelistEditorScreen extends Screen {
                 graphics.fill(x, y, x + CELL, y + CELL, 0x4055FF55);
                 graphics.renderOutline(x, y, CELL, CELL, 0xFF55FF55);
             }
-            // Drawn after (and overrides) the whitelist highlight - a ban is the stronger, overriding state.
-            if (banned) {
-                graphics.fill(x, y, x + CELL, y + CELL, 0x60FF3333);
-                graphics.renderOutline(x, y, CELL, CELL, 0xFFFF3333);
-            }
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
+            int iconX = x + (CELL - ICON) / 2;
+            int iconY = y + (CELL - ICON) / 2;
             ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
-            graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
+            graphics.renderItem(stack, iconX, iconY);
+            // Drawn tight around the icon (not the whole cell) and after it, so the ban reads as a
+            // clear "forbidden" ring on the icon itself rather than a wash that fights the sprite.
+            if (banned) {
+                graphics.renderOutline(iconX - 1, iconY - 1, ICON + 2, ICON + 2, 0xFFFF3333);
+            }
             if (hasAmmoGrant) {
                 graphics.fill(x + CELL - 5, y + 1, x + CELL - 1, y + 5, 0xFFFFAA00);
             }
