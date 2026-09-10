@@ -49,8 +49,8 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
     public record PriceEntry(ResourceLocation item, int cost) {
     }
 
-    /** One OP-registered "exact held item" whitelist entry - see {@link uk.iwaservice.classloadout.loadout.LoadoutManager#addHeldItemToWhitelist}. {@code registeredAt} is an epoch-millis timestamp, shown in the whitelist editor's tooltip. */
-    public record VariantEntry(ResourceLocation id, CompoundTag stack, long registeredAt) {
+    /** One OP-registered "exact held item" whitelist entry - see {@link uk.iwaservice.classloadout.loadout.LoadoutManager#addHeldItemToWhitelist}. {@code registeredAt} is an epoch-millis timestamp, shown in the whitelist editor's tooltip. {@code folder} is a purely organizational OP-assigned label (empty = uncategorized), see {@code /class whitelist set_folder}. */
+    public record VariantEntry(ResourceLocation id, CompoundTag stack, long registeredAt, String folder) {
     }
 
     public record Entry(UUID id, String name,
@@ -177,6 +177,7 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
             buf.writeResourceLocation(v.id());
             buf.writeNbt(v.stack());
             buf.writeVarLong(v.registeredAt());
+            buf.writeUtf(v.folder());
         }
         writeList(buf, msg.protectedItems);
         buf.writeVarInt(msg.spawnKit.size());
@@ -240,7 +241,8 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
             ResourceLocation id = buf.readResourceLocation();
             CompoundTag stack = buf.readNbt();
             long registeredAt = buf.readVarLong();
-            variants.add(new VariantEntry(id, stack == null ? new CompoundTag() : stack, registeredAt));
+            String folder = buf.readUtf();
+            variants.add(new VariantEntry(id, stack == null ? new CompoundTag() : stack, registeredAt, folder));
         }
         List<ResourceLocation> protectedItems = readList(buf);
         int spawnKitCount = buf.readVarInt();

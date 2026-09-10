@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -53,6 +54,9 @@ public class WhitelistEditorScreen extends Screen {
     private LoadoutSlot selectedSlot = LoadoutSlot.MAIN;
     @Nullable
     private ItemCatalog.Category selectedCategory = null;
+    /** Only meaningful for {@link ItemCatalog.Category#HELD_ITEMS} - null means no folder filter ("All"). Reset whenever the category changes. */
+    @Nullable
+    private String selectedFolder = null;
     private List<ResourceLocation> allItems = List.of();
     private List<ResourceLocation> shown = List.of();
     private EditBox search;
@@ -134,8 +138,31 @@ public class WhitelistEditorScreen extends Screen {
             cx += catWidth;
         }
 
+        int afterCatY = catY + CAT_H + 6;
+        List<String> folders = selectedCategory == ItemCatalog.Category.HELD_ITEMS
+                ? LoadoutClientData.getVariantFolders() : List.of();
+        if (!folders.isEmpty()) {
+            int folderCount = folders.size() + 1; // +1 for the "all" tab
+            int folderWidth = (panelWidth - 2 * PAD) / folderCount;
+            int fx = panelLeft + PAD;
+            Button allFolderBtn = Button.builder(Component.translatable("classloadout.gui.folder_all"),
+                            btn -> selectFolder(null))
+                    .bounds(fx, afterCatY, folderWidth, CAT_H).build();
+            allFolderBtn.active = selectedFolder != null;
+            addRenderableWidget(allFolderBtn);
+            fx += folderWidth;
+            for (String folder : folders) {
+                Button fb = Button.builder(Component.literal(folder), btn -> selectFolder(folder))
+                        .bounds(fx, afterCatY, folderWidth, CAT_H).build();
+                fb.active = !folder.equals(selectedFolder);
+                addRenderableWidget(fb);
+                fx += folderWidth;
+            }
+            afterCatY += CAT_H + 6;
+        }
+
         String previousQuery = search != null ? search.getValue() : "";
-        search = new EditBox(this.font, panelLeft + PAD, catY + CAT_H + 6,
+        search = new EditBox(this.font, panelLeft + PAD, afterCatY,
                 panelWidth - 2 * PAD, SEARCH_H, Component.translatable("classloadout.gui.item_search"));
         search.setHint(Component.translatable("classloadout.gui.item_search"));
         search.setValue(previousQuery);
@@ -143,7 +170,7 @@ public class WhitelistEditorScreen extends Screen {
         addRenderableWidget(search);
 
         gridLeft = panelLeft + PAD;
-        gridTop = catY + CAT_H + 6 + SEARCH_H + 6;
+        gridTop = afterCatY + SEARCH_H + 6;
         gridHeight = panelTop + panelHeight - PAD - 24 - gridTop;
 
         int closeWidth = (panelWidth - 2 * PAD - 4) * 2 / 3;
@@ -174,12 +201,30 @@ public class WhitelistEditorScreen extends Screen {
     private void selectCategory(@Nullable ItemCatalog.Category category) {
         if (category != selectedCategory) {
             selectedCategory = category;
+            selectedFolder = null;
+            this.init(this.minecraft, this.width, this.height);
+        }
+    }
+
+    private void selectFolder(@Nullable String folder) {
+        if (!Objects.equals(folder, selectedFolder)) {
+            selectedFolder = folder;
             this.init(this.minecraft, this.width, this.height);
         }
     }
 
     private void updateShown() {
-        shown = ItemCatalog.search(ItemCatalog.byCategory(allItems, selectedCategory), search.getValue());
+        List<ResourceLocation> categoryFiltered = ItemCatalog.byCategory(allItems, selectedCategory);
+        if (selectedCategory == ItemCatalog.Category.HELD_ITEMS && selectedFolder != null) {
+            List<ResourceLocation> folderFiltered = new ArrayList<>();
+            for (ResourceLocation loc : categoryFiltered) {
+                if (selectedFolder.equals(LoadoutClientData.getVariantFolder(loc))) {
+                    folderFiltered.add(loc);
+                }
+            }
+            categoryFiltered = folderFiltered;
+        }
+        shown = ItemCatalog.search(categoryFiltered, search.getValue());
         int rows = (shown.size() + COLS - 1) / COLS;
         int contentHeight = rows * CELL;
         maxScroll = Math.max(0, contentHeight - gridHeight);
@@ -243,6 +288,11 @@ public class WhitelistEditorScreen extends Screen {
             if (keyCode == GLFW.GLFW_KEY_B && hoveredItem != null) {
                 String cmd = "class ban " + (LoadoutClientData.isBanned(hoveredItem) ? "remove " : "add ") + hoveredItem;
                 command(cmd);
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_F && hoveredItem != null
+                    && LoadoutClientData.getItemVariants().containsKey(hoveredItem)) {
+                minecraft.setScreen(new VariantFolderScreen(this, hoveredItem));
                 return true;
             }
         }
@@ -371,6 +421,10 @@ public class WhitelistEditorScreen extends Screen {
                 lines.add(Component.translatable("classloadout.gui.held_item_delete_hint"));
                 lines.add(Component.translatable("classloadout.gui.variant_slots", variantSlotsText(hoveredLoc)));
                 lines.add(Component.translatable("classloadout.gui.variant_registered", variantRegisteredText(hoveredLoc)));
+                String folder = LoadoutClientData.getVariantFolder(hoveredLoc);
+                lines.add(folder.isEmpty()
+                        ? Component.translatable("classloadout.gui.variant_folder_hint")
+                        : Component.translatable("classloadout.gui.variant_folder_current", folder));
             }
             graphics.renderTooltip(this.font, lines, Optional.empty(), hoveredX, hoveredY);
         }

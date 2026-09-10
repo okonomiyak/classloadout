@@ -110,6 +110,13 @@ public final class ClassCommand {
                         .then(Commands.literal("delete_variant")
                                 .then(Commands.argument("id", ResourceLocationArgument.id())
                                         .executes(ctx -> whitelistDeleteVariant(ctx))))
+                        .then(Commands.literal("set_folder")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("folder", StringArgumentType.greedyString())
+                                        .executes(ctx -> whitelistSetFolder(ctx)))))
+                        .then(Commands.literal("clear_folder")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> whitelistClearFolder(ctx))))
                         .then(Commands.literal("ammo")
                                 .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                                 .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -412,6 +419,21 @@ public final class ClassCommand {
         ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
         LoadoutManager.get(ctx.getSource().getServer()).deleteItemVariant(ctx.getSource().getServer(), id);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.variant_deleted", id.toString()), true);
+        return 1;
+    }
+
+    private static int whitelistSetFolder(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        String folder = StringArgumentType.getString(ctx, "folder");
+        LoadoutManager.get(ctx.getSource().getServer()).setVariantFolder(ctx.getSource().getServer(), item, folder);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.variant_folder_set", item.toString(), folder), true);
+        return 1;
+    }
+
+    private static int whitelistClearFolder(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).setVariantFolder(ctx.getSource().getServer(), item, "");
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.variant_folder_cleared", item.toString()), true);
         return 1;
     }
 

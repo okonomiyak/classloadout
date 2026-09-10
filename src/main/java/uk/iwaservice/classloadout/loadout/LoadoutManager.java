@@ -73,6 +73,8 @@ public class LoadoutManager extends SavedData {
     private final Map<ResourceLocation, CompoundTag> itemVariants = new LinkedHashMap<>();
     /** Wall-clock registration time (epoch millis) per {@link #itemVariants} entry, shown in the whitelist editor's tooltip. */
     private final Map<ResourceLocation, Long> variantRegisteredAt = new LinkedHashMap<>();
+    /** OP-assigned folder name per {@link #itemVariants} entry, purely organizational (lets the whitelist editor's Held-items tab filter a long variant list into groups). Absent = uncategorized. */
+    private final Map<ResourceLocation, String> variantFolders = new LinkedHashMap<>();
     /** OP-curated: items that survive the on-death inventory clear (see {@code clearInventoryOnDeath}). Matched by base item type, not exact NBT. */
     private final Set<ResourceLocation> protectedItems = new LinkedHashSet<>();
     /** OP-curated: items temporarily blocked from equipping regardless of whitelist state (see {@code /class ban}, toggled in-place from the whitelist editor). Unlike whitelist, this isn't bypassed by a locked slot - a ban is a hard block, not a player-choice restriction. */
@@ -315,9 +317,24 @@ public class LoadoutManager extends SavedData {
     public void deleteItemVariant(MinecraftServer server, ResourceLocation variantId) {
         if (itemVariants.remove(variantId) != null) {
             variantRegisteredAt.remove(variantId);
+            variantFolders.remove(variantId);
             setDirty();
             broadcastAll(server);
         }
+    }
+
+    /** Purely organizational grouping for the whitelist editor's Held-items tab. Blank clears it (back to uncategorized). No-op if {@code variantId} was never registered. */
+    public void setVariantFolder(MinecraftServer server, ResourceLocation variantId, String folder) {
+        if (!itemVariants.containsKey(variantId)) {
+            return;
+        }
+        if (folder.isBlank()) {
+            variantFolders.remove(variantId);
+        } else {
+            variantFolders.put(variantId, folder);
+        }
+        setDirty();
+        broadcastAll(server);
     }
 
     private static ResourceLocation variantId(UUID id) {
@@ -734,7 +751,7 @@ public class LoadoutManager extends SavedData {
         List<LoadoutSyncPacket.VariantEntry> variantEntries = new ArrayList<>(itemVariants.size());
         for (Map.Entry<ResourceLocation, CompoundTag> e : itemVariants.entrySet()) {
             variantEntries.add(new LoadoutSyncPacket.VariantEntry(e.getKey(), e.getValue(),
-                    variantRegisteredAt.getOrDefault(e.getKey(), 0L)));
+                    variantRegisteredAt.getOrDefault(e.getKey(), 0L), variantFolders.getOrDefault(e.getKey(), "")));
         }
 
         List<LoadoutSyncPacket.SpawnKitEntry> spawnKitEntries = new ArrayList<>(spawnKit.size());
@@ -819,6 +836,9 @@ public class LoadoutManager extends SavedData {
             ResourceLocation id = new ResourceLocation(v.getString("Id"));
             manager.itemVariants.put(id, v.getCompound("Stack"));
             manager.variantRegisteredAt.put(id, v.getLong("RegisteredAt"));
+            if (v.contains("Folder") && !v.getString("Folder").isBlank()) {
+                manager.variantFolders.put(id, v.getString("Folder"));
+            }
         }
         ListTag protectedList = tag.getList("ProtectedItems", Tag.TAG_STRING);
         for (Tag t : protectedList) {
@@ -946,6 +966,10 @@ public class LoadoutManager extends SavedData {
             v.putString("Id", e.getKey().toString());
             v.put("Stack", e.getValue());
             v.putLong("RegisteredAt", variantRegisteredAt.getOrDefault(e.getKey(), 0L));
+            String folder = variantFolders.get(e.getKey());
+            if (folder != null) {
+                v.putString("Folder", folder);
+            }
             variantList.add(v);
         }
         tag.put("ItemVariants", variantList);
