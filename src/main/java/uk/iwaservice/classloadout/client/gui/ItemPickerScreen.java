@@ -11,14 +11,18 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.TooltipFlag;
+import uk.iwaservice.classloadout.ClassLoadoutMod;
 import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -44,6 +48,14 @@ import java.util.function.Consumer;
  * after login. Cell 0 is a fixed "none" entry that reports
  * {@code minecraft:air}, the sentinel the save/assign commands treat as
  * "unset".
+ *
+ * <p>Restricted mode only: held-item variants grouped into a folder (see
+ * {@code /class whitelist set_folder}) collapse into one chest-icon tile,
+ * same idea as {@link WhitelistEditorScreen}'s Held-items view - clicking
+ * a tile pops a flyout of that folder's items (within {@code restrictTo}
+ * only, not every variant in that folder server-wide) out beside it;
+ * clicking a flyout item picks it and closes, same as any other cell.
+ * Typing a search query flattens back to a plain list, ignoring folders.
  */
 public class ItemPickerScreen extends Screen {
     private int savedBlur = -1;
@@ -65,6 +77,9 @@ public class ItemPickerScreen extends Screen {
     private static final int CELL = 20;
     private static final int COLS = 9;
     private static final int ICON = 16;
+    private static final int FLYOUT_COLS = 4;
+    /** No scrolling in the flyout (kept simple) - a folder past this size just shows its first items. */
+    private static final int FLYOUT_MAX_ITEMS = 16;
 
     private static final int COLOR_PANEL_BG = 0xF4222222;
     private static final int COLOR_HEADER_BG = 0xFF1F2333;
@@ -80,6 +95,15 @@ public class ItemPickerScreen extends Screen {
 
     private List<ResourceLocation> allItems = List.of();
     private List<ResourceLocation> shown = List.of();
+    /** Restricted mode only: synthetic per-render tile id -> folder name (see class doc). Empty in unrestricted mode. */
+    private Map<ResourceLocation, String> folderTiles = Map.of();
+    /** Restricted mode only: folder name -> its items within {@code restrictTo}, populated alongside {@link #folderTiles}. */
+    private Map<String, List<ResourceLocation>> folderContents = Map.of();
+    @Nullable
+    private String expandedFolder;
+    private List<ResourceLocation> expandedFolderItems = List.of();
+    private int expandedFlyoutX;
+    private int expandedFlyoutY;
     private EditBox search;
 
     private int panelWidth;
@@ -192,11 +216,102 @@ public class ItemPickerScreen extends Screen {
     }
 
     private void updateShown() {
-        shown = ItemCatalog.search(ItemCatalog.byCategory(allItems, selectedCategory), search.getValue());
+        List<ResourceLocation> base = ItemCatalog.byCategory(allItems, selectedCategory);
+        String query = search.getValue();
+        if (restrictTo != null && query.isBlank()) {
+            base = buildTopLevel(base);
+        } else {
+            folderTiles = Map.of();
+            folderContents = Map.of();
+            expandedFolder = null;
+            expandedFolderItems = List.of();
+        }
+        shown = ItemCatalog.search(base, query);
         int rows = (shown.size() + 1 + COLS - 1) / COLS; // +1 for the "none" cell
         int contentHeight = rows * CELL;
         maxScroll = Math.max(0, contentHeight - gridHeight);
         scrollOffset = Math.min(scrollOffset, maxScroll);
+    }
+
+    /** One chest-icon tile per folder in use within {@code items} (see {@link #folderTiles}/{@link #folderContents}), followed by every item with no folder assigned. */
+    private List<ResourceLocation> buildTopLevel(List<ResourceLocation> items) {
+        Map<String, List<ResourceLocation>> byFolder = new LinkedHashMap<>();
+        List<ResourceLocation> unfoldered = new ArrayList<>();
+        for (ResourceLocation loc : items) {
+            String folder = LoadoutClientData.getVariantFolder(loc);
+            if (folder.isEmpty()) {
+                unfoldered.add(loc);
+            } else {
+                byFolder.computeIfAbsent(folder, f -> new ArrayList<>()).add(loc);
+            }
+        }
+        List<String> folderNames = new ArrayList<>(byFolder.keySet());
+        Collections.sort(folderNames);
+        Map<ResourceLocation, String> tiles = new LinkedHashMap<>();
+        List<ResourceLocation> result = new ArrayList<>();
+        for (int i = 0; i < folderNames.size(); i++) {
+            ResourceLocation tileId = ResourceLocation.fromNamespaceAndPath(ClassLoadoutMod.MODID, "folder_" + i);
+            tiles.put(tileId, folderNames.get(i));
+            result.add(tileId);
+        }
+        result.addAll(unfoldered);
+        folderTiles = tiles;
+        folderContents = byFolder;
+        return result;
+    }
+
+    /** While a folder's flyout is open, everything else in the main grid (including the "none" cell) is hidden - only the open folder's own tile stays visible/clickable, so it can still be clicked again to close. {@code totalIndex} is the grid index including the "none" cell at 0. */
+    private boolean isMainGridCellVisible(int totalIndex) {
+        if (expandedFolder == null) {
+            return true;
+        }
+        if (totalIndex == 0) {
+            return false;
+        }
+        return expandedFolder.equals(folderTiles.get(shown.get(totalIndex - 1)));
+    }
+
+    private void toggleFolderFlyout(String folder, int totalIndex) {
+        if (folder.equals(expandedFolder)) {
+            expandedFolder = null;
+            expandedFolderItems = List.of();
+            return;
+        }
+        expandedFolder = folder;
+        List<ResourceLocation> items = folderContents.getOrDefault(folder, List.of());
+        expandedFolderItems = items.size() > FLYOUT_MAX_ITEMS ? items.subList(0, FLYOUT_MAX_ITEMS) : items;
+        int col = totalIndex % COLS;
+        int row = totalIndex / COLS;
+        expandedFlyoutX = gridLeft + col * CELL + CELL + 4;
+        expandedFlyoutY = gridTop + row * CELL - scrollOffset;
+    }
+
+    /** Mirrors {@link #cellIndexAt}, but against the flyout's own (unscrolled) grid. -1 when no flyout is open. */
+    private int flyoutIndexAt(double mouseX, double mouseY) {
+        if (expandedFolder == null || expandedFolderItems.isEmpty()) {
+            return -1;
+        }
+        int[] origin = flyoutOrigin();
+        int rows = (expandedFolderItems.size() + FLYOUT_COLS - 1) / FLYOUT_COLS;
+        int w = FLYOUT_COLS * CELL;
+        int h = rows * CELL;
+        if (mouseX < origin[0] || mouseX >= origin[0] + w || mouseY < origin[1] || mouseY >= origin[1] + h) {
+            return -1;
+        }
+        int col = (int) ((mouseX - origin[0]) / CELL);
+        int row = (int) ((mouseY - origin[1]) / CELL);
+        int index = row * FLYOUT_COLS + col;
+        return index < expandedFolderItems.size() ? index : -1;
+    }
+
+    /** Top-left of the flyout, clamped so it never draws off-screen. */
+    private int[] flyoutOrigin() {
+        int rows = (expandedFolderItems.size() + FLYOUT_COLS - 1) / FLYOUT_COLS;
+        int w = FLYOUT_COLS * CELL;
+        int h = rows * CELL;
+        int fx = Math.max(4, Math.min(expandedFlyoutX, this.width - w - 4));
+        int fy = Math.max(4, Math.min(expandedFlyoutY, this.height - h - 4));
+        return new int[]{fx, fy};
     }
 
     /** Cell index 0 is "none"; index n>0 maps to shown.get(n - 1). Returns -1 if out of range. */
@@ -215,13 +330,28 @@ public class ItemPickerScreen extends Screen {
         if (restrictTo == null && HotbarBar.mouseClicked(minecraft, mouseX, mouseY)) {
             return true;
         }
+        int flyoutIndex = flyoutIndexAt(mouseX, mouseY);
+        if (flyoutIndex >= 0) {
+            onPick.accept(expandedFolderItems.get(flyoutIndex));
+            minecraft.setScreen(parent);
+            return true;
+        }
         int index = cellIndexAt(mouseX, mouseY);
+        if (index >= 0 && !isMainGridCellVisible(index)) {
+            return true;
+        }
         if (index == 0) {
             onPick.accept(ResourceLocation.fromNamespaceAndPath("minecraft", "air"));
             minecraft.setScreen(parent);
             return true;
         } else if (index > 0) {
-            onPick.accept(shown.get(index - 1));
+            ResourceLocation loc = shown.get(index - 1);
+            String folder = folderTiles.get(loc);
+            if (folder != null) {
+                toggleFolderFlyout(folder, index);
+                return true;
+            }
+            onPick.accept(loc);
             minecraft.setScreen(parent);
             return true;
         }
@@ -271,6 +401,8 @@ public class ItemPickerScreen extends Screen {
         ItemStack hoveredStack = null;
         int hoveredX = 0;
         int hoveredY = 0;
+        String hoveredFolder = null;
+        int hoveredFolderCount = 0;
         int total = shown.size() + 1;
         for (int index = 0; index < total; index++) {
             int col = index % COLS;
@@ -280,12 +412,32 @@ public class ItemPickerScreen extends Screen {
             if (y + CELL <= gridTop || y >= gridTop + gridHeight) {
                 continue;
             }
+            if (!isMainGridCellVisible(index)) {
+                continue;
+            }
             boolean hovered = mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL
                     && mouseY >= gridTop && mouseY < gridTop + gridHeight;
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
-            ItemStack resolved = index == 0 ? null : ItemResolver.resolve(shown.get(index - 1), LoadoutClientData.getItemVariants());
+            ResourceLocation loc = index == 0 ? null : shown.get(index - 1);
+            String folder = loc == null ? null : folderTiles.get(loc);
+            if (folder != null) {
+                boolean open = folder.equals(expandedFolder);
+                if (open) {
+                    graphics.fill(x, y, x + CELL, y + CELL, 0x4055AAFF);
+                }
+                graphics.renderItem(new ItemStack(Items.CHEST), x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
+                graphics.renderOutline(x, y, CELL, CELL, open ? 0xFF55AAFF : COLOR_OUTLINE);
+                if (hovered) {
+                    hoveredFolder = folder;
+                    hoveredFolderCount = folderContents.getOrDefault(folder, List.of()).size();
+                    hoveredX = mouseX;
+                    hoveredY = mouseY;
+                }
+                continue;
+            }
+            ItemStack resolved = loc == null ? null : ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
             if (hovered) {
@@ -296,7 +448,45 @@ public class ItemPickerScreen extends Screen {
         }
         graphics.disableScissor();
 
-        if (hoveredStack != null) {
+        // Flyout: the expanded folder's contents, popped out beside the tile that opened it. Not
+        // scissored or scrollable (see FLYOUT_MAX_ITEMS) - clicking a cell here picks it directly,
+        // same as any other cell.
+        if (expandedFolder != null && !expandedFolderItems.isEmpty()) {
+            int[] origin = flyoutOrigin();
+            int fx = origin[0];
+            int fy = origin[1];
+            int rows = (expandedFolderItems.size() + FLYOUT_COLS - 1) / FLYOUT_COLS;
+            int fw = FLYOUT_COLS * CELL;
+            int fh = rows * CELL;
+            graphics.fill(fx - 2, fy - 2, fx + fw + 2, fy + fh + 2, 0xF0222222);
+            graphics.renderOutline(fx - 2, fy - 2, fw + 4, fh + 4, 0xFF55AAFF);
+            for (int index = 0; index < expandedFolderItems.size(); index++) {
+                int col = index % FLYOUT_COLS;
+                int row = index / FLYOUT_COLS;
+                int x = fx + col * CELL;
+                int y = fy + row * CELL;
+                ResourceLocation loc = expandedFolderItems.get(index);
+                boolean hovered = mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL;
+                if (hovered) {
+                    graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
+                }
+                ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+                ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
+                graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
+                if (hovered) {
+                    hoveredStack = stack;
+                    hoveredX = mouseX;
+                    hoveredY = mouseY;
+                }
+            }
+        }
+
+        if (hoveredFolder != null) {
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.literal(hoveredFolder));
+            lines.add(Component.translatable("classloadout.gui.folder_item_count", hoveredFolderCount));
+            graphics.renderTooltip(this.font, lines, Optional.empty(), hoveredX, hoveredY);
+        } else if (hoveredStack != null) {
             if (hoveredStack.getItem() == Items.BARRIER) {
                 graphics.renderTooltip(this.font, Component.translatable("classloadout.gui.item_none"), hoveredX, hoveredY);
             } else {
