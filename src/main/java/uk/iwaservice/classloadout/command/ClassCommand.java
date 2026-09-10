@@ -247,10 +247,12 @@ public final class ClassCommand {
                                 .then(Commands.argument("id", UuidArgument.uuid())
                                         .executes(ctx -> myPresetReceive(ctx))))
                         .then(Commands.literal("selectshared")
-                                .executes(ctx -> myPresetSelectShared(ctx, true))
-                                .then(Commands.literal("defer").executes(ctx -> myPresetSelectShared(ctx, false))))
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetSelectShared(ctx, true))
+                                        .then(Commands.literal("defer").executes(ctx -> myPresetSelectShared(ctx, false)))))
                         .then(Commands.literal("clearshared")
-                                .executes(ctx -> myPresetClearShared(ctx))))
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetClearShared(ctx)))))
                 .then(Commands.literal("forceselect")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player())
@@ -1054,18 +1056,23 @@ public final class ClassCommand {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         UUID id = UuidArgument.getUuid(ctx, "id");
         MinecraftServer server = ctx.getSource().getServer();
-        if (!LoadoutManager.get(server).receiveSharedPreset(server, player, id)) {
+        LoadoutManager.ReceiveResult result = LoadoutManager.get(server).receiveSharedPreset(server, player, id);
+        if (result == LoadoutManager.ReceiveResult.FULL) {
+            return fail(ctx, "classloadout.msg.sharedpreset_full", LoadoutManager.MAX_SHARED_PRESETS);
+        }
+        if (result == LoadoutManager.ReceiveResult.NOT_FOUND) {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_received_self"), false);
         return 1;
     }
 
-    /** Self-service: applies whatever's currently in the player's own shared-preset slot. Same {@code immediate}/{@code defer} split as {@link #select}. */
+    /** Self-service: applies one of the player's own received shared presets. Same {@code immediate}/{@code defer} split as {@link #select}. */
     private static int myPresetSelectShared(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
         MinecraftServer server = ctx.getSource().getServer();
-        if (!LoadoutManager.get(server).selectSharedPreset(server, player)) {
+        if (!LoadoutManager.get(server).selectSharedPreset(server, player, id)) {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
         if (immediate) {
@@ -1077,8 +1084,9 @@ public final class ClassCommand {
 
     private static int myPresetClearShared(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
         MinecraftServer server = ctx.getSource().getServer();
-        if (!LoadoutManager.get(server).clearSharedPreset(server, player)) {
+        if (!LoadoutManager.get(server).clearSharedPreset(server, player, id)) {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_deleted"), false);

@@ -8,6 +8,7 @@
   "classloadout.msg.mypreset_applied": "Loadout set from your personal preset.",
   "classloadout.msg.mypreset_deleted": "Personal preset deleted.",
   "classloadout.msg.mypreset_received_self": "Received! Check the Shared With You slot.",
+  "classloadout.msg.sharedpreset_full": "You already have %s received presets - clear one first.",
   "classloadout.msg.force_select_applied": "Applied preset \"%s\" to %s.",
   "classloadout.msg.force_select_notice": "An operator set your loadout to \"%s\".",
   "classloadout.msg.force_assign_applied": "Set %s to %s.",

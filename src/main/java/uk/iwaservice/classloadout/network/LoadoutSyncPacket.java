@@ -31,10 +31,9 @@ import java.util.UUID;
  * - slots an OP force-assigned that the recipient can't self-service-change),
  * plus that one recipient's own personal presets (see {@code /class mypreset}
  * - self-service, capped, and never sent to anyone but their own owner), plus
- * that one recipient's own shared-preset "inbox" slot ({@code sharedPreset} -
- * 0 or 1 entries, reusing the same {@code List<Entry>} wire shape as
- * {@code personalPresets} purely to avoid a second "optional Entry" codec;
- * see {@code LoadoutManager#sharePersonalPreset}).
+ * that one recipient's own received-preset "inbox" ({@code sharedPresets},
+ * capped at {@code LoadoutManager#MAX_SHARED_PRESETS} - see {@code
+ * LoadoutManager#receiveSharedPreset}).
  */
 public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whitelists whitelists,
                                 List<AmmoGrantEntry> ammoGrants, List<VariantEntry> variants,
@@ -42,7 +41,7 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
                                 List<ResourceLocation> hammerBlocks, List<LoadoutSlot> lockedSlots,
                                 boolean whitelistEnabled, List<PriceEntry> prices, int points,
                                 List<ResourceLocation> purchasedItems, List<ResourceLocation> bannedItems,
-                                List<Entry> personalPresets, List<Entry> sharedPreset) {
+                                List<Entry> personalPresets, List<Entry> sharedPresets) {
 
     /** One OP-configured ammo grant: equipping {@code item} in {@code slot} also gives {@code count} of {@code ammoItem}. */
     public record AmmoGrantEntry(LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
@@ -192,7 +191,7 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         writeList(buf, msg.purchasedItems);
         writeList(buf, msg.bannedItems);
         writeEntries(buf, msg.personalPresets);
-        writeEntries(buf, msg.sharedPreset);
+        writeEntries(buf, msg.sharedPresets);
     }
 
     private static void writeEntries(FriendlyByteBuf buf, List<Entry> entries) {
@@ -288,10 +287,10 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         List<ResourceLocation> purchasedItems = readList(buf);
         List<ResourceLocation> bannedItems = readList(buf);
         List<Entry> personalPresets = readEntries(buf);
-        List<Entry> sharedPreset = readEntries(buf);
+        List<Entry> sharedPresets = readEntries(buf);
         return new LoadoutSyncPacket(classes, personal, whitelists, ammoGrants, variants, protectedItems, spawnKit,
                 hammerBlocks, lockedSlots, whitelistEnabled, prices, points, purchasedItems, bannedItems,
-                personalPresets, sharedPreset);
+                personalPresets, sharedPresets);
     }
 
     private static void writeOptional(FriendlyByteBuf buf, @Nullable ResourceLocation loc) {

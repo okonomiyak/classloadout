@@ -8,6 +8,7 @@
   "classloadout.msg.mypreset_applied": "マイプリセットをロードアウトに反映しました。",
   "classloadout.msg.mypreset_deleted": "マイプリセットを削除しました。",
   "classloadout.msg.mypreset_received_self": "受け取りました!「共有されたプリセット」欄を確認してください。",
+  "classloadout.msg.sharedpreset_full": "受け取ったプリセットは既に%s個あります。先に1つ削除してください。",
   "classloadout.msg.force_select_applied": "プリセット「%s」を%sに適用しました。",
   "classloadout.msg.force_select_notice": "運営があなたのロードアウトを「%s」に設定しました。",
   "classloadout.msg.force_assign_applied": "%2$sの%1$sを設定しました。",

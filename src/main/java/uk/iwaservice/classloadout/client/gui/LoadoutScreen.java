@@ -55,7 +55,7 @@ public class LoadoutScreen extends Screen {
     private final List<PresetRow> presetRows = new ArrayList<>();
     /** Same row shape as {@link PresetRow}, but for the player's own {@code /class mypreset} entries. */
     private final List<PresetRow> personalPresetRows = new ArrayList<>();
-    /** 0 or 1 entries - the player's shared-preset "inbox" slot, see {@code LoadoutClientData#getSharedPreset}. */
+    /** Same row shape as {@link PresetRow}, but for the player's received-preset "inbox", see {@code LoadoutClientData#getSharedPresets}. */
     private final List<PresetRow> sharedPresetRows = new ArrayList<>();
     private Tab selectedTab = Tab.PRESETS;
 
@@ -87,12 +87,12 @@ public class LoadoutScreen extends Screen {
     protected void init() {
         List<LoadoutSyncPacket.Entry> classes = LoadoutClientData.getClasses();
         List<LoadoutSyncPacket.Entry> myPresets = LoadoutClientData.getPersonalPresets();
-        LoadoutSyncPacket.Entry sharedEntry = LoadoutClientData.getSharedPreset();
+        List<LoadoutSyncPacket.Entry> sharedEntries = LoadoutClientData.getSharedPresets();
 
         int tabContentH = 14 + switch (selectedTab) {
             case PRESETS -> classes.size() * PRESET_ROW_H;
             case MY_PRESETS -> myPresets.size() * PRESET_ROW_H + 30;
-            case SHARED -> 30 + (sharedEntry == null ? 0 : PRESET_ROW_H + 10);
+            case SHARED -> sharedEntries.size() * PRESET_ROW_H + 30;
         };
         panelWidth = Math.min(360, this.width - 16);
         panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + 2 * SLOT + 8 + 34 + 16 + 30 + tabContentH + 30,
@@ -167,15 +167,15 @@ public class LoadoutScreen extends Screen {
                 y += 20 + 10;
             }
             case SHARED -> {
-                if (sharedEntry != null) {
-                    sharedPresetRows.add(new PresetRow(sharedEntry, y));
+                for (LoadoutSyncPacket.Entry entry : sharedEntries) {
+                    sharedPresetRows.add(new PresetRow(entry, y));
                     addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                                    b -> command("class mypreset selectshared"))
+                                    b -> command("class mypreset selectshared " + entry.id()))
                             .bounds(panelLeft + panelWidth - PAD - 78, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
                     addRenderableWidget(Button.builder(Component.literal("x"),
-                                    b -> rawCommand("class mypreset clearshared"))
+                                    b -> rawCommand("class mypreset clearshared " + entry.id()))
                             .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
-                    y += PRESET_ROW_H + 10;
+                    y += PRESET_ROW_H;
                 }
                 addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_receive_button"),
                                 b -> minecraft.setScreen(new ReceiveSharedPresetScreen(this)))
