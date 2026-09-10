@@ -54,6 +54,8 @@ public final class LoadoutClientData {
     private static Set<ResourceLocation> purchasedItems = Set.of();
     /** The local player's own personal presets (see {@code /class mypreset}) - never someone else's, capped server-side at {@code LoadoutManager#MAX_PERSONAL_PRESETS}. */
     private static List<LoadoutSyncPacket.Entry> personalPresets = List.of();
+    /** The local player's own shared-preset "inbox" slot (0 or 1 entries) - see {@code LoadoutManager#sharePersonalPreset}. */
+    private static List<LoadoutSyncPacket.Entry> sharedPreset = List.of();
     /** Incremented on every sync; lets screens detect updates cheaply. */
     private static int revision;
 
@@ -75,9 +77,11 @@ public final class LoadoutClientData {
                                               int newPoints,
                                               List<ResourceLocation> newPurchasedItems,
                                               List<ResourceLocation> newBannedItems,
-                                              List<LoadoutSyncPacket.Entry> newPersonalPresets) {
+                                              List<LoadoutSyncPacket.Entry> newPersonalPresets,
+                                              List<LoadoutSyncPacket.Entry> newSharedPreset) {
         classes = List.copyOf(newClasses);
         personalPresets = List.copyOf(newPersonalPresets);
+        sharedPreset = List.copyOf(newSharedPreset);
         personal = newPersonal;
         whitelists = newWhitelists;
         Map<LoadoutSlot, Map<ResourceLocation, Map<ResourceLocation, Integer>>> grants = new EnumMap<>(LoadoutSlot.class);
@@ -138,6 +142,7 @@ public final class LoadoutClientData {
         points = 0;
         purchasedItems = Set.of();
         personalPresets = List.of();
+        sharedPreset = List.of();
         revision++;
     }
 
@@ -148,6 +153,12 @@ public final class LoadoutClientData {
     /** The local player's own personal presets (see {@code /class mypreset}) - never someone else's. */
     public static synchronized List<LoadoutSyncPacket.Entry> getPersonalPresets() {
         return new ArrayList<>(personalPresets);
+    }
+
+    /** The local player's own shared-preset "inbox" slot, or null if empty - see {@code LoadoutManager#sharePersonalPreset}. */
+    @Nullable
+    public static synchronized LoadoutSyncPacket.Entry getSharedPreset() {
+        return sharedPreset.isEmpty() ? null : sharedPreset.get(0);
     }
 
     @Nullable

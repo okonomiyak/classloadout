@@ -56,6 +56,8 @@ public class LoadoutManager extends SavedData {
     private final Map<UUID, PersonalLoadout> personalLoadouts = new java.util.HashMap<>();
     /** Player-created presets (see {@code /class mypreset}), capped at {@link #MAX_PERSONAL_PRESETS} per player - reuses {@link ClassDefinition}'s shape since the data is identical, just self-service and visible/usable only by their own owner (never synced to anyone else, unlike the OP-managed {@link #classes}). */
     private final Map<UUID, List<ClassDefinition>> personalPresets = new java.util.HashMap<>();
+    /** One dedicated "inbox" slot per player for a preset shared by another player (see {@link #sharePersonalPreset}) - separate from {@link #personalPresets} so an incoming share never competes with the player's own two. A new share overwrites whatever was here before; absent = nothing received (or already applied/cleared). */
+    private final Map<UUID, ClassDefinition> sharedPreset = new java.util.HashMap<>();
     /** OP-forced slots (via {@code /class forceassign}/{@code forceselect} and their all/team variants): the player can't self-service-change these until an OP frees them (assigning {@code minecraft:air} to a forced slot unlocks it - see {@code ClassCommand}). */
     private final Map<UUID, Set<LoadoutSlot>> lockedSlots = new java.util.HashMap<>();
     /** Insertion order preserved for a stable whitelist-editor grid; empty (or absent) = nothing assignable yet. */
@@ -706,13 +708,15 @@ public class LoadoutManager extends SavedData {
     }
 
     /** Outcome of {@link #sharePersonalPreset}. */
-    public enum ShareResult { OK, PRESET_NOT_FOUND, TARGET_FULL }
+    public enum ShareResult { OK, PRESET_NOT_FOUND }
 
     /**
-     * Copies one of {@code from}'s personal presets into {@code to}'s own personal presets under
-     * a fresh id (same name/slots) - {@code from}'s own copy is untouched. Fails with
-     * {@link ShareResult#TARGET_FULL} rather than bumping anything out if {@code to} is already
-     * at {@link #MAX_PERSONAL_PRESETS}.
+     * Copies one of {@code from}'s personal presets into {@code to}'s single dedicated
+     * {@link #sharedPreset} slot (fresh id, same name/slots) - {@code from}'s own copy is
+     * untouched. Unlike {@link #personalPresets}, this slot has no cap to hit: a new share always
+     * overwrites whatever {@code to} had received before, since it's meant as a one-item "inbox"
+     * rather than permanent storage - see {@link #selectSharedPreset} to apply it, or the regular
+     * {@code /class mypreset save} to keep a copy permanently after applying it.
      */
     public ShareResult sharePersonalPreset(MinecraftServer server, ServerPlayer from, UUID presetId, ServerPlayer to) {
         ClassDefinition source = getPersonalPresets(from.getUUID()).stream()
@@ -720,17 +724,37 @@ public class LoadoutManager extends SavedData {
         if (source == null) {
             return ShareResult.PRESET_NOT_FOUND;
         }
-        List<ClassDefinition> targetList = personalPresets.computeIfAbsent(to.getUUID(), p -> new ArrayList<>());
-        if (targetList.size() >= MAX_PERSONAL_PRESETS) {
-            return ShareResult.TARGET_FULL;
-        }
         ClassDefinition copy = new ClassDefinition(UUID.randomUUID(), source.name(), source.icon(),
                 source.main(), source.sidearm(), source.throwable(), source.gadget(), source.gadget2(), source.melee(),
                 source.helmet(), source.chestplate(), source.leggings(), source.boots());
-        targetList.add(copy);
+        sharedPreset.put(to.getUUID(), copy);
         setDirty();
         sendTo(server, to);
         return ShareResult.OK;
+    }
+
+    @Nullable
+    public ClassDefinition getSharedPreset(UUID player) {
+        return sharedPreset.get(player);
+    }
+
+    /** Same locked-slot handling as {@link #applyPresetSelfService}. False (no-op) if the player has nothing in their shared-preset slot. */
+    public boolean selectSharedPreset(MinecraftServer server, ServerPlayer player) {
+        ClassDefinition def = sharedPreset.get(player.getUUID());
+        if (def == null) {
+            return false;
+        }
+        applySelfService(server, player, def);
+        return true;
+    }
+
+    public boolean clearSharedPreset(MinecraftServer server, ServerPlayer player) {
+        if (sharedPreset.remove(player.getUUID()) == null) {
+            return false;
+        }
+        setDirty();
+        sendTo(server, player);
+        return true;
     }
 
     /** Resets the player back to "never touched their loadout" (equip-on-respawn stops overwriting their hotbar). Doesn't respect locked slots - see {@link #clearPersonalLoadoutSelfService} for the self-service path that does. */
@@ -814,6 +838,11 @@ public class LoadoutManager extends SavedData {
         for (ClassDefinition def : getPersonalPresets(player.getUUID())) {
             personalPresetEntries.add(LoadoutSyncPacket.Entry.of(def));
         }
+        // 0 or 1 entries - reuses the same list-of-Entry wire shape as personalPresetEntries above
+        // purely so the client/network code doesn't need a second, "optional single Entry" codec.
+        ClassDefinition shared = sharedPreset.get(player.getUUID());
+        List<LoadoutSyncPacket.Entry> sharedPresetEntries = shared == null
+                ? List.of() : List.of(LoadoutSyncPacket.Entry.of(shared));
         PersonalLoadout personal = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
 
         Map<LoadoutSlot, List<ResourceLocation>> whitelistsBySlot = new EnumMap<>(LoadoutSlot.class);
@@ -853,7 +882,7 @@ public class LoadoutManager extends SavedData {
                 ammoGrantEntries, variantEntries, new ArrayList<>(protectedItems), spawnKitEntries,
                 new ArrayList<>(hammerBlocks), new ArrayList<>(getLockedSlots(player.getUUID())), whitelistEnabled,
                 priceEntries, getPoints(player.getUUID()), new ArrayList<>(purchased), new ArrayList<>(bannedItems),
-                personalPresetEntries));
+                personalPresetEntries, sharedPresetEntries));
     }
 
     // --- persistence ---
@@ -879,6 +908,11 @@ public class LoadoutManager extends SavedData {
                 defs.add(ClassDefinition.load(presetList.getCompound(j)));
             }
             manager.personalPresets.put(owner.getUUID("Player"), defs);
+        }
+        ListTag sharedPresetList = tag.getList("SharedPresets", Tag.TAG_COMPOUND);
+        for (int i = 0; i < sharedPresetList.size(); i++) {
+            CompoundTag s = sharedPresetList.getCompound(i);
+            manager.sharedPreset.put(s.getUUID("Player"), ClassDefinition.load(s.getCompound("Preset")));
         }
         ListTag lockedSlotList = tag.getList("LockedSlots", Tag.TAG_COMPOUND);
         for (int i = 0; i < lockedSlotList.size(); i++) {
@@ -1028,6 +1062,15 @@ public class LoadoutManager extends SavedData {
             personalPresetOwners.add(owner);
         }
         tag.put("PersonalPresets", personalPresetOwners);
+
+        ListTag sharedPresetList = new ListTag();
+        for (Map.Entry<UUID, ClassDefinition> e : sharedPreset.entrySet()) {
+            CompoundTag s = new CompoundTag();
+            s.putUUID("Player", e.getKey());
+            s.put("Preset", e.getValue().save());
+            sharedPresetList.add(s);
+        }
+        tag.put("SharedPresets", sharedPresetList);
 
         ListTag lockedSlotList = new ListTag();
         for (Map.Entry<UUID, Set<LoadoutSlot>> e : lockedSlots.entrySet()) {
