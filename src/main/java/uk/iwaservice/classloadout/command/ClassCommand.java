@@ -243,10 +243,9 @@ public final class ClassCommand {
                         .then(Commands.literal("delete")
                                 .then(Commands.argument("id", UuidArgument.uuid())
                                         .executes(ctx -> myPresetDelete(ctx))))
-                        .then(Commands.literal("share")
+                        .then(Commands.literal("receive")
                                 .then(Commands.argument("id", UuidArgument.uuid())
-                                .then(Commands.argument("player", EntityArgument.player())
-                                        .executes(ctx -> myPresetShare(ctx)))))
+                                        .executes(ctx -> myPresetReceive(ctx))))
                         .then(Commands.literal("selectshared")
                                 .executes(ctx -> myPresetSelectShared(ctx, true))
                                 .then(Commands.literal("defer").executes(ctx -> myPresetSelectShared(ctx, false))))
@@ -1045,21 +1044,20 @@ public final class ClassCommand {
         return 1;
     }
 
-    /** Self-service, no OP permission needed - copies one of the sender's own personal presets into the target's, under a fresh id. The sender's own copy is untouched. */
-    private static int myPresetShare(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        ServerPlayer sender = ctx.getSource().getPlayerOrException();
+    /**
+     * Self-service, no OP permission needed - redeems any player's personal preset "code" (their
+     * preset's own id, shown to them in {@link uk.iwaservice.classloadout.client.gui.LoadoutScreen}
+     * as copyable text) into the caller's own shared-preset slot. The code's original owner isn't
+     * looked up by name - anyone holding the code can redeem it, and doesn't need the owner online.
+     */
+    private static int myPresetReceive(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         UUID id = UuidArgument.getUuid(ctx, "id");
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-        if (target == sender) {
-            return fail(ctx, "classloadout.msg.mypreset_share_self");
-        }
         MinecraftServer server = ctx.getSource().getServer();
-        LoadoutManager.ShareResult result = LoadoutManager.get(server).sharePersonalPreset(server, sender, id, target);
-        if (result == LoadoutManager.ShareResult.PRESET_NOT_FOUND) {
+        if (!LoadoutManager.get(server).receiveSharedPreset(server, player, id)) {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
-        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_shared", target.getName()), false);
-        target.sendSystemMessage(Component.translatable("classloadout.msg.mypreset_received", sender.getName()));
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_received_self"), false);
         return 1;
     }
 

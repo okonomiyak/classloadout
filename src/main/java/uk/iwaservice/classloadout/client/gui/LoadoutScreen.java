@@ -3,6 +3,8 @@ package uk.iwaservice.classloadout.client.gui;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -15,6 +17,7 @@ import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Player-facing loadout screen, reachable only from the death screen's
@@ -131,7 +134,9 @@ public class LoadoutScreen extends Screen {
             personalPresetRows.add(new PresetRow(entry, y));
             addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
                             b -> command("class mypreset select " + entry.id()))
-                    .bounds(panelLeft + panelWidth - PAD - 78, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
+                    .bounds(panelLeft + panelWidth - PAD - 88, y + (PRESET_ROW_H - 20) / 2, 44, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("#"), b -> showCode(entry.id()))
+                    .bounds(panelLeft + panelWidth - PAD - 42, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
             addRenderableWidget(Button.builder(Component.literal("x"),
                             b -> rawCommand("class mypreset delete " + entry.id()))
                     .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
@@ -206,6 +211,22 @@ public class LoadoutScreen extends Screen {
         if (minecraft != null && minecraft.player != null) {
             minecraft.player.connection.sendCommand(cmd);
         }
+    }
+
+    /**
+     * Purely client-side (no server round trip needed - the id is already known locally): prints
+     * the preset's own id as a click-to-copy chat message, for the player to hand out however they
+     * like (chat, Discord, ...) so someone else can redeem it via {@code /class mypreset receive}.
+     */
+    private void showCode(UUID id) {
+        if (minecraft == null) {
+            return;
+        }
+        Component code = Component.translatable("classloadout.gui.mypreset_code", id.toString())
+                .withStyle(style -> style
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, id.toString()))
+                        .withColor(ChatFormatting.AQUA));
+        minecraft.gui.getChat().addMessage(code);
     }
 
     // --- rendering ---

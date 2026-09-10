@@ -707,30 +707,41 @@ public class LoadoutManager extends SavedData {
         return true;
     }
 
-    /** Outcome of {@link #sharePersonalPreset}. */
-    public enum ShareResult { OK, PRESET_NOT_FOUND }
-
     /**
-     * Copies one of {@code from}'s personal presets into {@code to}'s single dedicated
-     * {@link #sharedPreset} slot (fresh id, same name/slots) - {@code from}'s own copy is
-     * untouched. Unlike {@link #personalPresets}, this slot has no cap to hit: a new share always
-     * overwrites whatever {@code to} had received before, since it's meant as a one-item "inbox"
+     * Pull-based sharing: {@code presetId} is any player's personal preset id (shown to its owner
+     * as a copyable "code" in {@code LoadoutScreen} - see {@code classloadout.gui.mypreset_code}),
+     * handed out out-of-band (chat, Discord, whatever). Anyone who has the code can redeem it here
+     * into their own single dedicated {@link #sharedPreset} slot (fresh id, same name/slots) -
+     * the original owner's copy is untouched, and doesn't need to be online or even be told who
+     * redeemed it. Unlike {@link #personalPresets}, this slot has no cap to hit: redeeming a new
+     * code always overwrites whatever was there before, since it's meant as a one-item "inbox"
      * rather than permanent storage - see {@link #selectSharedPreset} to apply it, or the regular
-     * {@code /class mypreset save} to keep a copy permanently after applying it.
+     * {@code /class mypreset save} to keep a copy permanently after applying it. False if no
+     * personal preset anywhere has that id.
      */
-    public ShareResult sharePersonalPreset(MinecraftServer server, ServerPlayer from, UUID presetId, ServerPlayer to) {
-        ClassDefinition source = getPersonalPresets(from.getUUID()).stream()
-                .filter(d -> d.id().equals(presetId)).findFirst().orElse(null);
+    public boolean receiveSharedPreset(MinecraftServer server, ServerPlayer player, UUID presetId) {
+        ClassDefinition source = null;
+        for (List<ClassDefinition> owned : personalPresets.values()) {
+            for (ClassDefinition def : owned) {
+                if (def.id().equals(presetId)) {
+                    source = def;
+                    break;
+                }
+            }
+            if (source != null) {
+                break;
+            }
+        }
         if (source == null) {
-            return ShareResult.PRESET_NOT_FOUND;
+            return false;
         }
         ClassDefinition copy = new ClassDefinition(UUID.randomUUID(), source.name(), source.icon(),
                 source.main(), source.sidearm(), source.throwable(), source.gadget(), source.gadget2(), source.melee(),
                 source.helmet(), source.chestplate(), source.leggings(), source.boots());
-        sharedPreset.put(to.getUUID(), copy);
+        sharedPreset.put(player.getUUID(), copy);
         setDirty();
-        sendTo(server, to);
-        return ShareResult.OK;
+        sendTo(server, player);
+        return true;
     }
 
     @Nullable
