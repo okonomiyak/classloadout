@@ -54,6 +54,8 @@ public class LoadoutManager extends SavedData {
     private final Map<UUID, ClassDefinition> classes = new LinkedHashMap<>();
     /** Absent entry = player has never touched their loadout; present (even if all-empty) = they have. */
     private final Map<UUID, PersonalLoadout> personalLoadouts = new java.util.HashMap<>();
+    /** Player-created presets (see {@code /class mypreset}), capped at {@link #MAX_PERSONAL_PRESETS} per player - reuses {@link ClassDefinition}'s shape since the data is identical, just self-service and visible/usable only by their own owner (never synced to anyone else, unlike the OP-managed {@link #classes}). */
+    private final Map<UUID, List<ClassDefinition>> personalPresets = new java.util.HashMap<>();
     /** OP-forced slots (via {@code /class forceassign}/{@code forceselect} and their all/team variants): the player can't self-service-change these until an OP frees them (assigning {@code minecraft:air} to a forced slot unlocks it - see {@code ClassCommand}). */
     private final Map<UUID, Set<LoadoutSlot>> lockedSlots = new java.util.HashMap<>();
     /** Insertion order preserved for a stable whitelist-editor grid; empty (or absent) = nothing assignable yet. */
@@ -647,10 +649,59 @@ public class LoadoutManager extends SavedData {
         if (def == null) {
             return false;
         }
+        applySelfService(server, player, def);
+        return true;
+    }
+
+    private void applySelfService(MinecraftServer server, ServerPlayer player, ClassDefinition def) {
         PersonalLoadout current = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
         personalLoadouts.put(player.getUUID(), keepLockedSlots(player.getUUID(), current, PersonalLoadout.fromClass(def)));
         setDirty();
         sendTo(server, player);
+    }
+
+    // --- personal presets (player self-service, capped, private to their own owner) ---
+
+    public static final int MAX_PERSONAL_PRESETS = 2;
+
+    public List<ClassDefinition> getPersonalPresets(UUID player) {
+        return personalPresets.getOrDefault(player, List.of());
+    }
+
+    /** Snapshots the player's current personal loadout as a new named preset. False (no-op) if they're already at {@link #MAX_PERSONAL_PRESETS}. */
+    public boolean savePersonalPreset(MinecraftServer server, ServerPlayer player, String name) {
+        List<ClassDefinition> existing = personalPresets.computeIfAbsent(player.getUUID(), p -> new ArrayList<>());
+        if (existing.size() >= MAX_PERSONAL_PRESETS) {
+            return false;
+        }
+        PersonalLoadout loadout = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
+        ClassDefinition def = new ClassDefinition(UUID.randomUUID(), name, null,
+                loadout.main(), loadout.sidearm(), loadout.throwable(), loadout.gadget(), loadout.gadget2(), loadout.melee(),
+                loadout.helmet(), loadout.chestplate(), loadout.leggings(), loadout.boots());
+        existing.add(def);
+        setDirty();
+        sendTo(server, player);
+        return true;
+    }
+
+    public boolean deletePersonalPreset(MinecraftServer server, ServerPlayer player, UUID id) {
+        List<ClassDefinition> existing = personalPresets.get(player.getUUID());
+        boolean removed = existing != null && existing.removeIf(d -> d.id().equals(id));
+        if (removed) {
+            setDirty();
+            sendTo(server, player);
+        }
+        return removed;
+    }
+
+    /** Same locked-slot handling as {@link #applyPresetSelfService}, but looking the id up in the player's own {@link #personalPresets} instead of the OP-managed {@link #classes} - a player can only ever select their own. */
+    public boolean selectPersonalPreset(MinecraftServer server, ServerPlayer player, UUID id) {
+        ClassDefinition def = getPersonalPresets(player.getUUID()).stream()
+                .filter(d -> d.id().equals(id)).findFirst().orElse(null);
+        if (def == null) {
+            return false;
+        }
+        applySelfService(server, player, def);
         return true;
     }
 
@@ -731,6 +782,10 @@ public class LoadoutManager extends SavedData {
         for (ClassDefinition def : classes.values()) {
             entries.add(LoadoutSyncPacket.Entry.of(def));
         }
+        List<LoadoutSyncPacket.Entry> personalPresetEntries = new ArrayList<>();
+        for (ClassDefinition def : getPersonalPresets(player.getUUID())) {
+            personalPresetEntries.add(LoadoutSyncPacket.Entry.of(def));
+        }
         PersonalLoadout personal = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
 
         Map<LoadoutSlot, List<ResourceLocation>> whitelistsBySlot = new EnumMap<>(LoadoutSlot.class);
@@ -769,7 +824,8 @@ public class LoadoutManager extends SavedData {
                 LoadoutSyncPacket.PersonalData.of(personal), LoadoutSyncPacket.Whitelists.of(whitelistsBySlot),
                 ammoGrantEntries, variantEntries, new ArrayList<>(protectedItems), spawnKitEntries,
                 new ArrayList<>(hammerBlocks), new ArrayList<>(getLockedSlots(player.getUUID())), whitelistEnabled,
-                priceEntries, getPoints(player.getUUID()), new ArrayList<>(purchased), new ArrayList<>(bannedItems)));
+                priceEntries, getPoints(player.getUUID()), new ArrayList<>(purchased), new ArrayList<>(bannedItems),
+                personalPresetEntries));
     }
 
     // --- persistence ---
@@ -785,6 +841,16 @@ public class LoadoutManager extends SavedData {
         for (int i = 0; i < personalList.size(); i++) {
             CompoundTag p = personalList.getCompound(i);
             manager.personalLoadouts.put(p.getUUID("Player"), PersonalLoadout.load(p.getCompound("Loadout")));
+        }
+        ListTag personalPresetOwners = tag.getList("PersonalPresets", Tag.TAG_COMPOUND);
+        for (int i = 0; i < personalPresetOwners.size(); i++) {
+            CompoundTag owner = personalPresetOwners.getCompound(i);
+            List<ClassDefinition> defs = new ArrayList<>();
+            ListTag presetList = owner.getList("Presets", Tag.TAG_COMPOUND);
+            for (int j = 0; j < presetList.size(); j++) {
+                defs.add(ClassDefinition.load(presetList.getCompound(j)));
+            }
+            manager.personalPresets.put(owner.getUUID("Player"), defs);
         }
         ListTag lockedSlotList = tag.getList("LockedSlots", Tag.TAG_COMPOUND);
         for (int i = 0; i < lockedSlotList.size(); i++) {
@@ -918,6 +984,22 @@ public class LoadoutManager extends SavedData {
             personalList.add(p);
         }
         tag.put("PersonalLoadouts", personalList);
+
+        ListTag personalPresetOwners = new ListTag();
+        for (Map.Entry<UUID, List<ClassDefinition>> e : personalPresets.entrySet()) {
+            if (e.getValue().isEmpty()) {
+                continue;
+            }
+            CompoundTag owner = new CompoundTag();
+            owner.putUUID("Player", e.getKey());
+            ListTag presetList = new ListTag();
+            for (ClassDefinition def : e.getValue()) {
+                presetList.add(def.save());
+            }
+            owner.put("Presets", presetList);
+            personalPresetOwners.add(owner);
+        }
+        tag.put("PersonalPresets", personalPresetOwners);
 
         ListTag lockedSlotList = new ListTag();
         for (Map.Entry<UUID, Set<LoadoutSlot>> e : lockedSlots.entrySet()) {

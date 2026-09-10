@@ -52,6 +52,8 @@ public final class LoadoutClientData {
     private static int points;
     /** Priced items the local player has already bought via {@code /class buy} - never someone else's. */
     private static Set<ResourceLocation> purchasedItems = Set.of();
+    /** The local player's own personal presets (see {@code /class mypreset}) - never someone else's, capped server-side at {@code LoadoutManager#MAX_PERSONAL_PRESETS}. */
+    private static List<LoadoutSyncPacket.Entry> personalPresets = List.of();
     /** Incremented on every sync; lets screens detect updates cheaply. */
     private static int revision;
 
@@ -72,8 +74,10 @@ public final class LoadoutClientData {
                                               List<LoadoutSyncPacket.PriceEntry> newPrices,
                                               int newPoints,
                                               List<ResourceLocation> newPurchasedItems,
-                                              List<ResourceLocation> newBannedItems) {
+                                              List<ResourceLocation> newBannedItems,
+                                              List<LoadoutSyncPacket.Entry> newPersonalPresets) {
         classes = List.copyOf(newClasses);
+        personalPresets = List.copyOf(newPersonalPresets);
         personal = newPersonal;
         whitelists = newWhitelists;
         Map<LoadoutSlot, Map<ResourceLocation, Map<ResourceLocation, Integer>>> grants = new EnumMap<>(LoadoutSlot.class);
@@ -133,11 +137,17 @@ public final class LoadoutClientData {
         prices = Map.of();
         points = 0;
         purchasedItems = Set.of();
+        personalPresets = List.of();
         revision++;
     }
 
     public static synchronized List<LoadoutSyncPacket.Entry> getClasses() {
         return new ArrayList<>(classes);
+    }
+
+    /** The local player's own personal presets (see {@code /class mypreset}) - never someone else's. */
+    public static synchronized List<LoadoutSyncPacket.Entry> getPersonalPresets() {
+        return new ArrayList<>(personalPresets);
     }
 
     @Nullable

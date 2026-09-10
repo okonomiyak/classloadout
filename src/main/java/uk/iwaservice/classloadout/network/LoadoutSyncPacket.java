@@ -28,14 +28,17 @@ import java.util.UUID;
  * every respawn / eligible for the hammer's area-of-effect break / blocked
  * from equipping regardless of whitelist - same for everyone), plus
  * that one recipient's own OP-locked slots (see {@code LoadoutManager#lockSlot}
- * - slots an OP force-assigned that the recipient can't self-service-change).
+ * - slots an OP force-assigned that the recipient can't self-service-change),
+ * plus that one recipient's own personal presets (see {@code /class mypreset}
+ * - self-service, capped, and never sent to anyone but their own owner).
  */
 public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whitelists whitelists,
                                 List<AmmoGrantEntry> ammoGrants, List<VariantEntry> variants,
                                 List<ResourceLocation> protectedItems, List<SpawnKitEntry> spawnKit,
                                 List<ResourceLocation> hammerBlocks, List<LoadoutSlot> lockedSlots,
                                 boolean whitelistEnabled, List<PriceEntry> prices, int points,
-                                List<ResourceLocation> purchasedItems, List<ResourceLocation> bannedItems) {
+                                List<ResourceLocation> purchasedItems, List<ResourceLocation> bannedItems,
+                                List<Entry> personalPresets) {
 
     /** One OP-configured ammo grant: equipping {@code item} in {@code slot} also gives {@code count} of {@code ammoItem}. */
     public record AmmoGrantEntry(LoadoutSlot slot, ResourceLocation item, ResourceLocation ammoItem, int count) {
@@ -129,22 +132,7 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
     }
 
     public static void encode(LoadoutSyncPacket msg, FriendlyByteBuf buf) {
-        buf.writeVarInt(msg.classes.size());
-        for (Entry e : msg.classes) {
-            buf.writeUUID(e.id());
-            buf.writeUtf(e.name());
-            writeOptional(buf, e.icon());
-            writeOptional(buf, e.main());
-            writeOptional(buf, e.sidearm());
-            writeOptional(buf, e.throwable());
-            writeOptional(buf, e.gadget());
-            writeOptional(buf, e.gadget2());
-            writeOptional(buf, e.melee());
-            writeOptional(buf, e.helmet());
-            writeOptional(buf, e.chestplate());
-            writeOptional(buf, e.leggings());
-            writeOptional(buf, e.boots());
-        }
+        writeEntries(buf, msg.classes);
         writeOptional(buf, msg.personal.main());
         writeOptional(buf, msg.personal.sidearm());
         writeOptional(buf, msg.personal.throwable());
@@ -199,11 +187,31 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         buf.writeVarInt(msg.points);
         writeList(buf, msg.purchasedItems);
         writeList(buf, msg.bannedItems);
+        writeEntries(buf, msg.personalPresets);
     }
 
-    public static LoadoutSyncPacket decode(FriendlyByteBuf buf) {
+    private static void writeEntries(FriendlyByteBuf buf, List<Entry> entries) {
+        buf.writeVarInt(entries.size());
+        for (Entry e : entries) {
+            buf.writeUUID(e.id());
+            buf.writeUtf(e.name());
+            writeOptional(buf, e.icon());
+            writeOptional(buf, e.main());
+            writeOptional(buf, e.sidearm());
+            writeOptional(buf, e.throwable());
+            writeOptional(buf, e.gadget());
+            writeOptional(buf, e.gadget2());
+            writeOptional(buf, e.melee());
+            writeOptional(buf, e.helmet());
+            writeOptional(buf, e.chestplate());
+            writeOptional(buf, e.leggings());
+            writeOptional(buf, e.boots());
+        }
+    }
+
+    private static List<Entry> readEntries(FriendlyByteBuf buf) {
         int count = buf.readVarInt();
-        List<Entry> classes = new ArrayList<>(count);
+        List<Entry> entries = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             UUID id = buf.readUUID();
             String name = buf.readUtf();
@@ -218,9 +226,14 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
             ResourceLocation chestplate = readOptional(buf);
             ResourceLocation leggings = readOptional(buf);
             ResourceLocation boots = readOptional(buf);
-            classes.add(new Entry(id, name, icon, main, sidearm, throwable, gadget, gadget2, melee,
+            entries.add(new Entry(id, name, icon, main, sidearm, throwable, gadget, gadget2, melee,
                     helmet, chestplate, leggings, boots));
         }
+        return entries;
+    }
+
+    public static LoadoutSyncPacket decode(FriendlyByteBuf buf) {
+        List<Entry> classes = readEntries(buf);
         PersonalData personal = new PersonalData(readOptional(buf), readOptional(buf), readOptional(buf),
                 readOptional(buf), readOptional(buf), readOptional(buf), readOptional(buf), readOptional(buf),
                 readOptional(buf), readOptional(buf));
@@ -269,8 +282,10 @@ public record LoadoutSyncPacket(List<Entry> classes, PersonalData personal, Whit
         int points = buf.readVarInt();
         List<ResourceLocation> purchasedItems = readList(buf);
         List<ResourceLocation> bannedItems = readList(buf);
+        List<Entry> personalPresets = readEntries(buf);
         return new LoadoutSyncPacket(classes, personal, whitelists, ammoGrants, variants, protectedItems, spawnKit,
-                hammerBlocks, lockedSlots, whitelistEnabled, prices, points, purchasedItems, bannedItems);
+                hammerBlocks, lockedSlots, whitelistEnabled, prices, points, purchasedItems, bannedItems,
+                personalPresets);
     }
 
     private static void writeOptional(FriendlyByteBuf buf, @Nullable ResourceLocation loc) {

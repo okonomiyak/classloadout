@@ -232,6 +232,17 @@ public final class ClassCommand {
                 .then(Commands.literal("clear")
                         .executes(ctx -> clear(ctx, true))
                         .then(Commands.literal("defer").executes(ctx -> clear(ctx, false))))
+                .then(Commands.literal("mypreset")
+                        .then(Commands.literal("save")
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .executes(ctx -> myPresetSave(ctx))))
+                        .then(Commands.literal("select")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetSelect(ctx, true))
+                                        .then(Commands.literal("defer").executes(ctx -> myPresetSelect(ctx, false)))))
+                        .then(Commands.literal("delete")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetDelete(ctx)))))
                 .then(Commands.literal("forceselect")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player())
@@ -983,6 +994,45 @@ public final class ClassCommand {
             ServerEvents.equipLoadout(player);
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.class_cleared"), false);
+        return 1;
+    }
+
+    /** Self-service, no OP permission needed - snapshots the player's own current loadout as a new named preset, capped at {@code LoadoutManager#MAX_PERSONAL_PRESETS}. */
+    private static int myPresetSave(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        String name = StringArgumentType.getString(ctx, "name");
+        boolean saved = LoadoutManager.get(ctx.getSource().getServer())
+                .savePersonalPreset(ctx.getSource().getServer(), player, name);
+        if (!saved) {
+            return fail(ctx, "classloadout.msg.mypreset_full", LoadoutManager.MAX_PERSONAL_PRESETS);
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_saved", name), false);
+        return 1;
+    }
+
+    /** Self-service: applies one of the player's own personal presets. Same {@code immediate}/{@code defer} split as {@link #select}. */
+    private static int myPresetSelect(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        if (!LoadoutManager.get(server).selectPersonalPreset(server, player, id)) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        if (immediate) {
+            ServerEvents.equipLoadout(player);
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_applied"), false);
+        return 1;
+    }
+
+    private static int myPresetDelete(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        if (!LoadoutManager.get(server).deletePersonalPreset(server, player, id)) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_deleted"), false);
         return 1;
     }
 

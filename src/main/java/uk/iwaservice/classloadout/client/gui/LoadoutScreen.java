@@ -48,6 +48,8 @@ public class LoadoutScreen extends Screen {
     /** True (the regular loadout station / death screen): changes equip into the hotbar right away. False (the deferred loadout locker): only the saved data changes, taking effect on the next respawn. */
     private final boolean immediate;
     private final List<PresetRow> presetRows = new ArrayList<>();
+    /** Same row shape as {@link PresetRow}, but for the player's own {@code /class mypreset} entries. */
+    private final List<PresetRow> personalPresetRows = new ArrayList<>();
 
     private int panelWidth;
     private int panelLeft;
@@ -75,8 +77,10 @@ public class LoadoutScreen extends Screen {
     protected void init() {
         List<LoadoutSyncPacket.Entry> classes = LoadoutClientData.getClasses();
         int presetShown = Math.min(classes.size(), MAX_PRESET_ROWS);
+        List<LoadoutSyncPacket.Entry> myPresets = LoadoutClientData.getPersonalPresets();
         panelWidth = Math.min(360, this.width - 16);
-        panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + 2 * SLOT + 8 + 34 + 16 + presetShown * PRESET_ROW_H + 30,
+        panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + 2 * SLOT + 8 + 34 + 16 + presetShown * PRESET_ROW_H
+                        + 14 + myPresets.size() * PRESET_ROW_H + 30 + 30,
                 this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
@@ -116,6 +120,23 @@ public class LoadoutScreen extends Screen {
                     .bounds(panelLeft + panelWidth - PAD - 56, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
             y += PRESET_ROW_H;
         }
+
+        personalPresetRows.clear();
+        y += 14;
+        for (LoadoutSyncPacket.Entry entry : myPresets) {
+            personalPresetRows.add(new PresetRow(entry, y));
+            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
+                            b -> command("class mypreset select " + entry.id()))
+                    .bounds(panelLeft + panelWidth - PAD - 78, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("x"),
+                            b -> rawCommand("class mypreset delete " + entry.id()))
+                    .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
+            y += PRESET_ROW_H;
+        }
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_save"),
+                        b -> minecraft.setScreen(new PersonalPresetNameScreen(this)))
+                .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
+        y += 20 + 10;
 
         int bottomY = panelTop + panelHeight - PAD - 20;
         int third = (panelWidth - 2 * PAD - 8) / 3;
@@ -163,6 +184,13 @@ public class LoadoutScreen extends Screen {
         }
     }
 
+    /** Same as {@link #command}, but without the immediate/defer suffixing - for commands with no such variant (e.g. {@code /class mypreset delete}, which doesn't equip anything). */
+    private void rawCommand(String cmd) {
+        if (minecraft != null && minecraft.player != null) {
+            minecraft.player.connection.sendCommand(cmd);
+        }
+    }
+
     // --- rendering ---
 
     @Override
@@ -204,18 +232,31 @@ public class LoadoutScreen extends Screen {
                     l + PAD, sepY + 20, COLOR_TEXT_DIM);
         }
         for (PresetRow row : presetRows) {
-            graphics.drawString(this.font, row.entry().name(), l + PAD, row.y(), COLOR_TEXT);
-            ResourceLocation[] slots = {row.entry().main(), row.entry().sidearm(), row.entry().throwable(),
-                    row.entry().gadget(), row.entry().gadget2(), row.entry().melee(),
-                    row.entry().helmet(), row.entry().chestplate(), row.entry().leggings(), row.entry().boots()};
-            for (int i = 0; i < slots.length; i++) {
-                int x = l + PAD + i * (ICON + 4);
-                int y = row.y() + 14;
-                drawSmallIcon(graphics, x, y, slots[i]);
-            }
+            drawPresetRow(graphics, row);
+        }
+
+        if (!personalPresetRows.isEmpty()) {
+            int myY = personalPresetRows.get(0).y() - 14;
+            graphics.drawString(this.font, Component.translatable("classloadout.gui.mypresets_section"),
+                    l + PAD, myY, COLOR_TEXT_DIM);
+        }
+        for (PresetRow row : personalPresetRows) {
+            drawPresetRow(graphics, row);
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    private void drawPresetRow(GuiGraphics graphics, PresetRow row) {
+        graphics.drawString(this.font, row.entry().name(), panelLeft + PAD, row.y(), COLOR_TEXT);
+        ResourceLocation[] slots = {row.entry().main(), row.entry().sidearm(), row.entry().throwable(),
+                row.entry().gadget(), row.entry().gadget2(), row.entry().melee(),
+                row.entry().helmet(), row.entry().chestplate(), row.entry().leggings(), row.entry().boots()};
+        for (int i = 0; i < slots.length; i++) {
+            int x = panelLeft + PAD + i * (ICON + 4);
+            int y = row.y() + 14;
+            drawSmallIcon(graphics, x, y, slots[i]);
+        }
     }
 
     /**
