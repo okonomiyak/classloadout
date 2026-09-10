@@ -87,7 +87,7 @@ public class LoadoutScreen extends Screen {
         panelWidth = Math.min(360, this.width - 16);
         panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + 2 * SLOT + 8 + 34 + 16 + presetShown * PRESET_ROW_H
                         + 14 + myPresets.size() * PRESET_ROW_H + 30
-                        + (sharedEntry == null ? 0 : 14 + PRESET_ROW_H) + 30,
+                        + (sharedEntry == null ? 0 : 14 + PRESET_ROW_H) + 30 + 30,
                 this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
@@ -159,6 +159,10 @@ public class LoadoutScreen extends Screen {
                     .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
             y += PRESET_ROW_H;
         }
+        y += 10;
+        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_receive_button"),
+                        b -> minecraft.setScreen(new ReceiveSharedPresetScreen(this)))
+                .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
 
         int bottomY = panelTop + panelHeight - PAD - 20;
         int third = (panelWidth - 2 * PAD - 8) / 3;
