@@ -104,6 +104,13 @@ public final class ClassCommand {
                         .then(Commands.literal("delete_variant")
                                 .then(Commands.argument("id", ResourceLocationArgument.id())
                                         .executes(ctx -> whitelistDeleteVariant(ctx))))
+                        .then(Commands.literal("set_folder")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("folder", StringArgumentType.greedyString())
+                                        .executes(ctx -> whitelistSetFolder(ctx)))))
+                        .then(Commands.literal("clear_folder")
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> whitelistClearFolder(ctx))))
                         .then(Commands.literal("ammo")
                                 .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                                 .then(Commands.argument("item", ResourceLocationArgument.id())
@@ -219,6 +226,27 @@ public final class ClassCommand {
                 .then(Commands.literal("clear")
                         .executes(ctx -> clear(ctx, true))
                         .then(Commands.literal("defer").executes(ctx -> clear(ctx, false))))
+                .then(Commands.literal("mypreset")
+                        .then(Commands.literal("save")
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .executes(ctx -> myPresetSave(ctx))))
+                        .then(Commands.literal("select")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetSelect(ctx, true))
+                                        .then(Commands.literal("defer").executes(ctx -> myPresetSelect(ctx, false)))))
+                        .then(Commands.literal("delete")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetDelete(ctx))))
+                        .then(Commands.literal("receive")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetReceive(ctx))))
+                        .then(Commands.literal("selectshared")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetSelectShared(ctx, true))
+                                        .then(Commands.literal("defer").executes(ctx -> myPresetSelectShared(ctx, false)))))
+                        .then(Commands.literal("clearshared")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                        .executes(ctx -> myPresetClearShared(ctx)))))
                 .then(Commands.literal("forceselect")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player())
@@ -406,6 +434,21 @@ public final class ClassCommand {
         ResourceLocation id = ResourceLocationArgument.getId(ctx, "id");
         LoadoutManager.get(ctx.getSource().getServer()).deleteItemVariant(ctx.getSource().getServer(), id);
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.variant_deleted", id.toString()), true);
+        return 1;
+    }
+
+    private static int whitelistSetFolder(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        String folder = StringArgumentType.getString(ctx, "folder");
+        LoadoutManager.get(ctx.getSource().getServer()).setVariantFolder(ctx.getSource().getServer(), item, folder);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.variant_folder_set", item.toString(), folder), true);
+        return 1;
+    }
+
+    private static int whitelistClearFolder(CommandContext<CommandSourceStack> ctx) {
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager.get(ctx.getSource().getServer()).setVariantFolder(ctx.getSource().getServer(), item, "");
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.variant_folder_cleared", item.toString()), true);
         return 1;
     }
 
@@ -943,6 +986,92 @@ public final class ClassCommand {
             ServerEvents.equipLoadout(player);
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.class_cleared"), false);
+        return 1;
+    }
+
+    /** Self-service, no OP permission needed - snapshots the player's own current loadout as a new named preset, capped at {@code LoadoutManager#MAX_PERSONAL_PRESETS}. */
+    private static int myPresetSave(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        String name = StringArgumentType.getString(ctx, "name");
+        boolean saved = LoadoutManager.get(ctx.getSource().getServer())
+                .savePersonalPreset(ctx.getSource().getServer(), player, name);
+        if (!saved) {
+            return fail(ctx, "classloadout.msg.mypreset_full", LoadoutManager.MAX_PERSONAL_PRESETS);
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_saved", name), false);
+        return 1;
+    }
+
+    /** Self-service: applies one of the player's own personal presets. Same {@code immediate}/{@code defer} split as {@link #select}. */
+    private static int myPresetSelect(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        if (!LoadoutManager.get(server).selectPersonalPreset(server, player, id)) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        if (immediate) {
+            ServerEvents.equipLoadout(player);
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_applied"), false);
+        return 1;
+    }
+
+    private static int myPresetDelete(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        if (!LoadoutManager.get(server).deletePersonalPreset(server, player, id)) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_deleted"), false);
+        return 1;
+    }
+
+    /**
+     * Self-service, no OP permission needed - redeems any player's personal preset "code" (their
+     * preset's own id, shown to them in {@link uk.iwaservice.classloadout.client.gui.LoadoutScreen}
+     * as copyable text) into the caller's own shared-preset slot. The code's original owner isn't
+     * looked up by name - anyone holding the code can redeem it, and doesn't need the owner online.
+     */
+    private static int myPresetReceive(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        LoadoutManager.ReceiveResult result = LoadoutManager.get(server).receiveSharedPreset(server, player, id);
+        if (result == LoadoutManager.ReceiveResult.FULL) {
+            return fail(ctx, "classloadout.msg.sharedpreset_full", LoadoutManager.MAX_SHARED_PRESETS);
+        }
+        if (result == LoadoutManager.ReceiveResult.NOT_FOUND) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_received_self"), false);
+        return 1;
+    }
+
+    /** Self-service: applies one of the player's own received shared presets. Same {@code immediate}/{@code defer} split as {@link #select}. */
+    private static int myPresetSelectShared(CommandContext<CommandSourceStack> ctx, boolean immediate) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        if (!LoadoutManager.get(server).selectSharedPreset(server, player, id)) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        if (immediate) {
+            ServerEvents.equipLoadout(player);
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_applied"), false);
+        return 1;
+    }
+
+    private static int myPresetClearShared(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        MinecraftServer server = ctx.getSource().getServer();
+        if (!LoadoutManager.get(server).clearSharedPreset(server, player, id)) {
+            return fail(ctx, "classloadout.msg.class_not_found");
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_deleted"), false);
         return 1;
     }
 

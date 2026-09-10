@@ -35,6 +35,8 @@ public final class LoadoutClientData {
     private static Map<LoadoutSlot, Map<ResourceLocation, Map<ResourceLocation, Integer>>> ammoGrants = Map.of();
     private static Map<ResourceLocation, CompoundTag> itemVariants = Map.of();
     private static Map<ResourceLocation, Long> variantRegisteredAt = Map.of();
+    /** Purely organizational OP-assigned folder per {@link #itemVariants} entry - see {@code /class whitelist set_folder}. Absent = uncategorized. */
+    private static Map<ResourceLocation, String> variantFolders = Map.of();
     private static List<ResourceLocation> protectedItems = List.of();
     private static Map<ResourceLocation, Integer> spawnKit = Map.of();
     private static List<ResourceLocation> hammerBlocks = List.of();
@@ -50,6 +52,10 @@ public final class LoadoutClientData {
     private static int points;
     /** Priced items the local player has already bought via {@code /class buy} - never someone else's. */
     private static Set<ResourceLocation> purchasedItems = Set.of();
+    /** The local player's own personal presets (see {@code /class mypreset}) - never someone else's, capped server-side at {@code LoadoutManager#MAX_PERSONAL_PRESETS}. */
+    private static List<LoadoutSyncPacket.Entry> personalPresets = List.of();
+    /** The local player's own received-preset "inbox" (see {@code /class mypreset receive}) - never someone else's, capped server-side at {@code LoadoutManager#MAX_SHARED_PRESETS}. */
+    private static List<LoadoutSyncPacket.Entry> sharedPresets = List.of();
     /** Incremented on every sync; lets screens detect updates cheaply. */
     private static int revision;
 
@@ -70,8 +76,12 @@ public final class LoadoutClientData {
                                               List<LoadoutSyncPacket.PriceEntry> newPrices,
                                               int newPoints,
                                               List<ResourceLocation> newPurchasedItems,
-                                              List<ResourceLocation> newBannedItems) {
+                                              List<ResourceLocation> newBannedItems,
+                                              List<LoadoutSyncPacket.Entry> newPersonalPresets,
+                                              List<LoadoutSyncPacket.Entry> newSharedPresets) {
         classes = List.copyOf(newClasses);
+        personalPresets = List.copyOf(newPersonalPresets);
+        sharedPresets = List.copyOf(newSharedPresets);
         personal = newPersonal;
         whitelists = newWhitelists;
         Map<LoadoutSlot, Map<ResourceLocation, Map<ResourceLocation, Integer>>> grants = new EnumMap<>(LoadoutSlot.class);
@@ -83,12 +93,17 @@ public final class LoadoutClientData {
         ammoGrants = grants;
         Map<ResourceLocation, CompoundTag> variants = new HashMap<>();
         Map<ResourceLocation, Long> registeredAt = new HashMap<>();
+        Map<ResourceLocation, String> folders = new HashMap<>();
         for (LoadoutSyncPacket.VariantEntry v : newVariants) {
             variants.put(v.id(), v.stack());
             registeredAt.put(v.id(), v.registeredAt());
+            if (!v.folder().isBlank()) {
+                folders.put(v.id(), v.folder());
+            }
         }
         itemVariants = variants;
         variantRegisteredAt = registeredAt;
+        variantFolders = folders;
         protectedItems = List.copyOf(newProtectedItems);
         Map<ResourceLocation, Integer> kit = new HashMap<>();
         for (LoadoutSyncPacket.SpawnKitEntry s : newSpawnKit) {
@@ -116,6 +131,7 @@ public final class LoadoutClientData {
         ammoGrants = Map.of();
         itemVariants = Map.of();
         variantRegisteredAt = Map.of();
+        variantFolders = Map.of();
         protectedItems = List.of();
         spawnKit = Map.of();
         hammerBlocks = List.of();
@@ -125,11 +141,23 @@ public final class LoadoutClientData {
         prices = Map.of();
         points = 0;
         purchasedItems = Set.of();
+        personalPresets = List.of();
+        sharedPresets = List.of();
         revision++;
     }
 
     public static synchronized List<LoadoutSyncPacket.Entry> getClasses() {
         return new ArrayList<>(classes);
+    }
+
+    /** The local player's own personal presets (see {@code /class mypreset}) - never someone else's. */
+    public static synchronized List<LoadoutSyncPacket.Entry> getPersonalPresets() {
+        return new ArrayList<>(personalPresets);
+    }
+
+    /** The local player's own received-preset "inbox" (see {@code /class mypreset receive}) - never someone else's. */
+    public static synchronized List<LoadoutSyncPacket.Entry> getSharedPresets() {
+        return new ArrayList<>(sharedPresets);
     }
 
     @Nullable
@@ -165,6 +193,16 @@ public final class LoadoutClientData {
     /** Epoch-millis registration time for a held-item variant id, or 0 if unknown. */
     public static synchronized long getVariantRegisteredAt(ResourceLocation id) {
         return variantRegisteredAt.getOrDefault(id, 0L);
+    }
+
+    /** The OP-assigned folder for a held-item variant id, or "" if uncategorized. */
+    public static synchronized String getVariantFolder(ResourceLocation id) {
+        return variantFolders.getOrDefault(id, "");
+    }
+
+    /** Every distinct folder name currently in use, alphabetical - for building the whitelist editor's folder tabs. */
+    public static synchronized List<String> getVariantFolders() {
+        return variantFolders.values().stream().distinct().sorted().toList();
     }
 
     public static synchronized List<ResourceLocation> getProtectedItems() {

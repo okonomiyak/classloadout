@@ -55,6 +55,10 @@ public class LoadoutManager extends SavedData {
     private final Map<UUID, ClassDefinition> classes = new LinkedHashMap<>();
     /** Absent entry = player has never touched their loadout; present (even if all-empty) = they have. */
     private final Map<UUID, PersonalLoadout> personalLoadouts = new java.util.HashMap<>();
+    /** Player-created presets (see {@code /class mypreset}), capped at {@link #MAX_PERSONAL_PRESETS} per player - reuses {@link ClassDefinition}'s shape since the data is identical, just self-service and visible/usable only by their own owner (never synced to anyone else, unlike the OP-managed {@link #classes}). */
+    private final Map<UUID, List<ClassDefinition>> personalPresets = new java.util.HashMap<>();
+    /** Received-preset "inbox" per player (see {@link #receiveSharedPreset}), capped at {@link #MAX_SHARED_PRESETS} - separate from {@link #personalPresets} so incoming shares never compete with the player's own two. */
+    private final Map<UUID, List<ClassDefinition>> sharedPresets = new java.util.HashMap<>();
     /** OP-forced slots (via {@code /class forceassign}/{@code forceselect} and their all/team variants): the player can't self-service-change these until an OP frees them (assigning {@code minecraft:air} to a forced slot unlocks it - see {@code ClassCommand}). */
     private final Map<UUID, Set<LoadoutSlot>> lockedSlots = new java.util.HashMap<>();
     /** Insertion order preserved for a stable whitelist-editor grid; empty (or absent) = nothing assignable yet. */
@@ -74,6 +78,8 @@ public class LoadoutManager extends SavedData {
     private final Map<ResourceLocation, CompoundTag> itemVariants = new LinkedHashMap<>();
     /** Wall-clock registration time (epoch millis) per {@link #itemVariants} entry, shown in the whitelist editor's tooltip. */
     private final Map<ResourceLocation, Long> variantRegisteredAt = new LinkedHashMap<>();
+    /** OP-assigned folder name per {@link #itemVariants} entry, purely organizational (lets the whitelist editor's Held-items tab filter a long variant list into groups). Absent = uncategorized. */
+    private final Map<ResourceLocation, String> variantFolders = new LinkedHashMap<>();
     /** OP-curated: items that survive the on-death inventory clear (see {@code clearInventoryOnDeath}). Matched by base item type, not exact NBT. */
     private final Set<ResourceLocation> protectedItems = new LinkedHashSet<>();
     /** OP-curated: items temporarily blocked from equipping regardless of whitelist state (see {@code /class ban}, toggled in-place from the whitelist editor). Unlike whitelist, this isn't bypassed by a locked slot - a ban is a hard block, not a player-choice restriction. */
@@ -304,9 +310,24 @@ public class LoadoutManager extends SavedData {
     public void deleteItemVariant(MinecraftServer server, ResourceLocation variantId) {
         if (itemVariants.remove(variantId) != null) {
             variantRegisteredAt.remove(variantId);
+            variantFolders.remove(variantId);
             setDirty();
             broadcastAll(server);
         }
+    }
+
+    /** Purely organizational grouping for the whitelist editor's Held-items tab. Blank clears it (back to uncategorized). No-op if {@code variantId} was never registered. */
+    public void setVariantFolder(MinecraftServer server, ResourceLocation variantId, String folder) {
+        if (!itemVariants.containsKey(variantId)) {
+            return;
+        }
+        if (folder.isBlank()) {
+            variantFolders.remove(variantId);
+        } else {
+            variantFolders.put(variantId, folder);
+        }
+        setDirty();
+        broadcastAll(server);
     }
 
     private static ResourceLocation variantId(UUID id) {
@@ -619,11 +640,127 @@ public class LoadoutManager extends SavedData {
         if (def == null) {
             return false;
         }
+        applySelfService(server, player, def);
+        return true;
+    }
+
+    private void applySelfService(MinecraftServer server, ServerPlayer player, ClassDefinition def) {
         PersonalLoadout current = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
         personalLoadouts.put(player.getUUID(), keepLockedSlots(player.getUUID(), current, PersonalLoadout.fromClass(def)));
         setDirty();
         sendTo(server, player);
+    }
+
+    // --- personal presets (player self-service, capped, private to their own owner) ---
+
+    public static final int MAX_PERSONAL_PRESETS = 2;
+
+    public List<ClassDefinition> getPersonalPresets(UUID player) {
+        return personalPresets.getOrDefault(player, List.of());
+    }
+
+    /** Snapshots the player's current personal loadout as a new named preset. False (no-op) if they're already at {@link #MAX_PERSONAL_PRESETS}. */
+    public boolean savePersonalPreset(MinecraftServer server, ServerPlayer player, String name) {
+        List<ClassDefinition> existing = personalPresets.computeIfAbsent(player.getUUID(), p -> new ArrayList<>());
+        if (existing.size() >= MAX_PERSONAL_PRESETS) {
+            return false;
+        }
+        PersonalLoadout loadout = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
+        ClassDefinition def = new ClassDefinition(UUID.randomUUID(), name, null,
+                loadout.main(), loadout.sidearm(), loadout.throwable(), loadout.gadget(), loadout.gadget2(), loadout.melee(),
+                loadout.helmet(), loadout.chestplate(), loadout.leggings(), loadout.boots());
+        existing.add(def);
+        setDirty();
+        sendTo(server, player);
         return true;
+    }
+
+    public boolean deletePersonalPreset(MinecraftServer server, ServerPlayer player, UUID id) {
+        List<ClassDefinition> existing = personalPresets.get(player.getUUID());
+        boolean removed = existing != null && existing.removeIf(d -> d.id().equals(id));
+        if (removed) {
+            setDirty();
+            sendTo(server, player);
+        }
+        return removed;
+    }
+
+    /** Same locked-slot handling as {@link #applyPresetSelfService}, but looking the id up in the player's own {@link #personalPresets} instead of the OP-managed {@link #classes} - a player can only ever select their own. */
+    public boolean selectPersonalPreset(MinecraftServer server, ServerPlayer player, UUID id) {
+        ClassDefinition def = getPersonalPresets(player.getUUID()).stream()
+                .filter(d -> d.id().equals(id)).findFirst().orElse(null);
+        if (def == null) {
+            return false;
+        }
+        applySelfService(server, player, def);
+        return true;
+    }
+
+    public static final int MAX_SHARED_PRESETS = 2;
+
+    public enum ReceiveResult { OK, NOT_FOUND, FULL }
+
+    /**
+     * Pull-based sharing: {@code presetId} is any player's personal preset id (shown to its owner
+     * as a copyable "code" in {@code LoadoutScreen} - see {@code classloadout.gui.mypreset_code}),
+     * handed out out-of-band (chat, Discord, whatever). Anyone who has the code can redeem it here
+     * into their own {@link #sharedPresets} inbox (fresh id, same name/slots, capped at
+     * {@link #MAX_SHARED_PRESETS}) - the original owner's copy is untouched, and doesn't need to
+     * be online or even be told who redeemed it. See {@link #selectSharedPreset} to apply a
+     * received copy, or the regular {@code /class mypreset save} to keep it permanently afterward.
+     */
+    public ReceiveResult receiveSharedPreset(MinecraftServer server, ServerPlayer player, UUID presetId) {
+        ClassDefinition source = null;
+        for (List<ClassDefinition> owned : personalPresets.values()) {
+            for (ClassDefinition def : owned) {
+                if (def.id().equals(presetId)) {
+                    source = def;
+                    break;
+                }
+            }
+            if (source != null) {
+                break;
+            }
+        }
+        if (source == null) {
+            return ReceiveResult.NOT_FOUND;
+        }
+        List<ClassDefinition> inbox = sharedPresets.computeIfAbsent(player.getUUID(), p -> new ArrayList<>());
+        if (inbox.size() >= MAX_SHARED_PRESETS) {
+            return ReceiveResult.FULL;
+        }
+        ClassDefinition copy = new ClassDefinition(UUID.randomUUID(), source.name(), source.icon(),
+                source.main(), source.sidearm(), source.throwable(), source.gadget(), source.gadget2(), source.melee(),
+                source.helmet(), source.chestplate(), source.leggings(), source.boots());
+        inbox.add(copy);
+        setDirty();
+        sendTo(server, player);
+        return ReceiveResult.OK;
+    }
+
+    public List<ClassDefinition> getSharedPresets(UUID player) {
+        return sharedPresets.getOrDefault(player, List.of());
+    }
+
+    /** Same locked-slot handling as {@link #applyPresetSelfService}. False (no-op) if the player has no received preset with that id. */
+    public boolean selectSharedPreset(MinecraftServer server, ServerPlayer player, UUID id) {
+        ClassDefinition def = getSharedPresets(player.getUUID()).stream()
+                .filter(d -> d.id().equals(id)).findFirst().orElse(null);
+        if (def == null) {
+            return false;
+        }
+        applySelfService(server, player, def);
+        return true;
+    }
+
+    public boolean clearSharedPreset(MinecraftServer server, ServerPlayer player, UUID id) {
+        List<ClassDefinition> inbox = sharedPresets.get(player.getUUID());
+        boolean removed = inbox != null && inbox.removeIf(d -> d.id().equals(id));
+        if (removed) {
+            setDirty();
+            sendTo(server, player);
+        }
+        return removed;
     }
 
     /** Resets the player back to "never touched their loadout" (equip-on-respawn stops overwriting their hotbar). Doesn't respect locked slots - see {@link #clearPersonalLoadoutSelfService} for the self-service path that does. */
@@ -703,6 +840,14 @@ public class LoadoutManager extends SavedData {
         for (ClassDefinition def : classes.values()) {
             entries.add(LoadoutSyncPacket.Entry.of(def));
         }
+        List<LoadoutSyncPacket.Entry> personalPresetEntries = new ArrayList<>();
+        for (ClassDefinition def : getPersonalPresets(player.getUUID())) {
+            personalPresetEntries.add(LoadoutSyncPacket.Entry.of(def));
+        }
+        List<LoadoutSyncPacket.Entry> sharedPresetEntries = new ArrayList<>();
+        for (ClassDefinition def : getSharedPresets(player.getUUID())) {
+            sharedPresetEntries.add(LoadoutSyncPacket.Entry.of(def));
+        }
         PersonalLoadout personal = personalLoadouts.getOrDefault(player.getUUID(), PersonalLoadout.EMPTY);
 
         Map<LoadoutSlot, List<ResourceLocation>> whitelistsBySlot = new EnumMap<>(LoadoutSlot.class);
@@ -723,7 +868,7 @@ public class LoadoutManager extends SavedData {
         List<LoadoutSyncPacket.VariantEntry> variantEntries = new ArrayList<>(itemVariants.size());
         for (Map.Entry<ResourceLocation, CompoundTag> e : itemVariants.entrySet()) {
             variantEntries.add(new LoadoutSyncPacket.VariantEntry(e.getKey(), e.getValue(),
-                    variantRegisteredAt.getOrDefault(e.getKey(), 0L)));
+                    variantRegisteredAt.getOrDefault(e.getKey(), 0L), variantFolders.getOrDefault(e.getKey(), "")));
         }
 
         List<LoadoutSyncPacket.SpawnKitEntry> spawnKitEntries = new ArrayList<>(spawnKit.size());
@@ -741,7 +886,8 @@ public class LoadoutManager extends SavedData {
                 LoadoutSyncPacket.PersonalData.of(personal), LoadoutSyncPacket.Whitelists.of(whitelistsBySlot),
                 ammoGrantEntries, variantEntries, new ArrayList<>(protectedItems), spawnKitEntries,
                 new ArrayList<>(hammerBlocks), new ArrayList<>(getLockedSlots(player.getUUID())), whitelistEnabled,
-                priceEntries, getPoints(player.getUUID()), new ArrayList<>(purchased), new ArrayList<>(bannedItems)));
+                priceEntries, getPoints(player.getUUID()), new ArrayList<>(purchased), new ArrayList<>(bannedItems),
+                personalPresetEntries, sharedPresetEntries));
     }
 
     // --- persistence ---
@@ -757,6 +903,26 @@ public class LoadoutManager extends SavedData {
         for (int i = 0; i < personalList.size(); i++) {
             CompoundTag p = personalList.getCompound(i);
             manager.personalLoadouts.put(p.getUUID("Player"), PersonalLoadout.load(p.getCompound("Loadout")));
+        }
+        ListTag personalPresetOwners = tag.getList("PersonalPresets", Tag.TAG_COMPOUND);
+        for (int i = 0; i < personalPresetOwners.size(); i++) {
+            CompoundTag owner = personalPresetOwners.getCompound(i);
+            List<ClassDefinition> defs = new ArrayList<>();
+            ListTag presetList = owner.getList("Presets", Tag.TAG_COMPOUND);
+            for (int j = 0; j < presetList.size(); j++) {
+                defs.add(ClassDefinition.load(presetList.getCompound(j)));
+            }
+            manager.personalPresets.put(owner.getUUID("Player"), defs);
+        }
+        ListTag sharedPresetOwners = tag.getList("SharedPresets", Tag.TAG_COMPOUND);
+        for (int i = 0; i < sharedPresetOwners.size(); i++) {
+            CompoundTag owner = sharedPresetOwners.getCompound(i);
+            List<ClassDefinition> defs = new ArrayList<>();
+            ListTag presetList = owner.getList("Presets", Tag.TAG_COMPOUND);
+            for (int j = 0; j < presetList.size(); j++) {
+                defs.add(ClassDefinition.load(presetList.getCompound(j)));
+            }
+            manager.sharedPresets.put(owner.getUUID("Player"), defs);
         }
         ListTag lockedSlotList = tag.getList("LockedSlots", Tag.TAG_COMPOUND);
         for (int i = 0; i < lockedSlotList.size(); i++) {
@@ -808,6 +974,9 @@ public class LoadoutManager extends SavedData {
             ResourceLocation id = ResourceLocation.parse(v.getString("Id"));
             manager.itemVariants.put(id, v.getCompound("Stack"));
             manager.variantRegisteredAt.put(id, v.getLong("RegisteredAt"));
+            if (v.contains("Folder") && !v.getString("Folder").isBlank()) {
+                manager.variantFolders.put(id, v.getString("Folder"));
+            }
         }
         ListTag protectedList = tag.getList("ProtectedItems", Tag.TAG_STRING);
         for (Tag t : protectedList) {
@@ -887,6 +1056,38 @@ public class LoadoutManager extends SavedData {
         }
         tag.put("PersonalLoadouts", personalList);
 
+        ListTag personalPresetOwners = new ListTag();
+        for (Map.Entry<UUID, List<ClassDefinition>> e : personalPresets.entrySet()) {
+            if (e.getValue().isEmpty()) {
+                continue;
+            }
+            CompoundTag owner = new CompoundTag();
+            owner.putUUID("Player", e.getKey());
+            ListTag presetList = new ListTag();
+            for (ClassDefinition def : e.getValue()) {
+                presetList.add(def.save());
+            }
+            owner.put("Presets", presetList);
+            personalPresetOwners.add(owner);
+        }
+        tag.put("PersonalPresets", personalPresetOwners);
+
+        ListTag sharedPresetOwners = new ListTag();
+        for (Map.Entry<UUID, List<ClassDefinition>> e : sharedPresets.entrySet()) {
+            if (e.getValue().isEmpty()) {
+                continue;
+            }
+            CompoundTag owner = new CompoundTag();
+            owner.putUUID("Player", e.getKey());
+            ListTag presetList = new ListTag();
+            for (ClassDefinition def : e.getValue()) {
+                presetList.add(def.save());
+            }
+            owner.put("Presets", presetList);
+            sharedPresetOwners.add(owner);
+        }
+        tag.put("SharedPresets", sharedPresetOwners);
+
         ListTag lockedSlotList = new ListTag();
         for (Map.Entry<UUID, Set<LoadoutSlot>> e : lockedSlots.entrySet()) {
             CompoundTag l = new CompoundTag();
@@ -934,6 +1135,10 @@ public class LoadoutManager extends SavedData {
             v.putString("Id", e.getKey().toString());
             v.put("Stack", e.getValue());
             v.putLong("RegisteredAt", variantRegisteredAt.getOrDefault(e.getKey(), 0L));
+            String folder = variantFolders.get(e.getKey());
+            if (folder != null) {
+                v.putString("Folder", folder);
+            }
             variantList.add(v);
         }
         tag.put("ItemVariants", variantList);
