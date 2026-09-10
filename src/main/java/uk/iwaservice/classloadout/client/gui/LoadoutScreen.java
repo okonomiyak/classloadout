@@ -137,12 +137,24 @@ public class LoadoutScreen extends Screen {
         }
     }
 
-    /** Picker is unrestricted (full catalog) while an OP has temporarily disabled whitelist enforcement - see {@code LoadoutManager#isWhitelistEnabled}. */
+    /** Picker is unrestricted (full catalog, purchase gate included) while an OP has temporarily disabled whitelist enforcement - see {@code LoadoutManager#isWhitelistEnabled}. */
     private Button slotButton(int x, int y, LoadoutSlot slot) {
         return Button.builder(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this,
                         loc -> command("class assign " + slot.key() + " " + loc),
-                        LoadoutClientData.isWhitelistEnabled() ? LoadoutClientData.getWhitelist(slot) : null)))
+                        LoadoutClientData.isWhitelistEnabled() ? purchasable(LoadoutClientData.getWhitelist(slot)) : null)))
                 .bounds(x, y, SLOT, SLOT).build();
+    }
+
+    /** Drops priced items the player hasn't bought yet (see {@code /class buy}) - picking one would just silently fail to equip server-side anyway (see {@code LoadoutManager#canEquip}), so don't offer it as a choice at all. */
+    private static List<ResourceLocation> purchasable(List<ResourceLocation> items) {
+        List<ResourceLocation> result = new ArrayList<>();
+        for (ResourceLocation loc : items) {
+            int price = LoadoutClientData.getPrices().getOrDefault(loc, 0);
+            if (price <= 0 || LoadoutClientData.isPurchased(loc)) {
+                result.add(loc);
+            }
+        }
+        return result;
     }
 
     private void command(String cmd) {
