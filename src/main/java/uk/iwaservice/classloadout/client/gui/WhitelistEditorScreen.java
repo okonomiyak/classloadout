@@ -275,6 +275,14 @@ public class WhitelistEditorScreen extends Screen {
         return index < expandedFolderItems.size() ? index : -1;
     }
 
+    /** While a folder's flyout is open, everything else in the main grid is hidden (icons were overlapping the flyout) - only the open folder's own tile stays visible/clickable, so it can still be clicked again to close. */
+    private boolean isMainGridCellVisible(ResourceLocation loc) {
+        if (expandedFolder == null) {
+            return true;
+        }
+        return expandedFolder.equals(folderTiles.get(loc));
+    }
+
     /** Top-left of the flyout, clamped so it never draws off-screen. */
     private int[] flyoutOrigin() {
         int rows = (expandedFolderItems.size() + FLYOUT_COLS - 1) / FLYOUT_COLS;
@@ -320,6 +328,9 @@ public class WhitelistEditorScreen extends Screen {
         int index = cellIndexAt(mouseX, mouseY);
         if (index >= 0) {
             ResourceLocation loc = shown.get(index);
+            if (!isMainGridCellVisible(loc)) {
+                return true;
+            }
             String folder = folderTiles.get(loc);
             if (folder != null) {
                 toggleFolderFlyout(folder, index);
@@ -443,6 +454,9 @@ public class WhitelistEditorScreen extends Screen {
                 continue;
             }
             ResourceLocation loc = shown.get(index);
+            if (!isMainGridCellVisible(loc)) {
+                continue;
+            }
             boolean hovered = mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL
                     && mouseY >= gridTop && mouseY < gridTop + gridHeight;
 
