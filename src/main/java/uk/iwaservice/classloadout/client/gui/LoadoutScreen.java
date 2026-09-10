@@ -33,7 +33,6 @@ public class LoadoutScreen extends Screen {
     private static final int HEADER_H = 24;
     private static final int SLOT = 32;
     private static final int PRESET_ROW_H = 40;
-    private static final int MAX_PRESET_ROWS = 5;
     private static final int ICON = 16;
 
     private static final int COLOR_PANEL_BG = 0xF4222222;
@@ -47,6 +46,9 @@ public class LoadoutScreen extends Screen {
 
     private record PresetRow(LoadoutSyncPacket.Entry entry, int y) {}
 
+    /** Which of the three preset lists is currently showing - only one at a time, switched via the tab bar. */
+    private enum Tab { PRESETS, MY_PRESETS, SHARED }
+
     private final Screen returnTo;
     /** True (the regular loadout station / death screen): changes equip into the hotbar right away. False (the deferred loadout locker): only the saved data changes, taking effect on the next respawn. */
     private final boolean immediate;
@@ -55,12 +57,15 @@ public class LoadoutScreen extends Screen {
     private final List<PresetRow> personalPresetRows = new ArrayList<>();
     /** 0 or 1 entries - the player's shared-preset "inbox" slot, see {@code LoadoutClientData#getSharedPreset}. */
     private final List<PresetRow> sharedPresetRows = new ArrayList<>();
+    private Tab selectedTab = Tab.PRESETS;
 
     private int panelWidth;
     private int panelLeft;
     private int panelTop;
     private int panelHeight;
     private int dataRevision = -1;
+    /** Y where the active tab's row list begins, set in {@link #init()} - reused by {@link #render} for the "no presets" placeholder. */
+    private int contentTop;
 
     private final int[] slotX = new int[6];
     private int slotY;
@@ -81,13 +86,16 @@ public class LoadoutScreen extends Screen {
     @Override
     protected void init() {
         List<LoadoutSyncPacket.Entry> classes = LoadoutClientData.getClasses();
-        int presetShown = Math.min(classes.size(), MAX_PRESET_ROWS);
         List<LoadoutSyncPacket.Entry> myPresets = LoadoutClientData.getPersonalPresets();
         LoadoutSyncPacket.Entry sharedEntry = LoadoutClientData.getSharedPreset();
+
+        int tabContentH = 14 + switch (selectedTab) {
+            case PRESETS -> classes.size() * PRESET_ROW_H;
+            case MY_PRESETS -> myPresets.size() * PRESET_ROW_H + 30;
+            case SHARED -> 30 + (sharedEntry == null ? 0 : PRESET_ROW_H + 10);
+        };
         panelWidth = Math.min(360, this.width - 16);
-        panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + 2 * SLOT + 8 + 34 + 16 + presetShown * PRESET_ROW_H
-                        + 14 + myPresets.size() * PRESET_ROW_H + 30
-                        + (sharedEntry == null ? 0 : 14 + PRESET_ROW_H) + 30 + 30,
+        panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + 2 * SLOT + 8 + 34 + 16 + 30 + tabContentH + 30,
                 this.height - 32);
         panelLeft = (this.width - panelWidth) / 2;
         panelTop = (this.height - panelHeight) / 2;
@@ -117,52 +125,64 @@ public class LoadoutScreen extends Screen {
         addRenderableWidget(slotButton(armorX[3], armorY, LoadoutSlot.BOOTS));
         y += SLOT + 34;
 
+        int tabW = (panelWidth - 2 * PAD - 8) / 3;
+        addRenderableWidget(tabButton("classloadout.gui.presets_section", Tab.PRESETS,
+                panelLeft + PAD, y, tabW));
+        addRenderableWidget(tabButton("classloadout.gui.mypresets_section", Tab.MY_PRESETS,
+                panelLeft + PAD + tabW + 4, y, tabW));
+        addRenderableWidget(tabButton("classloadout.gui.sharedpreset_section", Tab.SHARED,
+                panelLeft + PAD + (tabW + 4) * 2, y, tabW));
+        y += 20 + 10 + 14;
+        contentTop = y;
+
         presetRows.clear();
-        y += 14;
-        for (int i = 0; i < presetShown; i++) {
-            LoadoutSyncPacket.Entry entry = classes.get(i);
-            presetRows.add(new PresetRow(entry, y));
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                            b -> command("class select " + entry.id()))
-                    .bounds(panelLeft + panelWidth - PAD - 56, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
-            y += PRESET_ROW_H;
-        }
-
         personalPresetRows.clear();
-        y += 14;
-        for (LoadoutSyncPacket.Entry entry : myPresets) {
-            personalPresetRows.add(new PresetRow(entry, y));
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                            b -> command("class mypreset select " + entry.id()))
-                    .bounds(panelLeft + panelWidth - PAD - 88, y + (PRESET_ROW_H - 20) / 2, 44, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("#"), b -> showCode(entry.id()))
-                    .bounds(panelLeft + panelWidth - PAD - 42, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("x"),
-                            b -> rawCommand("class mypreset delete " + entry.id()))
-                    .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
-            y += PRESET_ROW_H;
-        }
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_save"),
-                        b -> minecraft.setScreen(new PersonalPresetNameScreen(this)))
-                .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
-        y += 20 + 10;
-
         sharedPresetRows.clear();
-        if (sharedEntry != null) {
-            y += 14;
-            sharedPresetRows.add(new PresetRow(sharedEntry, y));
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                            b -> command("class mypreset selectshared"))
-                    .bounds(panelLeft + panelWidth - PAD - 78, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("x"),
-                            b -> rawCommand("class mypreset clearshared"))
-                    .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
-            y += PRESET_ROW_H;
+        switch (selectedTab) {
+            case PRESETS -> {
+                for (LoadoutSyncPacket.Entry entry : classes) {
+                    presetRows.add(new PresetRow(entry, y));
+                    addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
+                                    b -> command("class select " + entry.id()))
+                            .bounds(panelLeft + panelWidth - PAD - 56, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
+                    y += PRESET_ROW_H;
+                }
+            }
+            case MY_PRESETS -> {
+                for (LoadoutSyncPacket.Entry entry : myPresets) {
+                    personalPresetRows.add(new PresetRow(entry, y));
+                    addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
+                                    b -> command("class mypreset select " + entry.id()))
+                            .bounds(panelLeft + panelWidth - PAD - 88, y + (PRESET_ROW_H - 20) / 2, 44, 20).build());
+                    addRenderableWidget(Button.builder(Component.literal("#"), b -> showCode(entry.id()))
+                            .bounds(panelLeft + panelWidth - PAD - 42, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
+                    addRenderableWidget(Button.builder(Component.literal("x"),
+                                    b -> rawCommand("class mypreset delete " + entry.id()))
+                            .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
+                    y += PRESET_ROW_H;
+                }
+                addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_save"),
+                                b -> minecraft.setScreen(new PersonalPresetNameScreen(this)))
+                        .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
+                y += 20 + 10;
+            }
+            case SHARED -> {
+                if (sharedEntry != null) {
+                    sharedPresetRows.add(new PresetRow(sharedEntry, y));
+                    addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
+                                    b -> command("class mypreset selectshared"))
+                            .bounds(panelLeft + panelWidth - PAD - 78, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
+                    addRenderableWidget(Button.builder(Component.literal("x"),
+                                    b -> rawCommand("class mypreset clearshared"))
+                            .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
+                    y += PRESET_ROW_H + 10;
+                }
+                addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_receive_button"),
+                                b -> minecraft.setScreen(new ReceiveSharedPresetScreen(this)))
+                        .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
+                y += 20 + 10;
+            }
         }
-        y += 10;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_receive_button"),
-                        b -> minecraft.setScreen(new ReceiveSharedPresetScreen(this)))
-                .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
 
         int bottomY = panelTop + panelHeight - PAD - 20;
         int third = (panelWidth - 2 * PAD - 8) / 3;
@@ -182,6 +202,19 @@ public class LoadoutScreen extends Screen {
         if (dataRevision != LoadoutClientData.getRevision()) {
             this.init(this.minecraft, this.width, this.height);
         }
+    }
+
+    /** Switches which of the three preset lists is showing; the active tab's label is prefixed to stand out since {@link Button} has no separate "pressed" style to lean on here. */
+    private Button tabButton(String labelKey, Tab tab, int x, int y, int width) {
+        Component label = Component.translatable(labelKey);
+        if (tab == selectedTab) {
+            label = Component.literal("» ").append(label);
+        }
+        return Button.builder(label, b -> {
+                    selectedTab = tab;
+                    this.init(this.minecraft, this.width, this.height);
+                })
+                .bounds(x, y, width, 20).build();
     }
 
     /** Picker is unrestricted (full catalog, purchase gate included) while an OP has temporarily disabled whitelist enforcement - see {@code LoadoutManager#isWhitelistEnabled}. */
@@ -266,30 +299,16 @@ public class LoadoutScreen extends Screen {
 
         int sepY = armorY + SLOT + 20;
         graphics.fill(l + PAD, sepY, r - PAD, sepY + 1, COLOR_SEPARATOR);
-        graphics.drawString(this.font, Component.translatable("classloadout.gui.presets_section"),
-                l + PAD, sepY + 6, COLOR_TEXT_DIM);
 
-        if (presetRows.isEmpty()) {
+        if (selectedTab == Tab.PRESETS && presetRows.isEmpty()) {
             graphics.drawString(this.font, Component.translatable("classloadout.gui.class_none_defined"),
-                    l + PAD, sepY + 20, COLOR_TEXT_DIM);
+                    l + PAD, contentTop, COLOR_TEXT_DIM);
         }
         for (PresetRow row : presetRows) {
             drawPresetRow(graphics, row);
         }
-
-        if (!personalPresetRows.isEmpty()) {
-            int myY = personalPresetRows.get(0).y() - 14;
-            graphics.drawString(this.font, Component.translatable("classloadout.gui.mypresets_section"),
-                    l + PAD, myY, COLOR_TEXT_DIM);
-        }
         for (PresetRow row : personalPresetRows) {
             drawPresetRow(graphics, row);
-        }
-
-        if (!sharedPresetRows.isEmpty()) {
-            int sharedY = sharedPresetRows.get(0).y() - 14;
-            graphics.drawString(this.font, Component.translatable("classloadout.gui.sharedpreset_section"),
-                    l + PAD, sharedY, COLOR_TEXT_DIM);
         }
         for (PresetRow row : sharedPresetRows) {
             drawPresetRow(graphics, row);
