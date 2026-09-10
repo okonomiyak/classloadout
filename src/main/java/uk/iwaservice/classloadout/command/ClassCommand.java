@@ -242,7 +242,11 @@ public final class ClassCommand {
                                         .then(Commands.literal("defer").executes(ctx -> myPresetSelect(ctx, false)))))
                         .then(Commands.literal("delete")
                                 .then(Commands.argument("id", UuidArgument.uuid())
-                                        .executes(ctx -> myPresetDelete(ctx)))))
+                                        .executes(ctx -> myPresetDelete(ctx))))
+                        .then(Commands.literal("share")
+                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(ctx -> myPresetShare(ctx))))))
                 .then(Commands.literal("forceselect")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player())
@@ -1033,6 +1037,31 @@ public final class ClassCommand {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_deleted"), false);
+        return 1;
+    }
+
+    /** Self-service, no OP permission needed - copies one of the sender's own personal presets into the target's, under a fresh id. The sender's own copy is untouched. */
+    private static int myPresetShare(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer sender = ctx.getSource().getPlayerOrException();
+        UUID id = UuidArgument.getUuid(ctx, "id");
+        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        if (target == sender) {
+            return fail(ctx, "classloadout.msg.mypreset_share_self");
+        }
+        MinecraftServer server = ctx.getSource().getServer();
+        LoadoutManager.ShareResult result = LoadoutManager.get(server).sharePersonalPreset(server, sender, id, target);
+        switch (result) {
+            case PRESET_NOT_FOUND -> {
+                return fail(ctx, "classloadout.msg.class_not_found");
+            }
+            case TARGET_FULL -> {
+                return fail(ctx, "classloadout.msg.mypreset_target_full", target.getName().getString(), LoadoutManager.MAX_PERSONAL_PRESETS);
+            }
+            default -> {
+            }
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.mypreset_shared", target.getName()), false);
+        target.sendSystemMessage(Component.translatable("classloadout.msg.mypreset_received", sender.getName()));
         return 1;
     }
 

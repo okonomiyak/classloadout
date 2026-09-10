@@ -705,6 +705,34 @@ public class LoadoutManager extends SavedData {
         return true;
     }
 
+    /** Outcome of {@link #sharePersonalPreset}. */
+    public enum ShareResult { OK, PRESET_NOT_FOUND, TARGET_FULL }
+
+    /**
+     * Copies one of {@code from}'s personal presets into {@code to}'s own personal presets under
+     * a fresh id (same name/slots) - {@code from}'s own copy is untouched. Fails with
+     * {@link ShareResult#TARGET_FULL} rather than bumping anything out if {@code to} is already
+     * at {@link #MAX_PERSONAL_PRESETS}.
+     */
+    public ShareResult sharePersonalPreset(MinecraftServer server, ServerPlayer from, UUID presetId, ServerPlayer to) {
+        ClassDefinition source = getPersonalPresets(from.getUUID()).stream()
+                .filter(d -> d.id().equals(presetId)).findFirst().orElse(null);
+        if (source == null) {
+            return ShareResult.PRESET_NOT_FOUND;
+        }
+        List<ClassDefinition> targetList = personalPresets.computeIfAbsent(to.getUUID(), p -> new ArrayList<>());
+        if (targetList.size() >= MAX_PERSONAL_PRESETS) {
+            return ShareResult.TARGET_FULL;
+        }
+        ClassDefinition copy = new ClassDefinition(UUID.randomUUID(), source.name(), source.icon(),
+                source.main(), source.sidearm(), source.throwable(), source.gadget(), source.gadget2(), source.melee(),
+                source.helmet(), source.chestplate(), source.leggings(), source.boots());
+        targetList.add(copy);
+        setDirty();
+        sendTo(server, to);
+        return ShareResult.OK;
+    }
+
     /** Resets the player back to "never touched their loadout" (equip-on-respawn stops overwriting their hotbar). Doesn't respect locked slots - see {@link #clearPersonalLoadoutSelfService} for the self-service path that does. */
     public void clearPersonalLoadout(MinecraftServer server, ServerPlayer player) {
         if (personalLoadouts.remove(player.getUUID()) != null) {
