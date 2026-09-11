@@ -130,6 +130,7 @@
   "classloadout.gui.whitelist_off": " (click to whitelist)",
   "classloadout.gui.ban_on": " (banned - press B to un-ban)",
   "classloadout.gui.ban_off": " (press B to ban)",
+  "classloadout.gui.item_banned": "Banned",
   "classloadout.gui.whitelist_empty": "Nothing is whitelisted for this slot yet - use /class whitelist to add items.",
   "classloadout.gui.loadout_title": "Loadout",
   "classloadout.gui.my_loadout": "My Loadout",
