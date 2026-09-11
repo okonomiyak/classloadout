@@ -250,7 +250,7 @@ public final class ServerEvents {
         for (int i = 0; i < slots.length; i++) {
             if (slots[i] != null) {
                 for (Map.Entry<ResourceLocation, Integer> grant : manager.getAmmoGrants(slotKeys[i], slots[i]).entrySet()) {
-                    giveItem(player, grant.getKey(), grant.getValue(), manager);
+                    giveItem(player, grant.getKey(), grant.getValue(), manager, false);
                 }
             }
         }
@@ -259,7 +259,7 @@ public final class ServerEvents {
     /** Gives every OP-curated spawn kit entry to the player, unconditionally, on every respawn. */
     private static void grantSpawnKit(ServerPlayer player, LoadoutManager manager) {
         for (var entry : manager.getSpawnKit().entrySet()) {
-            giveItem(player, entry.getKey(), entry.getValue(), manager);
+            giveItem(player, entry.getKey(), entry.getValue(), manager, true);
         }
     }
 
@@ -390,32 +390,35 @@ public final class ServerEvents {
      * copies, so that case just gives the one exact item as registered and ignores the count.
      * Shared by ammo grants and the spawn kit - both are "resolve an id, give N of it" grants,
      * just triggered differently (per-slot on equip vs. unconditionally on every respawn).
+     * {@code preferHotbar} controls which range a brand-new stack lands in first - the spawn
+     * kit wants the hotbar (it's meant to be quick-selectable gear), ammo grants want it out
+     * of the way in the main inventory instead, so it doesn't cover up the loadout's hotbar gear.
      */
-    private static void giveItem(ServerPlayer player, ResourceLocation itemId, int count, LoadoutManager manager) {
+    private static void giveItem(ServerPlayer player, ResourceLocation itemId, int count, LoadoutManager manager, boolean preferHotbar) {
         ItemStack template = ItemResolver.resolve(itemId, manager.getItemVariants());
         if (template == null || template.isEmpty()) {
             return;
         }
         int maxStack = template.getMaxStackSize();
         if (maxStack <= 1) {
-            giveOrDrop(player, template.copy());
+            giveOrDrop(player, template.copy(), preferHotbar);
             return;
         }
         int remaining = count;
         while (remaining > 0) {
             ItemStack stack = template.copyWithCount(Math.min(maxStack, remaining));
             remaining -= stack.getCount();
-            giveOrDrop(player, stack);
+            giveOrDrop(player, stack, preferHotbar);
         }
     }
 
     /**
-     * Same net effect as {@code Inventory#add}, but a brand-new stack lands in the main
-     * inventory (slots 9-35) before falling back to the hotbar (0-8) - so ammo/spawn-kit
-     * grants don't cover up the loadout's hotbar gear. Still tops up any existing matching
-     * stack first, wherever it already is, same as vanilla.
+     * Same net effect as {@code Inventory#add}, but a brand-new stack lands in the range
+     * {@code preferHotbar} picks first (hotbar 0-8, else main inventory 9-35), falling back to
+     * the other range only if that one's full. Still tops up any existing matching stack first,
+     * wherever it already is, same as vanilla.
      */
-    private static void giveOrDrop(ServerPlayer player, ItemStack stack) {
+    private static void giveOrDrop(ServerPlayer player, ItemStack stack, boolean preferHotbar) {
         NonNullList<ItemStack> items = player.getInventory().items;
         for (int i = 0; i < items.size() && !stack.isEmpty(); i++) {
             ItemStack existing = items.get(i);
@@ -426,11 +429,15 @@ public final class ServerEvents {
                 stack.shrink(move);
             }
         }
+        int firstFrom = preferHotbar ? 0 : 9;
+        int firstTo = preferHotbar ? 9 : 36;
+        int secondFrom = preferHotbar ? 9 : 0;
+        int secondTo = preferHotbar ? 36 : 9;
         if (!stack.isEmpty()) {
-            placeInEmptySlot(items, 9, 36, stack);
+            placeInEmptySlot(items, firstFrom, firstTo, stack);
         }
         if (!stack.isEmpty()) {
-            placeInEmptySlot(items, 0, 9, stack);
+            placeInEmptySlot(items, secondFrom, secondTo, stack);
         }
         if (!stack.isEmpty()) {
             player.drop(stack, false);
