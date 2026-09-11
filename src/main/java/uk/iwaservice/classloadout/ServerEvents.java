@@ -364,6 +364,8 @@ public final class ServerEvents {
      * clear-except-protected step as respawn first, when {@code death.clearInventoryOnDeath} is
      * on, so re-visiting the loadout station/locker while alive behaves exactly like a respawn
      * instead of just swapping the six loadout slots over whatever else is in the inventory.
+     * Also re-grants the spawn kit, same as respawn - a station visit is meant to fully refresh
+     * the player's kit, not just the loadout slots.
      */
     public static void equipLoadout(ServerPlayer player) {
         LoadoutManager manager = LoadoutManager.get(player.server);
@@ -374,6 +376,7 @@ public final class ServerEvents {
         if (slots != null) {
             grantAmmoForSlots(player, slots, manager);
         }
+        grantSpawnKit(player, manager);
     }
 
     /**
