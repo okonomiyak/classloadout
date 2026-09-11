@@ -403,10 +403,41 @@ public final class ServerEvents {
         }
     }
 
+    /**
+     * Same net effect as {@code Inventory#add}, but a brand-new stack lands in the main
+     * inventory (slots 9-35) before falling back to the hotbar (0-8) - so ammo/spawn-kit
+     * grants don't cover up the loadout's hotbar gear. Still tops up any existing matching
+     * stack first, wherever it already is, same as vanilla.
+     */
     private static void giveOrDrop(ServerPlayer player, ItemStack stack) {
-        boolean added = player.getInventory().add(stack);
-        if (!added || !stack.isEmpty()) {
+        NonNullList<ItemStack> items = player.getInventory().items;
+        for (int i = 0; i < items.size() && !stack.isEmpty(); i++) {
+            ItemStack existing = items.get(i);
+            if (!existing.isEmpty() && ItemStack.isSameItemSameComponents(existing, stack)
+                    && existing.getCount() < existing.getMaxStackSize()) {
+                int move = Math.min(stack.getCount(), existing.getMaxStackSize() - existing.getCount());
+                existing.grow(move);
+                stack.shrink(move);
+            }
+        }
+        if (!stack.isEmpty()) {
+            placeInEmptySlot(items, 9, 36, stack);
+        }
+        if (!stack.isEmpty()) {
+            placeInEmptySlot(items, 0, 9, stack);
+        }
+        if (!stack.isEmpty()) {
             player.drop(stack, false);
+        }
+    }
+
+    private static void placeInEmptySlot(NonNullList<ItemStack> items, int from, int to, ItemStack stack) {
+        for (int i = from; i < to; i++) {
+            if (items.get(i).isEmpty()) {
+                items.set(i, stack.copy());
+                stack.setCount(0);
+                return;
+            }
         }
     }
 
