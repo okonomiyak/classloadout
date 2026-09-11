@@ -410,8 +410,24 @@ public class LoadoutManager extends SavedData {
 
     public void addBannedItem(MinecraftServer server, ResourceLocation item) {
         if (bannedItems.add(item)) {
+            clearFromPersonalLoadouts(item);
             setDirty();
             broadcastAll(server);
+        }
+    }
+
+    /** A ban is absolute (see {@link #isBanned}) - anyone with the newly-banned item already
+     * assigned to a slot has that slot reset to unset, same as if they'd never picked anything,
+     * rather than leaving a selection they can no longer equip sitting there unexplained. */
+    private void clearFromPersonalLoadouts(ResourceLocation item) {
+        for (Map.Entry<UUID, PersonalLoadout> entry : personalLoadouts.entrySet()) {
+            PersonalLoadout loadout = entry.getValue();
+            for (LoadoutSlot slot : LoadoutSlot.values()) {
+                if (item.equals(loadout.get(slot))) {
+                    loadout = loadout.withSlot(slot, null);
+                }
+            }
+            entry.setValue(loadout);
         }
     }
 
