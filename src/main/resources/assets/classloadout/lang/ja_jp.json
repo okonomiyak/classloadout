@@ -132,6 +132,7 @@
   "classloadout.gui.whitelist_off": " (クリックで許可)",
   "classloadout.gui.ban_on": " (禁止中・Bキーで解除)",
   "classloadout.gui.ban_off": " (Bキーで禁止)",
+  "classloadout.gui.item_banned": "禁止中",
   "classloadout.gui.whitelist_empty": "このスロットはまだ何も許可されていません。/class whitelist で追加してください。",
   "classloadout.gui.loadout_title": "ロードアウト",
   "classloadout.gui.my_loadout": "マイロードアウト",

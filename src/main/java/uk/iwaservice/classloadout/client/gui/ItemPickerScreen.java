@@ -389,6 +389,7 @@ public class ItemPickerScreen extends Screen {
         int hoveredY = 0;
         String hoveredFolder = null;
         int hoveredFolderCount = 0;
+        boolean hoveredBanned = false;
         int total = shown.size() + 1;
         for (int index = 0; index < total; index++) {
             int col = index % COLS;
@@ -425,11 +426,20 @@ public class ItemPickerScreen extends Screen {
             }
             ItemStack resolved = loc == null ? null : ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
-            graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
+            int iconX = x + (CELL - ICON) / 2;
+            int iconY = y + (CELL - ICON) / 2;
+            graphics.renderItem(stack, iconX, iconY);
+            boolean banned = loc != null && LoadoutClientData.isBanned(loc);
+            // Same tight ring as WhitelistEditorScreen - drawn on the icon, not the whole cell, so it
+            // doesn't get confused with the "none" cell's barrier icon or fight the item sprite.
+            if (banned) {
+                graphics.renderOutline(iconX - 1, iconY - 1, ICON + 2, ICON + 2, 0xFFFF3333);
+            }
             if (hovered) {
                 hoveredStack = stack;
                 hoveredX = mouseX;
                 hoveredY = mouseY;
+                hoveredBanned = banned;
             }
         }
         graphics.disableScissor();
@@ -458,11 +468,18 @@ public class ItemPickerScreen extends Screen {
                 }
                 ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
                 ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
-                graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
+                int iconX = x + (CELL - ICON) / 2;
+                int iconY = y + (CELL - ICON) / 2;
+                graphics.renderItem(stack, iconX, iconY);
+                boolean banned = LoadoutClientData.isBanned(loc);
+                if (banned) {
+                    graphics.renderOutline(iconX - 1, iconY - 1, ICON + 2, ICON + 2, 0xFFFF3333);
+                }
                 if (hovered) {
                     hoveredStack = stack;
                     hoveredX = mouseX;
                     hoveredY = mouseY;
+                    hoveredBanned = banned;
                 }
             }
         }
@@ -481,6 +498,9 @@ public class ItemPickerScreen extends Screen {
                 lines.addAll(TaczCompat.describeGunTooltip(hoveredStack));
                 lines.addAll(TaczCompat.describeAmmoBoxTooltip(hoveredStack));
                 lines.addAll(TaczCompat.describeAmmoTooltip(hoveredStack));
+                if (hoveredBanned) {
+                    lines.add(Component.translatable("classloadout.gui.item_banned"));
+                }
                 graphics.renderTooltip(this.font, lines, Optional.empty(), hoveredX, hoveredY);
             }
         }
