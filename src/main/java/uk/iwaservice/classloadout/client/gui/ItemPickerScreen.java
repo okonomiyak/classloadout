@@ -318,8 +318,11 @@ public class ItemPickerScreen extends Screen {
         }
         int flyoutIndex = flyoutIndexAt(mouseX, mouseY);
         if (flyoutIndex >= 0) {
-            onPick.accept(expandedFolderItems.get(flyoutIndex));
-            minecraft.setScreen(parent);
+            ResourceLocation loc = expandedFolderItems.get(flyoutIndex);
+            if (!LoadoutClientData.isBanned(loc)) {
+                onPick.accept(loc);
+                minecraft.setScreen(parent);
+            }
             return true;
         }
         int index = cellIndexAt(mouseX, mouseY);
@@ -337,8 +340,10 @@ public class ItemPickerScreen extends Screen {
                 toggleFolderFlyout(folder, index);
                 return true;
             }
-            onPick.accept(loc);
-            minecraft.setScreen(parent);
+            if (!LoadoutClientData.isBanned(loc)) {
+                onPick.accept(loc);
+                minecraft.setScreen(parent);
+            }
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
