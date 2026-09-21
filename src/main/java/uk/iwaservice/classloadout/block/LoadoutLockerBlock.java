@@ -1,17 +1,28 @@
-package uk.iwaservice.classloadout;
+package uk.iwaservice.classloadout.block;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
+import uk.iwaservice.classloadout.block.entity.LoadoutLockerBlockEntity;
+import uk.iwaservice.classloadout.client.ClientPacketHandler;
 
 import javax.annotation.Nullable;
 
@@ -23,7 +34,7 @@ import javax.annotation.Nullable;
  * to follow {@code FACING} - see the matching {@code y} rotations in
  * {@code blockstates/loadout_locker.json}.
  */
-public class LoadoutLockerBlock extends HorizontalDirectionalBlock {
+public class LoadoutLockerBlock extends HorizontalDirectionalBlock implements EntityBlock {
     private static final VoxelShape SHAPE_NORTH = Shapes.or(
             Shapes.box(0, 0, 3.0 / 16, 1, 1, 1),
             Shapes.box(12.0 / 16, 4.0 / 16, 2.0 / 16, 14.0 / 16, 12.0 / 16, 3.0 / 16));
@@ -63,5 +74,19 @@ public class LoadoutLockerBlock extends HorizontalDirectionalBlock {
             case WEST -> SHAPE_WEST;
             default -> SHAPE_NORTH;
         };
+    }
+
+    @Nullable
+    @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return new LoadoutLockerBlockEntity(pos, state);
+    }
+
+    @Override
+    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (level.isClientSide) {
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleOpenLoadoutScreen(false));
+        }
+        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 }

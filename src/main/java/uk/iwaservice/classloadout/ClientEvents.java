@@ -38,20 +38,20 @@ public final class ClientEvents {
      * click (crashed with an NPE from a stale {@code Screen.minecraft}
      * reference in testing) - only ever react to one of the two firings.
      */
-    @SubscribeEvent
-    public static void onRightClickLoadoutStation(PlayerInteractEvent.RightClickBlock event) {
-        if (event.getHand() != InteractionHand.MAIN_HAND) {
-            return;
-        }
-        var state = event.getLevel().getBlockState(event.getPos());
-        if (state.is(ModRegistry.LOADOUT_STATION.get())) {
-            event.setCanceled(true);
-            Minecraft.getInstance().setScreen(new LoadoutScreen(null, true));
-        } else if (state.is(ModRegistry.LOADOUT_LOCKER.get())) {
-            event.setCanceled(true);
-            Minecraft.getInstance().setScreen(new LoadoutScreen(null, false));
-        }
-    }
+//    @SubscribeEvent
+//    public static void onRightClickLoadoutStation(PlayerInteractEvent.RightClickBlock event) {
+//        if (event.getHand() != InteractionHand.MAIN_HAND) {
+//            return;
+//        }
+//        var state = event.getLevel().getBlockState(event.getPos());
+//        if (state.is(ModRegistry.LOADOUT_STATION.get())) {
+//            event.setCanceled(true);
+//            Minecraft.getInstance().setScreen(new LoadoutScreen(null, true));
+//        } else if (state.is(ModRegistry.LOADOUT_LOCKER.get())) {
+//            event.setCanceled(true);
+//            Minecraft.getInstance().setScreen(new LoadoutScreen(null, false));
+//        }
+//    }
 
     /** Adds a "Loadout" button to the vanilla death screen, in the corner to avoid the Respawn/Title stack. */
     @SubscribeEvent
