@@ -11,7 +11,6 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
-import net.minecraft.commands.arguments.TeamArgument;
 import net.minecraft.commands.arguments.UuidArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
@@ -21,7 +20,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.scores.PlayerTeam;
 import uk.iwaservice.classloadout.ServerEvents;
 import uk.iwaservice.classloadout.loadout.ClassDefinition;
 import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
@@ -31,7 +29,6 @@ import uk.iwaservice.classloadout.loadout.PersonalLoadout;
 import uk.iwaservice.classloadout.network.NetworkHandler;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -250,7 +247,7 @@ public final class ClassCommand {
                                         .executes(ctx -> myPresetClearShared(ctx)))))
                 .then(Commands.literal("forceselect")
                         .requires(src -> src.hasPermission(2))
-                        .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("players", EntityArgument.players())
                         .then(Commands.argument("id", UuidArgument.uuid())
                                 .executes(ctx -> forceSelect(ctx)))))
                 .then(Commands.literal("forceassign")
@@ -258,16 +255,7 @@ public final class ClassCommand {
                         .then(Commands.argument("players", EntityArgument.players())
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
-                                .executes(ctx -> forceAssign(ctx))))))
-                .then(Commands.literal("forceselectall")
-                        .requires(src -> src.hasPermission(2))
-                        .then(Commands.argument("id", UuidArgument.uuid())
-                                .executes(ctx -> forceSelectAll(ctx))))
-                .then(Commands.literal("forceselectteam")
-                        .requires(src -> src.hasPermission(2))
-                        .then(Commands.argument("team", TeamArgument.team())
-                        .then(Commands.argument("id", UuidArgument.uuid())
-                                .executes(ctx -> forceSelectTeam(ctx))))));
+                                .executes(ctx -> forceAssign(ctx)))))));
     }
 
     /** Opens the OP-only preset editor client-side; permission already enforced by the command node. */
@@ -802,36 +790,22 @@ public final class ClassCommand {
      * {@code defer} variant here - a target picked by an OP has no "locker" use case.
      */
     private static int forceSelect(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        Collection<ServerPlayer> targets = EntityArgument.getPlayers(ctx, "players");
         UUID id = UuidArgument.getUuid(ctx, "id");
         MinecraftServer server = ctx.getSource().getServer();
         ClassDefinition def = LoadoutManager.get(server).get(id);
         if (def == null) {
             return fail(ctx, "classloadout.msg.class_not_found");
         }
-        applyForceSelect(server, target, def);
-        String targetName = target.getGameProfile().getName();
-        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_select_applied",
-                def.name(), targetName), true);
-        return 1;
-    }
-
-    /** Every-online-player counterpart to {@link #forceSelect} - used when the force-loadout GUI's target-name field is left blank. */
-    private static int forceSelectAll(CommandContext<CommandSourceStack> ctx) {
-        UUID id = UuidArgument.getUuid(ctx, "id");
-        MinecraftServer server = ctx.getSource().getServer();
-        ClassDefinition def = LoadoutManager.get(server).get(id);
-        if (def == null) {
-            return fail(ctx, "classloadout.msg.class_not_found");
-        }
-        List<ServerPlayer> players = server.getPlayerList().getPlayers();
-        for (ServerPlayer target : players) {
+        for (ServerPlayer target : targets) {
             applyForceSelect(server, target, def);
         }
-        int count = players.size();
-        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_select_applied_all",
-                def.name(), count), true);
-        return count;
+        Component who = targets.size() == 1
+                ? Component.literal(targets.iterator().next().getGameProfile().getName())
+                : Component.translatable("classloadout.msg.force_assign_players", targets.size());
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_select_applied",
+                def.name(), who), true);
+        return targets.size();
     }
 
     /**
@@ -851,37 +825,6 @@ public final class ClassCommand {
         manager.applyPreset(server, target, def.id());
         ServerEvents.equipLoadout(target);
         target.sendSystemMessage(Component.translatable("classloadout.msg.force_select_notice", def.name()));
-    }
-
-    /** Every-currently-online-member-of-a-team counterpart to {@link #forceSelect}. */
-    private static int forceSelectTeam(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        PlayerTeam team = TeamArgument.getTeam(ctx, "team");
-        UUID id = UuidArgument.getUuid(ctx, "id");
-        MinecraftServer server = ctx.getSource().getServer();
-        ClassDefinition def = LoadoutManager.get(server).get(id);
-        if (def == null) {
-            return fail(ctx, "classloadout.msg.class_not_found");
-        }
-        List<ServerPlayer> players = onlinePlayersOnTeam(server, team);
-        for (ServerPlayer target : players) {
-            applyForceSelect(server, target, def);
-        }
-        int count = players.size();
-        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_select_applied_team",
-                def.name(), team.getName(), count), true);
-        return count;
-    }
-
-    /** Online members of {@code team} (offline teammates are simply skipped - nothing to equip). */
-    private static List<ServerPlayer> onlinePlayersOnTeam(MinecraftServer server, PlayerTeam team) {
-        List<ServerPlayer> result = new ArrayList<>();
-        for (String name : team.getPlayers()) {
-            ServerPlayer player = server.getPlayerList().getPlayerByName(name);
-            if (player != null) {
-                result.add(player);
-            }
-        }
-        return result;
     }
 
     /**
