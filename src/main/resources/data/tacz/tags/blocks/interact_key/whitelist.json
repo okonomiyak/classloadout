@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "classloadout:loadout_station",
+    "classloadout:loadout_locker"
+  ]
+}

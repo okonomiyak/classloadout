@@ -4,13 +4,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.InteractionHand;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.client.gui.LoadoutScreen;
 
@@ -20,37 +18,6 @@ public final class ClientEvents {
     @SubscribeEvent
     public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         LoadoutClientData.clear();
-    }
-
-    /**
-     * Right-clicking a placed loadout station or loadout locker opens the
-     * same self-service {@link LoadoutScreen} as the death screen's button -
-     * purely client-side (the loadout data is already synced), so there's
-     * nothing for the server to authorize and no reason to route this
-     * through a packet. The station equips changes into the hotbar right
-     * away ({@code immediate=true}); the locker only saves them, leaving the
-     * hotbar alone until the next respawn ({@code immediate=false}) - see
-     * {@link LoadoutScreen#LoadoutScreen(Screen, boolean)}.
-     *
-     * <p>{@code RightClickBlock} fires once per hand for a single physical
-     * click; without the {@code MAIN_HAND} guard below, a single click could
-     * call {@code setScreen(new LoadoutScreen(...))} twice for the same
-     * click (crashed with an NPE from a stale {@code Screen.minecraft}
-     * reference in testing) - only ever react to one of the two firings.
-     */
-    @SubscribeEvent
-    public static void onRightClickLoadoutStation(PlayerInteractEvent.RightClickBlock event) {
-        if (event.getHand() != InteractionHand.MAIN_HAND) {
-            return;
-        }
-        var state = event.getLevel().getBlockState(event.getPos());
-        if (state.is(ModRegistry.LOADOUT_STATION.get())) {
-            event.setCanceled(true);
-            Minecraft.getInstance().setScreen(new LoadoutScreen(null, true));
-        } else if (state.is(ModRegistry.LOADOUT_LOCKER.get())) {
-            event.setCanceled(true);
-            Minecraft.getInstance().setScreen(new LoadoutScreen(null, false));
-        }
     }
 
     /** Adds a "Loadout" button to the vanilla death screen, in the corner to avoid the Respawn/Title stack. */
