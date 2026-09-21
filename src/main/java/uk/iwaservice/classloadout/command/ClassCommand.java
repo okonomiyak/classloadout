@@ -33,6 +33,7 @@ import uk.iwaservice.classloadout.network.NetworkHandler;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -260,7 +261,7 @@ public final class ClassCommand {
                                 .executes(ctx -> forceSelect(ctx)))))
                 .then(Commands.literal("forceassign")
                         .requires(src -> src.hasPermission(2))
-                        .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("players", EntityArgument.players())
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                         .then(Commands.argument("item", ResourceLocationArgument.id())
                                 .executes(ctx -> forceAssign(ctx))))))
@@ -268,22 +269,11 @@ public final class ClassCommand {
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("id", UuidArgument.uuid())
                                 .executes(ctx -> forceSelectAll(ctx))))
-                .then(Commands.literal("forceassignall")
-                        .requires(src -> src.hasPermission(2))
-                        .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
-                        .then(Commands.argument("item", ResourceLocationArgument.id())
-                                .executes(ctx -> forceAssignAll(ctx)))))
                 .then(Commands.literal("forceselectteam")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("team", TeamArgument.team())
                         .then(Commands.argument("id", UuidArgument.uuid())
-                                .executes(ctx -> forceSelectTeam(ctx)))))
-                .then(Commands.literal("forceassignteam")
-                        .requires(src -> src.hasPermission(2))
-                        .then(Commands.argument("team", TeamArgument.team())
-                        .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
-                        .then(Commands.argument("item", ResourceLocationArgument.id())
-                                .executes(ctx -> forceAssignTeam(ctx)))))));
+                                .executes(ctx -> forceSelectTeam(ctx))))));
     }
 
     /** Opens the OP-only preset editor client-side; permission already enforced by the command node. */
@@ -921,38 +911,23 @@ public final class ClassCommand {
      * doesn't apply here either.
      */
     private static int forceAssign(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
+        Collection<ServerPlayer> targets = EntityArgument.getPlayers(ctx, "players");
         LoadoutSlot slot = parseSlot(ctx);
         if (slot == null) {
             return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
         }
         ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
         MinecraftServer server = ctx.getSource().getServer();
-        applyForceAssign(server, target, slot, item);
-        String targetName = target.getGameProfile().getName();
-        Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
-        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_assign_applied",
-                slotName, targetName), true);
-        return 1;
-    }
-
-    /** Every-online-player counterpart to {@link #forceAssign} - used when the force-loadout GUI's target-name field is left blank. */
-    private static int forceAssignAll(CommandContext<CommandSourceStack> ctx) {
-        LoadoutSlot slot = parseSlot(ctx);
-        if (slot == null) {
-            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
-        }
-        ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
-        MinecraftServer server = ctx.getSource().getServer();
-        List<ServerPlayer> players = server.getPlayerList().getPlayers();
-        for (ServerPlayer target : players) {
+        for (ServerPlayer target : targets) {
             applyForceAssign(server, target, slot, item);
         }
-        int count = players.size();
         Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
-        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_assign_applied_all",
-                slotName, count), true);
-        return count;
+        Component who = targets.size() == 1
+                ? Component.literal(targets.iterator().next().getGameProfile().getName())
+                : Component.translatable("classloadout.msg.force_assign_players", targets.size());
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_assign_applied",
+                slotName, who), true);
+        return targets.size();
     }
 
     /**
@@ -974,26 +949,6 @@ public final class ClassCommand {
         ServerEvents.equipLoadout(target);
         Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
         target.sendSystemMessage(Component.translatable("classloadout.msg.force_assign_notice", slotName));
-    }
-
-    /** Every-currently-online-member-of-a-team counterpart to {@link #forceAssign}. */
-    private static int forceAssignTeam(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        PlayerTeam team = TeamArgument.getTeam(ctx, "team");
-        LoadoutSlot slot = parseSlot(ctx);
-        if (slot == null) {
-            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
-        }
-        ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
-        MinecraftServer server = ctx.getSource().getServer();
-        List<ServerPlayer> players = onlinePlayersOnTeam(server, team);
-        for (ServerPlayer target : players) {
-            applyForceAssign(server, target, slot, item);
-        }
-        int count = players.size();
-        Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
-        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.force_assign_applied_team",
-                slotName, team.getName(), count), true);
-        return count;
     }
 
     /** Locked slots (see {@code LoadoutManager#isLocked}) keep their OP-forced value instead of being wiped. See {@link #assign} for {@code immediate}. */
