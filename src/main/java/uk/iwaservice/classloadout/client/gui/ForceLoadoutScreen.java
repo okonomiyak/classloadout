@@ -21,10 +21,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * OP-only GUI front end for {@code /class forceselect}/{@code forceassign}
- * and their every-online-player ({@code forceselectall})
- * and per-team ({@code forceselectteam})
- * counterparts: fill in a target player name and/or a scoreboard team name,
+ * OP-only GUI front end for {@code /class forceselect}/{@code forceassign}:
+ * fill in a target player name and/or a scoreboard team name,
  * then either click a preset's Apply button (forceselect - the whole
  * ten-slot loadout, not whitelist-restricted, same as the preset editor) or
  * click one of the slot icons below to force just that slot (forceassign)
@@ -235,9 +233,12 @@ public class ForceLoadoutScreen extends Screen {
 
     /** A non-blank team name wins over the player name (selector {@code @a[team=...]}); with both blank, targets every online player ({@code @a}). */
     private String forceAssignCommand(LoadoutSlot slot, ResourceLocation item) {
-        String selector = !teamName.isBlank() ? "@a[team=" + teamName.trim() + "]"
+        return "class forceassign " + targetSelector() + " " + slot.key() + " " + item;
+    }
+
+    private String targetSelector() {
+        return !teamName.isBlank() ? "@a[team=" + teamName.trim() + "]"
                 : !targetName.isBlank() ? targetName.trim() : "@a";
-        return "class forceassign " + selector + " " + slot.key() + " " + item;
     }
 
     /** See {@link #forceAssignCommand} for how a blank team/player name is resolved. */
@@ -253,13 +254,7 @@ public class ForceLoadoutScreen extends Screen {
         putIfPresent(LoadoutSlot.CHESTPLATE, entry.chestplate());
         putIfPresent(LoadoutSlot.LEGGINGS, entry.leggings());
         putIfPresent(LoadoutSlot.BOOTS, entry.boots());
-        if (!teamName.isBlank()) {
-            command("class forceselectteam " + teamName.trim() + " " + entry.id());
-        } else if (!targetName.isBlank()) {
-            command("class forceselect " + targetName.trim() + " " + entry.id());
-        } else {
-            command("class forceselectall " + entry.id());
-        }
+        command("class forceselect " + targetSelector() + " " + entry.id());
     }
 
     private void putIfPresent(LoadoutSlot slot, @Nullable ResourceLocation loc) {
