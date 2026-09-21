@@ -6,12 +6,17 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
+import uk.iwaservice.classloadout.block.LoadoutLockerBlock;
+import uk.iwaservice.classloadout.block.LoadoutStationBlock;
+import uk.iwaservice.classloadout.block.entity.LoadoutLockerBlockEntity;
+import uk.iwaservice.classloadout.block.entity.LoadoutStationBlockEntity;
 import uk.iwaservice.classloadout.cover.CoverEntity;
 import uk.iwaservice.classloadout.cover.CoverPlacerItem;
 import uk.iwaservice.classloadout.resupply.AmmoPackEntity;
@@ -28,6 +33,7 @@ public final class ModRegistry {
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, ClassLoadoutMod.MODID);
     public static final DeferredRegister<EntityType<?>> ENTITY_TYPES =
             DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, ClassLoadoutMod.MODID);
+    public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES = DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, ClassLoadoutMod.MODID);
 
     // --- loadout station (right-click to open the loadout screen without dying) ---
 
@@ -40,6 +46,8 @@ public final class ModRegistry {
                     .noOcclusion()));
     public static final RegistryObject<Item> LOADOUT_STATION_ITEM = ITEMS.register("loadout_station",
             () -> new BlockItem(LOADOUT_STATION.get(), new Item.Properties()));
+    public static final RegistryObject<BlockEntityType<LoadoutStationBlockEntity>> LOADOUT_STATION_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("loadout_station",
+        () -> BlockEntityType.Builder.of(LoadoutStationBlockEntity::new, LOADOUT_STATION.get()).build(null));
 
     // --- loadout locker (right-click to open the loadout screen, but changes only apply on next respawn) ---
 
@@ -52,6 +60,8 @@ public final class ModRegistry {
                     .noOcclusion()));
     public static final RegistryObject<Item> LOADOUT_LOCKER_ITEM = ITEMS.register("loadout_locker",
             () -> new BlockItem(LOADOUT_LOCKER.get(), new Item.Properties()));
+    public static final RegistryObject<BlockEntityType<LoadoutLockerBlockEntity>> LOADOUT_LOCKER_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("loadout_locker",
+        () -> BlockEntityType.Builder.of(LoadoutLockerBlockEntity::new, LOADOUT_LOCKER.get()).build(null));
 
     // --- guard spawner (right-click to configure, OP only: entity type, respawn delay, spawned items) ---
 
@@ -134,6 +144,7 @@ public final class ModRegistry {
         ITEMS.register(modBus);
         BLOCKS.register(modBus);
         ENTITY_TYPES.register(modBus);
+        BLOCK_ENTITY_TYPES.register(modBus);
     }
 
     private ModRegistry() {}

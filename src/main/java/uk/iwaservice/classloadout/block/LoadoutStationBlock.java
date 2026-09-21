@@ -1,17 +1,29 @@
-package uk.iwaservice.classloadout;
+package uk.iwaservice.classloadout.block;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
+import org.jetbrains.annotations.NotNull;
+import uk.iwaservice.classloadout.block.entity.LoadoutStationBlockEntity;
+import uk.iwaservice.classloadout.client.ClientPacketHandler;
 
 import javax.annotation.Nullable;
 
@@ -31,7 +43,7 @@ import javax.annotation.Nullable;
  * overhang, so they're left out of the collision shape entirely - a solid
  * hitbox extending into the block above would be surprising to stand near.
  */
-public class LoadoutStationBlock extends HorizontalDirectionalBlock {
+public class LoadoutStationBlock extends HorizontalDirectionalBlock implements EntityBlock {
     private static final VoxelShape SHAPE = Shapes.or(
             px(0, 14, 0, 16, 16, 16),
             px(1, 13, 11, 5, 14, 15),
@@ -66,5 +78,19 @@ public class LoadoutStationBlock extends HorizontalDirectionalBlock {
     @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return SHAPE;
+    }
+
+    @Nullable
+    @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return new LoadoutStationBlockEntity(pos, state);
+    }
+
+    @Override
+    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (level.isClientSide) {
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ClientPacketHandler.handleOpenLoadoutScreen(true));
+        }
+        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 }

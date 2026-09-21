@@ -7,6 +7,7 @@ import uk.iwaservice.classloadout.client.gui.ClassEditorScreen;
 import uk.iwaservice.classloadout.client.gui.ForceLoadoutScreen;
 import uk.iwaservice.classloadout.client.gui.GuardSpawnerEditorScreen;
 import uk.iwaservice.classloadout.client.gui.HammerBlocksEditorScreen;
+import uk.iwaservice.classloadout.client.gui.LoadoutScreen;
 import uk.iwaservice.classloadout.client.gui.PriceEditorScreen;
 import uk.iwaservice.classloadout.client.gui.ProtectedItemsEditorScreen;
 import uk.iwaservice.classloadout.client.gui.SpawnKitEditorScreen;
@@ -90,6 +91,10 @@ public final class ClientPacketHandler {
         if (mc.player != null && mc.player.hasPermissions(2)) {
             mc.setScreen(new PriceEditorScreen());
         }
+    }
+
+    public static void handleOpenLoadoutScreen(boolean immediate) {
+        Minecraft.getInstance().setScreen(new LoadoutScreen(null, immediate));
     }
 
     private ClientPacketHandler() {}
