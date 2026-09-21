@@ -120,7 +120,7 @@
   "classloadout.gui.category_tacz": "TACZ",
   "classloadout.gui.category_superbwarfare": "SW",
   "classloadout.gui.category_minecraft": "MC",
-  "classloadout.gui.category_classloadout": "CL",
+  "classloadout.gui.category_allowed": "Allowed",
   "classloadout.gui.category_held_items": "Held",
   "classloadout.msg.variant_deleted": "Deleted held-item variant %s.",
   "classloadout.msg.variant_folder_set": "%s filed under folder \"%s\".",

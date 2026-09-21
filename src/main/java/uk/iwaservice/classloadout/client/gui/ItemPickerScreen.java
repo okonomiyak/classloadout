@@ -216,7 +216,7 @@ public class ItemPickerScreen extends Screen {
     }
 
     private void updateShown() {
-        List<ResourceLocation> base = ItemCatalog.byCategory(allItems, selectedCategory);
+        List<ResourceLocation> base = ItemCatalog.byCategory(allItems, selectedCategory, ItemCatalog::allowedInAnySlot);
         String query = search.getValue();
         if (restrictTo != null && query.isBlank()) {
             base = buildTopLevel(base);
