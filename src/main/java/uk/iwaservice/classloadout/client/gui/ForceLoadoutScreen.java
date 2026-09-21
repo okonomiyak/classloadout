@@ -23,8 +23,8 @@ import java.util.stream.Collectors;
 
 /**
  * OP-only GUI front end for {@code /class forceselect}/{@code forceassign}
- * and their every-online-player ({@code forceselectall}/{@code forceassignall})
- * and per-team ({@code forceselectteam}/{@code forceassignteam})
+ * and their every-online-player ({@code forceselectall})
+ * and per-team ({@code forceselectteam})
  * counterparts: fill in a target player name and/or a scoreboard team name,
  * then either click a preset's Apply button (forceselect - the whole
  * ten-slot loadout, not whitelist-restricted, same as the preset editor) or
@@ -246,15 +246,11 @@ public class ForceLoadoutScreen extends Screen {
         }, LoadoutClientData.getWhitelist(slot)))).bounds(x, y, SLOT, SLOT).build();
     }
 
-    /** A non-blank team name wins over the player name (targets every online team member); with both blank, targets every online player. */
+    /** A non-blank team name wins over the player name (selector {@code @a[team=...]}); with both blank, targets every online player ({@code @a}). */
     private String forceAssignCommand(LoadoutSlot slot, ResourceLocation item) {
-        if (!teamName.isBlank()) {
-            return "class forceassignteam " + teamName.trim() + " " + slot.key() + " " + item;
-        }
-        if (!targetName.isBlank()) {
-            return "class forceassign " + targetName.trim() + " " + slot.key() + " " + item;
-        }
-        return "class forceassignall " + slot.key() + " " + item;
+        String selector = !teamName.isBlank() ? "@a[team=" + teamName.trim() + "]"
+                : !targetName.isBlank() ? targetName.trim() : "@a";
+        return "class forceassign " + selector + " " + slot.key() + " " + item;
     }
 
     /** See {@link #forceAssignCommand} for how a blank team/player name is resolved. */
