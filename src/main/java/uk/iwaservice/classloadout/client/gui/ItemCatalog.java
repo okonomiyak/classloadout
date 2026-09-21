@@ -6,6 +6,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
 import uk.iwaservice.classloadout.ItemResolver;
+import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 
@@ -16,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * The full pool of items an OP can browse when curating a slot whitelist,
@@ -51,8 +53,10 @@ final class ItemCatalog {
     }
 
     /** Namespace-based grouping shown as tabs in {@link WhitelistEditorScreen}; OP-registered held-item variants get their own bucket regardless of the item they wrap, since browsing "guns" and browsing "the customized gun I registered" are different tasks. */
-    enum Category { TACZ, SUPERBWARFARE, MINECRAFT, CLASSLOADOUT, HELD_ITEMS }
+    enum Category { TACZ, SUPERBWARFARE, MINECRAFT, ALLOWED, HELD_ITEMS }
 
+    /** Namespace bucket, or {@code null} for items that only appear under "All" (the mod's own pack items). {@link Category#ALLOWED} is not namespace-based - see {@link #byCategory}. */
+    @Nullable
     static Category categoryOf(ResourceLocation loc) {
         if ("classloadout".equals(loc.getNamespace()) && loc.getPath().startsWith("variant_")) {
             return Category.HELD_ITEMS;
@@ -61,18 +65,28 @@ final class ItemCatalog {
             case "tacz" -> Category.TACZ;
             case "superbwarfare" -> Category.SUPERBWARFARE;
             case "minecraft" -> Category.MINECRAFT;
-            default -> Category.CLASSLOADOUT;
+            default -> null;
         };
     }
 
-    /** {@code null} category means no filtering (all categories). */
-    static List<ResourceLocation> byCategory(List<ResourceLocation> items, @Nullable Category category) {
+    /** Whitelisted under any slot; the "allowed" tab of screens that aren't tied to one slot. */
+    static boolean allowedInAnySlot(ResourceLocation loc) {
+        for (LoadoutSlot slot : LoadoutSlot.values()) {
+            if (LoadoutClientData.getWhitelist(slot).contains(loc)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** {@code null} category means no filtering (all categories). {@code allowed} decides membership of {@link Category#ALLOWED}. */
+    static List<ResourceLocation> byCategory(List<ResourceLocation> items, @Nullable Category category, Predicate<ResourceLocation> allowed) {
         if (category == null) {
             return items;
         }
         List<ResourceLocation> filtered = new ArrayList<>();
         for (ResourceLocation loc : items) {
-            if (categoryOf(loc) == category) {
+            if (category == Category.ALLOWED ? allowed.test(loc) : categoryOf(loc) == category) {
                 filtered.add(loc);
             }
         }

@@ -122,7 +122,7 @@
   "classloadout.gui.category_tacz": "TACZ",
   "classloadout.gui.category_superbwarfare": "SW",
   "classloadout.gui.category_minecraft": "MC",
-  "classloadout.gui.category_classloadout": "CL",
+  "classloadout.gui.category_allowed": "許可済",
   "classloadout.gui.category_held_items": "手持ち",
   "classloadout.msg.variant_deleted": "手持ち登録アイテム%sを削除しました。",
   "classloadout.msg.variant_folder_set": "%sをフォルダ「%s」に分類しました。",

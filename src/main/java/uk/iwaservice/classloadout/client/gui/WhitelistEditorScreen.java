@@ -201,7 +201,7 @@ public class WhitelistEditorScreen extends Screen {
     }
 
     private void updateShown() {
-        List<ResourceLocation> categoryFiltered = ItemCatalog.byCategory(allItems, selectedCategory);
+        List<ResourceLocation> categoryFiltered = ItemCatalog.byCategory(allItems, selectedCategory, loc -> LoadoutClientData.getWhitelist(selectedSlot).contains(loc));
         String query = search.getValue();
         boolean topLevelHeldView = selectedCategory == ItemCatalog.Category.HELD_ITEMS && query.isBlank();
         if (topLevelHeldView) {

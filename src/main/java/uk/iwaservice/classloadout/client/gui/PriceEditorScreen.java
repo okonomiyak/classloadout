@@ -153,7 +153,7 @@ public class PriceEditorScreen extends Screen {
     }
 
     private void updateShown() {
-        shown = ItemCatalog.search(ItemCatalog.byCategory(allItems, selectedCategory), search.getValue());
+        shown = ItemCatalog.search(ItemCatalog.byCategory(allItems, selectedCategory, ItemCatalog::allowedInAnySlot), search.getValue());
         int rows = (shown.size() + COLS - 1) / COLS;
         int contentHeight = rows * CELL;
         maxScroll = Math.max(0, contentHeight - gridHeight);
