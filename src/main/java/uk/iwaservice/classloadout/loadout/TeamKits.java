@@ -3,6 +3,8 @@ package uk.iwaservice.classloadout.loadout;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
 import uk.iwaservice.classloadout.ServerEvents;
 
 import javax.annotation.Nullable;
@@ -29,13 +31,24 @@ public final class TeamKits {
         if (!leaving && !joining) {
             return;
         }
-        if (leaving) {
-            manager.revertTeamKit(server, player);
-        }
+        LoadoutManager.AppliedTeamKit reverted = leaving ? manager.revertTeamKit(server, player) : null;
         if (joining) {
             manager.applyTeamKit(server, player, team);
         }
-        ServerEvents.equipLoadout(player);
+        if (!joining && reverted != null && manager.getPersonalLoadout(player.getUUID()) == null) {
+            // No loadout of their own: just take the kit's items back off rather than running the
+            // full equip, which would clear the rest of their inventory.
+            for (LoadoutSlot slot : reverted.previous().keySet()) {
+                EquipmentSlot eq = slot.equipmentSlot();
+                if (eq != null) {
+                    player.setItemSlot(eq, ItemStack.EMPTY);
+                } else {
+                    player.getInventory().setItem(slot.hotbarIndex(), ItemStack.EMPTY);
+                }
+            }
+        } else {
+            ServerEvents.equipLoadout(player);
+        }
         if (joining) {
             player.sendSystemMessage(Component.translatable("classloadout.msg.teamkit_notice", team));
         }

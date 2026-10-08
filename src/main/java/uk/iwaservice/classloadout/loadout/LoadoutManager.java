@@ -852,7 +852,8 @@ public class LoadoutManager extends SavedData {
     /** What a slot looked like before a team kit overrode it: the player's own chosen item (null = unset) and whether it was already locked (e.g. by a manual forceassign). */
     public record PreviousSlot(@Nullable ResourceLocation item, boolean wasLocked) {}
 
-    public record AppliedTeamKit(String team, Map<LoadoutSlot, PreviousSlot> previous) {}
+    /** {@code hadLoadout}: whether the player had a personal loadout of their own before the kit applied. */
+    public record AppliedTeamKit(String team, Map<LoadoutSlot, PreviousSlot> previous, boolean hadLoadout) {}
 
     public Map<String, Map<LoadoutSlot, ResourceLocation>> getTeamKits() {
         return teamKits;
@@ -919,18 +920,24 @@ public class LoadoutManager extends SavedData {
         for (LoadoutSlot slot : kit.keySet()) {
             previous.put(slot, new PreviousSlot(current.get(slot), isLocked(id, slot)));
         }
-        appliedTeamKits.put(id, new AppliedTeamKit(team, previous));
+        appliedTeamKits.put(id, new AppliedTeamKit(team, previous, personalLoadouts.containsKey(id)));
         setDirty();
         for (Map.Entry<LoadoutSlot, ResourceLocation> e : kit.entrySet()) {
             forceSlot(server, player, e.getKey(), e.getValue());
         }
     }
 
-    /** Restores each overridden slot's previous item and lock state; no-op if no kit is applied. Doesn't equip. */
-    public void revertTeamKit(MinecraftServer server, ServerPlayer player) {
+    /**
+     * Restores each overridden slot's previous item and lock state; no-op (null) if no kit is
+     * applied. Doesn't equip. A player who had no loadout of their own before the kit, and still
+     * has nothing else set, gets the kit-created loadout removed again, so respawns keep leaving
+     * them alone. Returns the reverted record.
+     */
+    @Nullable
+    public AppliedTeamKit revertTeamKit(MinecraftServer server, ServerPlayer player) {
         AppliedTeamKit applied = appliedTeamKits.remove(player.getUUID());
         if (applied == null) {
-            return;
+            return null;
         }
         setDirty();
         for (Map.Entry<LoadoutSlot, PreviousSlot> e : applied.previous().entrySet()) {
@@ -942,6 +949,10 @@ public class LoadoutManager extends SavedData {
             }
             setSlot(server, player, e.getKey(), prev.item());
         }
+        if (!applied.hadLoadout() && PersonalLoadout.EMPTY.equals(personalLoadouts.get(player.getUUID()))) {
+            clearPersonalLoadout(server, player);
+        }
+        return applied;
     }
 
     /**
@@ -1101,7 +1112,8 @@ public class LoadoutManager extends SavedData {
                             s.contains("Item") ? ResourceLocation.parse(s.getString("Item")) : null, s.getBoolean("Locked")));
                 }
             }
-            manager.appliedTeamKits.put(a.getUUID("Player"), new AppliedTeamKit(a.getString("Team"), previous));
+            manager.appliedTeamKits.put(a.getUUID("Player"), new AppliedTeamKit(a.getString("Team"), previous,
+                    !a.contains("HadLoadout") || a.getBoolean("HadLoadout")));
         }
         ListTag whitelistList = tag.getList("Whitelists", Tag.TAG_COMPOUND);
         for (int i = 0; i < whitelistList.size(); i++) {
@@ -1296,6 +1308,7 @@ public class LoadoutManager extends SavedData {
                 prevSlots.add(st);
             }
             a.put("Slots", prevSlots);
+            a.putBoolean("HadLoadout", e.getValue().hadLoadout());
             appliedList.add(a);
         }
         tag.put("AppliedTeamKits", appliedList);
