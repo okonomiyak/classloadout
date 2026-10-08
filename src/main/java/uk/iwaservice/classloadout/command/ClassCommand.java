@@ -6,6 +6,8 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -20,6 +22,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.registries.ForgeRegistries;
 import uk.iwaservice.classloadout.ServerEvents;
 import uk.iwaservice.classloadout.loadout.ClassDefinition;
 import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
@@ -34,6 +37,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 /**
  * {@code /class} command tree. All loadout operations enter the server
@@ -67,6 +72,69 @@ public final class ClassCommand {
                             Arrays.stream(LoadoutSlot.values()).map(LoadoutSlot::key)),
                     builder);
 
+    private static final SuggestionProvider<CommandSourceStack> ALL_ITEMS = (ctx, b) ->
+            SharedSuggestionProvider.suggestResource(allItems(ctx), b);
+    private static final SuggestionProvider<CommandSourceStack> ALL_BLOCKS = (ctx, b) ->
+            SharedSuggestionProvider.suggestResource(ForgeRegistries.BLOCKS.getKeys().stream(), b);
+    private static final SuggestionProvider<CommandSourceStack> ENTITY_TYPES = (ctx, b) ->
+            SharedSuggestionProvider.suggestResource(ForgeRegistries.ENTITY_TYPES.getKeys().stream(), b);
+    private static final SuggestionProvider<CommandSourceStack> WHITELIST_ITEMS = (ctx, b) -> {
+        LoadoutSlot slot = slotArg(ctx);
+        return SharedSuggestionProvider.suggestResource(slot == null ? Stream.<ResourceLocation>empty() : mgr(ctx).getWhitelist(slot).stream(), b);
+    };
+    /** Exactly what the player may pick: the slot's whitelist plus whitelisted variants (everything when enforcement is off). */
+    private static final SuggestionProvider<CommandSourceStack> ASSIGN_ITEMS = (ctx, b) -> {
+        LoadoutSlot slot = slotArg(ctx);
+        if (slot == null) return b.buildFuture();
+        LoadoutManager m = mgr(ctx);
+        return SharedSuggestionProvider.suggestResource((m.isWhitelistEnabled()
+                ? Stream.concat(m.getWhitelist(slot).stream(), m.getItemVariants().keySet().stream().filter(v -> m.isWhitelisted(slot, v)))
+                : allItems(ctx)).distinct(), b);
+    };
+    private static final SuggestionProvider<CommandSourceStack> PROTECTED_ITEMS = (ctx, b) ->
+            SharedSuggestionProvider.suggestResource(mgr(ctx).getProtectedItems(), b);
+    private static final SuggestionProvider<CommandSourceStack> BANNED_ITEMS = (ctx, b) ->
+            SharedSuggestionProvider.suggestResource(mgr(ctx).getBannedItems(), b);
+    private static final SuggestionProvider<CommandSourceStack> SPAWNKIT_ITEMS = (ctx, b) ->
+            SharedSuggestionProvider.suggestResource(mgr(ctx).getSpawnKit().keySet(), b);
+    private static final SuggestionProvider<CommandSourceStack> HAMMER_BLOCKS = (ctx, b) ->
+            SharedSuggestionProvider.suggestResource(mgr(ctx).getHammerBlocks(), b);
+    private static final SuggestionProvider<CommandSourceStack> SPAWNER_ITEMS = (ctx, b) -> {
+        GlobalPos gp = GlobalPos.of(ctx.getSource().getLevel().dimension(), BlockPosArgument.getBlockPos(ctx, "pos"));
+        return SharedSuggestionProvider.suggestResource(mgr(ctx).getGuardSpawnerItems(gp), b);
+    };
+    private static final SuggestionProvider<CommandSourceStack> TEMPLATE_ITEMS = (ctx, b) -> {
+        GuardSpawnerTemplate t = mgr(ctx).getGuardSpawnerTemplate(UuidArgument.getUuid(ctx, "id"));
+        return SharedSuggestionProvider.suggestResource(t == null ? List.<ResourceLocation>of() : t.items(), b);
+    };
+    private static final SuggestionProvider<CommandSourceStack> PRESET_IDS = (ctx, b) -> suggestDefs(mgr(ctx).list(), b);
+    private static final SuggestionProvider<CommandSourceStack> TEMPLATE_IDS = (ctx, b) -> {
+        mgr(ctx).listGuardSpawnerTemplates().forEach(t -> b.suggest(t.id().toString(), Component.literal(t.name())));
+        return b.buildFuture();
+    };
+    private static final SuggestionProvider<CommandSourceStack> MY_PRESET_IDS = (ctx, b) ->
+            suggestDefs(mgr(ctx).getPersonalPresets(ctx.getSource().getPlayerOrException().getUUID()), b);
+    private static final SuggestionProvider<CommandSourceStack> SHARED_PRESET_IDS = (ctx, b) ->
+            suggestDefs(mgr(ctx).getSharedPresets(ctx.getSource().getPlayerOrException().getUUID()), b);
+
+    private static LoadoutManager mgr(CommandContext<CommandSourceStack> ctx) {
+        return LoadoutManager.get(ctx.getSource().getServer());
+    }
+
+    @Nullable
+    private static LoadoutSlot slotArg(CommandContext<CommandSourceStack> ctx) {
+        return LoadoutSlot.byKey(StringArgumentType.getString(ctx, "slot"));
+    }
+
+    private static Stream<ResourceLocation> allItems(CommandContext<CommandSourceStack> ctx) {
+        return Stream.concat(ForgeRegistries.ITEMS.getKeys().stream(), mgr(ctx).getItemVariants().keySet().stream());
+    }
+
+    private static CompletableFuture<Suggestions> suggestDefs(Collection<ClassDefinition> defs, SuggestionsBuilder b) {
+        defs.forEach(d -> b.suggest(d.id().toString(), Component.literal(d.name())));
+        return b.buildFuture();
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("class")
                 .then(Commands.literal("editor")
@@ -84,11 +152,11 @@ public final class ClassCommand {
                         .then(Commands.literal("add")
                                 .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
                                 .then(Commands.literal("held").executes(ctx -> whitelistAddHeld(ctx)))
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                                         .executes(ctx -> whitelistAdd(ctx)))))
                         .then(Commands.literal("remove")
                                 .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(WHITELIST_ITEMS)
                                         .executes(ctx -> whitelistRemove(ctx)))))
                         .then(Commands.literal("disable").executes(ctx -> whitelistDisable(ctx)))
                         .then(Commands.literal("enable").executes(ctx -> whitelistEnable(ctx))))
@@ -96,42 +164,42 @@ public final class ClassCommand {
                         .requires(src -> src.hasPermission(2))
                         .executes(ctx -> protectEditor(ctx))
                         .then(Commands.literal("add")
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                                         .executes(ctx -> protectAdd(ctx))))
                         .then(Commands.literal("remove")
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(PROTECTED_ITEMS)
                                         .executes(ctx -> protectRemove(ctx)))))
                 .then(Commands.literal("ban")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.literal("add")
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                                         .executes(ctx -> banAdd(ctx))))
                         .then(Commands.literal("remove")
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(BANNED_ITEMS)
                                         .executes(ctx -> banRemove(ctx)))))
                 .then(Commands.literal("spawnkit")
                         .requires(src -> src.hasPermission(2))
                         .executes(ctx -> spawnKitEditor(ctx))
                         .then(Commands.literal("add")
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                                 .then(Commands.argument("count", IntegerArgumentType.integer(0))
                                         .executes(ctx -> spawnKitAdd(ctx)))))
                         .then(Commands.literal("remove")
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(SPAWNKIT_ITEMS)
                                         .executes(ctx -> spawnKitRemove(ctx)))))
                 .then(Commands.literal("hammerblocks")
                         .requires(src -> src.hasPermission(2))
                         .executes(ctx -> hammerBlocksEditor(ctx))
                         .then(Commands.literal("add")
-                                .then(Commands.argument("block", ResourceLocationArgument.id())
+                                .then(Commands.argument("block", ResourceLocationArgument.id()).suggests(ALL_BLOCKS)
                                         .executes(ctx -> hammerBlocksAdd(ctx))))
                         .then(Commands.literal("remove")
-                                .then(Commands.argument("block", ResourceLocationArgument.id())
+                                .then(Commands.argument("block", ResourceLocationArgument.id()).suggests(HAMMER_BLOCKS)
                                         .executes(ctx -> hammerBlocksRemove(ctx)))))
                 .then(Commands.literal("price")
                         .requires(src -> src.hasPermission(2))
                         .executes(ctx -> priceEditor(ctx))
-                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                        .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                         .then(Commands.argument("cost", IntegerArgumentType.integer(0))
                                 .executes(ctx -> priceSet(ctx)))))
                 .then(Commands.literal("points")
@@ -153,42 +221,42 @@ public final class ClassCommand {
                         .then(Commands.literal("resume").executes(ctx -> guardSpawnerResume(ctx)))
                         .then(Commands.literal("clear").executes(ctx -> guardSpawnerClear(ctx)))
                         .then(Commands.literal("template")
-                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("id", UuidArgument.uuid()).suggests(TEMPLATE_IDS)
                                         .then(Commands.literal("save")
-                                                .then(Commands.argument("entityType", ResourceLocationArgument.id())
+                                                .then(Commands.argument("entityType", ResourceLocationArgument.id()).suggests(ENTITY_TYPES)
                                                 .then(Commands.argument("delaySeconds", IntegerArgumentType.integer(1))
                                                 .then(Commands.argument("name", StringArgumentType.greedyString())
                                                         .executes(ctx -> guardSpawnerTemplateSave(ctx))))))
                                         .then(Commands.literal("item")
                                                 .then(Commands.literal("add")
-                                                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                                        .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                                                                 .executes(ctx -> guardSpawnerTemplateAddItem(ctx))))
                                                 .then(Commands.literal("remove")
-                                                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                                        .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(TEMPLATE_ITEMS)
                                                                 .executes(ctx -> guardSpawnerTemplateRemoveItem(ctx)))))
                                         .then(Commands.literal("delete").executes(ctx -> guardSpawnerTemplateDelete(ctx)))))
                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
                                 .then(Commands.literal("config")
-                                        .then(Commands.argument("entityType", ResourceLocationArgument.id())
+                                        .then(Commands.argument("entityType", ResourceLocationArgument.id()).suggests(ENTITY_TYPES)
                                         .then(Commands.argument("delaySeconds", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> guardSpawnerConfig(ctx)))))
                                 .then(Commands.literal("item")
                                         .then(Commands.literal("add")
-                                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                                                         .executes(ctx -> guardSpawnerAddItem(ctx))))
                                         .then(Commands.literal("remove")
-                                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(SPAWNER_ITEMS)
                                                         .executes(ctx -> guardSpawnerRemoveItem(ctx)))))
                                 .then(Commands.literal("template")
-                                        .then(Commands.argument("id", UuidArgument.uuid())
+                                        .then(Commands.argument("id", UuidArgument.uuid()).suggests(TEMPLATE_IDS)
                                                 .executes(ctx -> guardSpawnerTemplateApply(ctx))))))
                 .then(Commands.literal("assign")
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
-                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                        .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ASSIGN_ITEMS)
                                 .executes(ctx -> assign(ctx, true))
                                 .then(Commands.literal("defer").executes(ctx -> assign(ctx, false))))))
                 .then(Commands.literal("select")
-                        .then(Commands.argument("id", UuidArgument.uuid())
+                        .then(Commands.argument("id", UuidArgument.uuid()).suggests(PRESET_IDS)
                                 .executes(ctx -> select(ctx, true))
                                 .then(Commands.literal("defer").executes(ctx -> select(ctx, false)))))
                 .then(Commands.literal("clear")
@@ -199,17 +267,17 @@ public final class ClassCommand {
                                 .then(Commands.argument("name", StringArgumentType.greedyString())
                                         .executes(ctx -> myPresetSave(ctx))))
                         .then(Commands.literal("select")
-                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("id", UuidArgument.uuid()).suggests(MY_PRESET_IDS)
                                         .executes(ctx -> myPresetSelect(ctx, true))
                                         .then(Commands.literal("defer").executes(ctx -> myPresetSelect(ctx, false)))))
                         .then(Commands.literal("delete")
-                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("id", UuidArgument.uuid()).suggests(MY_PRESET_IDS)
                                         .executes(ctx -> myPresetDelete(ctx))))
                         .then(Commands.literal("receive")
                                 .then(Commands.argument("id", UuidArgument.uuid())
                                         .executes(ctx -> myPresetReceive(ctx))))
                         .then(Commands.literal("shared")
-                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("id", UuidArgument.uuid()).suggests(SHARED_PRESET_IDS)
                                         .then(Commands.literal("select")
                                                 .executes(ctx -> myPresetSelectShared(ctx, true))
                                                 .then(Commands.literal("defer").executes(ctx -> myPresetSelectShared(ctx, false))))
@@ -227,7 +295,7 @@ public final class ClassCommand {
                         .then(Commands.literal("register")
                                 .then(Commands.argument("id", UuidArgument.uuid())
                                         .executes(ctx -> whitelistRegisterHeld(ctx))))
-                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                        .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(VARIANT_IDS)
                                 .then(Commands.literal("delete").executes(ctx -> whitelistDeleteVariant(ctx)))
                                 .then(Commands.literal("folder")
                                         .then(Commands.literal("clear").executes(ctx -> whitelistClearFolder(ctx)))
@@ -236,19 +304,19 @@ public final class ClassCommand {
                 .then(Commands.literal("ammo")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
-                        .then(Commands.argument("item", ResourceLocationArgument.id())
-                        .then(Commands.argument("ammoItem", ResourceLocationArgument.id())
+                        .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
+                        .then(Commands.argument("ammoItem", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                         .then(Commands.argument("count", IntegerArgumentType.integer(0))
                                 .executes(ctx -> whitelistAmmo(ctx)))))))
                 .then(Commands.literal("preset")
                         .requires(src -> src.hasPermission(2))
-                        .then(Commands.argument("id", UuidArgument.uuid())
+                        .then(Commands.argument("id", UuidArgument.uuid()).suggests(PRESET_IDS)
                                 .then(Commands.literal("name")
                                         .then(Commands.argument("name", StringArgumentType.greedyString())
                                                 .executes(ctx -> saveName(ctx))))
                                 .then(Commands.literal("slot")
                                         .then(Commands.argument("slot", StringArgumentType.word()).suggests(CLASS_SLOT_KEYS)
-                                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                                                 .executes(ctx -> saveSlot(ctx)))))
                                 .then(Commands.literal("delete").executes(ctx -> delete(ctx)))))
                 .then(Commands.literal("force")
@@ -256,12 +324,12 @@ public final class ClassCommand {
                         .executes(ctx -> forceEditor(ctx))
                         .then(Commands.literal("select")
                                 .then(Commands.argument("players", EntityArgument.players())
-                                .then(Commands.argument("id", UuidArgument.uuid())
+                                .then(Commands.argument("id", UuidArgument.uuid()).suggests(PRESET_IDS)
                                         .executes(ctx -> forceSelect(ctx)))))
                         .then(Commands.literal("assign")
                                 .then(Commands.argument("players", EntityArgument.players())
                                 .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(ALL_ITEMS)
                                         .executes(ctx -> forceAssign(ctx))))))));
     }
 
