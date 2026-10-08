@@ -13,7 +13,7 @@ import javax.annotation.Nullable;
  * Keeps each player's per-team "standard kit" (see {@code /class teamkit} and
  * {@link LoadoutManager#getTeamKit}) in step with their vanilla scoreboard team: while on a team
  * with a kit, each kit slot is force-assigned (set + locked + equipped, same as {@code /class
- * forceassign}); on leaving, the slots go back to the player's previous item and lock state.
+ * force assign}); on leaving, the slots go back to the player's previous item and lock state.
  */
 public final class TeamKits {
 

@@ -182,10 +182,10 @@ public class LoadoutScreen extends Screen {
                 for (LoadoutSyncPacket.Entry entry : sharedEntries) {
                     sharedPresetRows.add(new PresetRow(entry, y));
                     addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                                    b -> command("class mypreset selectshared " + entry.id()))
+                                    b -> command("class mypreset shared " + entry.id() + " select"))
                             .bounds(panelLeft + panelWidth - PAD - 78, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
                     addRenderableWidget(Button.builder(Component.literal("x"),
-                                    b -> rawCommand("class mypreset clearshared " + entry.id()))
+                                    b -> rawCommand("class mypreset shared " + entry.id() + " clear"))
                             .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
                     y += PRESET_ROW_H;
                 }

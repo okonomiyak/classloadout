@@ -191,14 +191,14 @@ public class GuardSpawnerEditorScreen extends Screen {
         }
         entityType = parsed.entityType();
         delaySeconds = parsed.delaySeconds();
-        command("class guardspawner config " + posArgs() + " " + entityType + " " + delaySeconds);
+        command("class guardspawner " + posArgs() + " config " + entityType + " " + delaySeconds);
     }
 
-    /** Applies a saved template to this spawner: overwrites the entity type/delay fields and replaces this spawner's item list wholesale (remove every current item, then add every template item) via {@code /class guardspawner template_apply}, a single command the server resolves against its own copy of the template. */
+    /** Applies a saved template to this spawner: overwrites the entity type/delay fields and replaces this spawner's item list wholesale (remove every current item, then add every template item) via {@code /class guardspawner <pos> template}, a single command the server resolves against its own copy of the template. */
     void applyTemplate(GuardSpawnerTemplate template) {
         entityType = template.entityType();
         delaySeconds = template.delaySeconds();
-        command("class guardspawner template_apply " + posArgs() + " " + template.id());
+        command("class guardspawner " + posArgs() + " template " + template.id());
         items.clear();
         items.addAll(template.items());
         this.init(this.minecraft, this.width, this.height);
@@ -207,10 +207,10 @@ public class GuardSpawnerEditorScreen extends Screen {
     /** Registers the OP's held item as a reusable variant and immediately adds it to this spawner's item list. */
     private void addHeldItem() {
         UUID id = UUID.randomUUID();
-        command("class whitelist register_held " + id);
+        command("class variant register " + id);
         ResourceLocation variant = ResourceLocation.fromNamespaceAndPath("classloadout", "variant_" + id);
         items.add(variant);
-        command("class guardspawner add_item " + posArgs() + " " + variant);
+        command("class guardspawner " + posArgs() + " item add " + variant);
     }
 
     private void updateShown() {
@@ -241,10 +241,10 @@ public class GuardSpawnerEditorScreen extends Screen {
             ResourceLocation item = shown.get(index);
             if (items.contains(item)) {
                 items.remove(item);
-                command("class guardspawner remove_item " + posArgs() + " " + item);
+                command("class guardspawner " + posArgs() + " item remove " + item);
             } else {
                 items.add(item);
-                command("class guardspawner add_item " + posArgs() + " " + item);
+                command("class guardspawner " + posArgs() + " item add " + item);
             }
             return true;
         }

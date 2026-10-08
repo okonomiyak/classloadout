@@ -13,7 +13,7 @@ import uk.iwaservice.classloadout.client.LoadoutClientData;
 /**
  * OP-only popup, opened by right-clicking a cell in {@link PriceEditorScreen},
  * that sets the exact point cost for that item. Mutates through the same
- * {@code /class price set} command surface as everything else - no C2S
+ * {@code /class price} command surface as everything else - no C2S
  * packets. Mirrors {@link SpawnKitCountScreen}.
  */
 public class PriceCountScreen extends Screen {
@@ -92,12 +92,12 @@ public class PriceCountScreen extends Screen {
         if (cost <= 0) {
             return;
         }
-        command("class price set " + item + " " + cost);
+        command("class price " + item + " " + cost);
         minecraft.setScreen(parent);
     }
 
     private void clear() {
-        command("class price set " + item + " 0");
+        command("class price " + item + " 0");
         minecraft.setScreen(parent);
     }
 

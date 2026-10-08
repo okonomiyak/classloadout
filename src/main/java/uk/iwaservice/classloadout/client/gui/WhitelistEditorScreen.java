@@ -39,7 +39,7 @@ import java.util.Optional;
  * a ban applies everywhere, not just to {@link #selectedSlot}.
  *
  * <p>In the Held-items category (with no active search), variants grouped
- * into a folder (see {@code /class whitelist set_folder}) are collapsed
+ * into a folder (see {@code /class variant <item> folder}) are collapsed
  * behind one chest-icon tile per folder instead of listing every item
  * inline; clicking a tile pops a small flyout grid of that folder's items
  * out beside it (see {@link #expandedFolder}). A non-blank search query
@@ -186,7 +186,7 @@ public class WhitelistEditorScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
                 .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, closeWidth, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_add_held"),
-                        b -> command("class whitelist add_held " + selectedSlot.key()))
+                        b -> command("class whitelist add " + selectedSlot.key() + " held"))
                 .bounds(panelLeft + PAD + closeWidth + 4, panelTop + panelHeight - PAD - 20, addHeldWidth, 20).build());
 
         updateShown();
@@ -357,7 +357,7 @@ public class WhitelistEditorScreen extends Screen {
     /** Left-click toggles whitelist membership, shift+left deletes a held-item variant, right-click opens the ammo-grant popup (whitelisting first if needed). Shared by the main grid and the folder flyout. */
     private boolean handleItemClick(ResourceLocation item, int button) {
         if (button == 0 && hasShiftDown() && LoadoutClientData.getItemVariants().containsKey(item)) {
-            command("class whitelist delete_variant " + item);
+            command("class variant " + item + " delete");
             return true;
         }
         boolean whitelisted = LoadoutClientData.getWhitelist(selectedSlot).contains(item);

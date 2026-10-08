@@ -224,7 +224,7 @@ public class ClassEditorScreen extends Screen {
     }
 
     private void deleteClass(UUID id) {
-        command("class delete " + id);
+        command("class preset " + id + " delete");
         if (editing && id.equals(pendingId)) {
             editing = false;
         }
@@ -242,18 +242,18 @@ public class ClassEditorScreen extends Screen {
         if (pendingName.isBlank()) {
             return;
         }
-        command("class save " + pendingId + " " + pendingName);
-        command("class save_slot " + pendingId + " icon " + rl(pendingIcon));
-        command("class save_slot " + pendingId + " main " + rl(pendingMain));
-        command("class save_slot " + pendingId + " sidearm " + rl(pendingSidearm));
-        command("class save_slot " + pendingId + " throwable " + rl(pendingThrowable));
-        command("class save_slot " + pendingId + " gadget " + rl(pendingGadget));
-        command("class save_slot " + pendingId + " gadget2 " + rl(pendingGadget2));
-        command("class save_slot " + pendingId + " melee " + rl(pendingMelee));
-        command("class save_slot " + pendingId + " helmet " + rl(pendingHelmet));
-        command("class save_slot " + pendingId + " chestplate " + rl(pendingChestplate));
-        command("class save_slot " + pendingId + " leggings " + rl(pendingLeggings));
-        command("class save_slot " + pendingId + " boots " + rl(pendingBoots));
+        command("class preset " + pendingId + " name " + pendingName);
+        command("class preset " + pendingId + " slot icon " + rl(pendingIcon));
+        command("class preset " + pendingId + " slot main " + rl(pendingMain));
+        command("class preset " + pendingId + " slot sidearm " + rl(pendingSidearm));
+        command("class preset " + pendingId + " slot throwable " + rl(pendingThrowable));
+        command("class preset " + pendingId + " slot gadget " + rl(pendingGadget));
+        command("class preset " + pendingId + " slot gadget2 " + rl(pendingGadget2));
+        command("class preset " + pendingId + " slot melee " + rl(pendingMelee));
+        command("class preset " + pendingId + " slot helmet " + rl(pendingHelmet));
+        command("class preset " + pendingId + " slot chestplate " + rl(pendingChestplate));
+        command("class preset " + pendingId + " slot leggings " + rl(pendingLeggings));
+        command("class preset " + pendingId + " slot boots " + rl(pendingBoots));
         editing = false;
         this.init(this.minecraft, this.width, this.height);
     }
