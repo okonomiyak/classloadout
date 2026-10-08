@@ -26,6 +26,7 @@ import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
+import uk.iwaservice.classloadout.loadout.TeamKits;
 import uk.iwaservice.classloadout.network.NetworkHandler;
 
 import javax.annotation.Nullable;
@@ -54,6 +55,9 @@ public final class ClassCommand {
 
     private static final SuggestionProvider<CommandSourceStack> SLOT_KEYS = (ctx, builder) ->
             SharedSuggestionProvider.suggest(Arrays.stream(LoadoutSlot.values()).map(LoadoutSlot::key), builder);
+    /** Existing scoreboard teams only as suggestions - any name is accepted, so kits can be preconfigured for teams that don't exist yet. */
+    private static final SuggestionProvider<CommandSourceStack> TEAM_NAMES = (ctx, builder) ->
+            SharedSuggestionProvider.suggest(ctx.getSource().getServer().getScoreboard().getTeamNames(), builder);
     private static final SuggestionProvider<CommandSourceStack> CLASS_SLOT_KEYS = (ctx, builder) ->
             SharedSuggestionProvider.suggest(
                     java.util.stream.Stream.concat(java.util.stream.Stream.of("icon"),
@@ -251,6 +255,14 @@ public final class ClassCommand {
                         .then(Commands.literal("clearshared")
                                 .then(Commands.argument("id", UuidArgument.uuid())
                                         .executes(ctx -> myPresetClearShared(ctx)))))
+                .then(Commands.literal("teamkit")
+                        .requires(src -> src.hasPermission(2))
+                        .then(Commands.literal("list").executes(ctx -> teamKitList(ctx)))
+                        .then(Commands.argument("team", StringArgumentType.word()).suggests(TEAM_NAMES)
+                                .then(Commands.literal("clear").executes(ctx -> teamKitClear(ctx)))
+                                .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
+                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                        .executes(ctx -> teamKitSet(ctx))))))
                 .then(Commands.literal("forceselect")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.argument("players", EntityArgument.players())
@@ -876,22 +888,63 @@ public final class ClassCommand {
     /**
      * A non-air item locks the slot (see {@code LoadoutManager#lockSlot}) so the player can't
      * self-service-change it back; force-assigning {@code minecraft:air} to an already-locked
-     * slot unlocks it instead - the intended way for an OP to free one back up.
+     * slot unlocks it instead - the intended way for an OP to free one back up. While the target
+     * is on a team whose kit covers this slot, the change is deferred until they leave the team.
      */
     private static void applyForceAssign(MinecraftServer server, ServerPlayer target, LoadoutSlot slot,
             @Nullable ResourceLocation item) {
         LoadoutManager manager = LoadoutManager.get(server);
-        // Lock/unlock before setSlot, not after - setSlot's own sync push (see LoadoutManager#sendTo)
-        // needs the updated lock state to already be in place to reach the client in the same packet.
-        if (item != null) {
-            manager.lockSlot(target.getUUID(), slot);
-        } else {
-            manager.unlockSlot(target.getUUID(), slot);
+        // A slot currently owned by the player's team kit isn't touched - see LoadoutManager#deferToTeamKit.
+        if (manager.deferToTeamKit(target.getUUID(), slot, item)) {
+            return;
         }
-        manager.setSlot(server, target, slot, item);
+        manager.forceSlot(server, target, slot, item);
         ServerEvents.equipLoadout(target);
         Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
         target.sendSystemMessage(Component.translatable("classloadout.msg.force_assign_notice", slotName));
+    }
+
+    /** Sets (or, for {@code minecraft:air}, removes) one slot of a team's standard kit, then re-syncs that team's online members - see {@link TeamKits}. */
+    private static int teamKitSet(CommandContext<CommandSourceStack> ctx) {
+        String team = StringArgumentType.getString(ctx, "team");
+        LoadoutSlot slot = parseSlot(ctx);
+        if (slot == null) {
+            return fail(ctx, "classloadout.msg.unknown_slot", StringArgumentType.getString(ctx, "slot"));
+        }
+        ResourceLocation item = noneIfAir(ResourceLocationArgument.getId(ctx, "item"));
+        MinecraftServer server = ctx.getSource().getServer();
+        LoadoutManager.get(server).setTeamKitSlot(team, slot, item);
+        TeamKits.resync(server, team);
+        Component slotName = Component.translatable("classloadout.gui.slot_" + slot.key());
+        ctx.getSource().sendSuccess(() -> item == null
+                ? Component.translatable("classloadout.msg.teamkit_removed", slotName, team)
+                : Component.translatable("classloadout.msg.teamkit_set", slotName, team, item.toString()), true);
+        return 1;
+    }
+
+    private static int teamKitClear(CommandContext<CommandSourceStack> ctx) {
+        String team = StringArgumentType.getString(ctx, "team");
+        MinecraftServer server = ctx.getSource().getServer();
+        if (!LoadoutManager.get(server).clearTeamKit(team)) {
+            return fail(ctx, "classloadout.msg.teamkit_none", team);
+        }
+        TeamKits.resync(server, team);
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.teamkit_cleared", team), true);
+        return 1;
+    }
+
+    private static int teamKitList(CommandContext<CommandSourceStack> ctx) {
+        var kits = LoadoutManager.get(ctx.getSource().getServer()).getTeamKits();
+        if (kits.isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.teamkit_list_empty"), false);
+            return 0;
+        }
+        kits.forEach((team, kit) -> {
+            StringBuilder sb = new StringBuilder();
+            kit.forEach((slot, item) -> sb.append(sb.length() == 0 ? "" : ", ").append(slot.key()).append('=').append(item));
+            ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.teamkit_list_entry", team, sb.toString()), false);
+        });
+        return kits.size();
     }
 
     /** Locked slots (see {@code LoadoutManager#isLocked}) keep their OP-forced value instead of being wiped. See {@link #assign} for {@code immediate}. */

@@ -31,6 +31,7 @@ import uk.iwaservice.classloadout.command.ClassCommand;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
+import uk.iwaservice.classloadout.loadout.TeamKits;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,10 +61,11 @@ public final class ServerEvents {
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             LoadoutManager.get(player.server).sendTo(player.server, player);
+            TeamKits.sync(player.server, player, null);
         }
     }
 
-    /** Throttled to once a second - a per-tick full scan of every guard spawner isn't worth the precision. */
+    /** Throttled to once a second - a per-tick full scan of every guard spawner isn't worth the precision (the per-player team kit check is cheap but needs no more than that either). */
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {
@@ -74,6 +76,9 @@ public final class ServerEvents {
             return;
         }
         tickGuardSpawners(server);
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            TeamKits.sync(server, player, null);
+        }
     }
 
     /**

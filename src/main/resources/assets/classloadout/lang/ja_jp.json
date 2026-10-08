@@ -191,5 +191,12 @@
   "item.classloadout.cover": "遮蔽物",
   "item.classloadout.bandage": "包帯",
   "classloadout.hud.thrown_health_resupplying": "回復中...",
-  "classloadout.hud.thrown_ammo_resupplying": "弾薬補給中..."
+  "classloadout.hud.thrown_ammo_resupplying": "弾薬補給中...",
+  "classloadout.msg.teamkit_set": "チームキット「%2$s」の%1$sを%3$sに設定しました。",
+  "classloadout.msg.teamkit_removed": "チームキット「%2$s」から%1$sを削除しました。",
+  "classloadout.msg.teamkit_cleared": "チームキット「%s」を削除しました。",
+  "classloadout.msg.teamkit_none": "チーム「%s」にキットはありません。",
+  "classloadout.msg.teamkit_list_empty": "チームキットは設定されていません。",
+  "classloadout.msg.teamkit_list_entry": "%1$s: %2$s",
+  "classloadout.msg.teamkit_notice": "チーム「%s」のキットを適用しました。"
 }
