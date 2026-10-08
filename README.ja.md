@@ -18,12 +18,8 @@ GNU General Public License v3.0 (GPL-3.0-only)。全文は [`LICENSE`](LICENSE) 
 | `/class assign <slot> <item>` | 自分のロードアウトの1スロット(`main`/`sidearm`/`throwable`/`gadget`/`gadget2`/`melee`/`helmet`/`chestplate`/`leggings`/`boots`)をホワイトリスト内のアイテムに設定。`minecraft:air`で解除。OPがそのスロットをロックしていれば失敗する(`force assign`参照) | - |
 | `/class select <id>` | プリセットの10アイテムを自分のロードアウトへ出発点として反映。ロック中のスロットはプリセットの値ではなくOPが強制設定した値のまま維持される | - |
 | `/class clear` | 自分のロードアウト全体をクリア。ロック中のスロットはクリアされずOPが強制設定した値のまま維持される | - |
-| `/class force select <player> <id>` | 他プレイヤーのロードアウトにプリセットを適用し即座に装備させる(インベントリクリア・弾薬付与含め、他の即時装備と同様)——対象プレイヤー側の操作は不要 | OP (レベル2+) |
-| `/class force assign <player> <slot> <item>` | 他プレイヤーのロードアウトの1スロット(防具含む全10種)を強制設定し即座に装備させる——プリセット全体を上書きせず1アイテムだけ直したい場合の`force select`版。プリセット同様そのスロットのホワイトリストは無視される | OP (レベル2+) |
-| `/class forceselectall <id>` | `force select`と同じだが、対象を1人指定する代わりオンライン中の全員に適用 | OP (レベル2+) |
-| `/class forceassignall <slot> <item>` | `force assign`と同じだが、対象を1人指定する代わりオンライン中の全員に適用 | OP (レベル2+) |
-| `/class forceselectteam <team> <id>` | `force select`と同じだが、対象を1人指定する代わりバニラのスコアボードチームのオンライン中の全メンバーに適用 | OP (レベル2+) |
-| `/class forceassignteam <team> <slot> <item>` | `force assign`と同じだが、対象を1人指定する代わりバニラのスコアボードチームのオンライン中の全メンバーに適用 | OP (レベル2+) |
+| `/class force select <players> <id>` | 他プレイヤーのロードアウトにプリセットを適用し即座に装備させる(インベントリクリア・弾薬付与含め、他の即時装備と同様)——対象プレイヤー側の操作は不要エンティティセレクター(`@a`、`@a[team=red]`など)も指定可。 | OP (レベル2+) |
+| `/class force assign <players> <slot> <item>` | 他プレイヤーのロードアウトの1スロット(防具含む全10種)を強制設定し即座に装備させる——プリセット全体を上書きせず1アイテムだけ直したい場合の`force select`版。プリセット同様そのスロットのホワイトリストは無視されるエンティティセレクター(`@a`、`@a[team=red]`など)も指定可。 | OP (レベル2+) |
 | `/class editor` | プリセットエディタGUIを開く | OP (レベル2+) |
 | `/class force` | 強制装備エディタGUIを開く——`force select`/`force assign`のGUI版(対象プレイヤー名を入力し、プリセットの[適用]ボタンかスロットアイコンをクリック) | OP (レベル2+) |
 | `/class preset <id> name <name...>` | プリセットを作成(スロットは空)、または既存プリセットの名前だけ変更(スロットは維持) | OP (レベル2+) |
