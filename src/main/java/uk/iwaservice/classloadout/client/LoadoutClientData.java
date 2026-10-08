@@ -2,7 +2,9 @@ package uk.iwaservice.classloadout.client;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
+import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
 
 import javax.annotation.Nullable;
@@ -56,6 +58,8 @@ public final class LoadoutClientData {
     private static List<LoadoutSyncPacket.Entry> personalPresets = List.of();
     /** The local player's own received-preset "inbox" (see {@code /class mypreset receive}) - never someone else's, capped server-side at {@code LoadoutManager#MAX_SHARED_PRESETS}. */
     private static List<LoadoutSyncPacket.Entry> sharedPresets = List.of();
+    /** Display-only resolved stacks (ItemStack.EMPTY = unresolvable); dropped whenever variants may change. */
+    private static final Map<ResourceLocation, ItemStack> displayStacks = new HashMap<>();
     /** Incremented on every sync; lets screens detect updates cheaply. */
     private static int revision;
 
@@ -121,6 +125,7 @@ public final class LoadoutClientData {
         points = newPoints;
         purchasedItems = newPurchasedItems.isEmpty() ? Set.of() : new java.util.HashSet<>(newPurchasedItems);
         bannedItems = List.copyOf(newBannedItems);
+        displayStacks.clear();
         revision++;
     }
 
@@ -143,6 +148,7 @@ public final class LoadoutClientData {
         purchasedItems = Set.of();
         personalPresets = List.of();
         sharedPresets = List.of();
+        displayStacks.clear();
         revision++;
     }
 
@@ -188,6 +194,19 @@ public final class LoadoutClientData {
     /** Client-side mirror of {@code LoadoutManager.getItemVariants()}; used to resolve slot/whitelist ids back into real ItemStacks. */
     public static synchronized Map<ResourceLocation, CompoundTag> getItemVariants() {
         return itemVariants;
+    }
+
+    /**
+     * Cached {@link ItemResolver#resolve} for drawing/reading only; callers must not mutate the returned stack.
+     * Null if unresolvable.
+     */
+    @Nullable
+    public static synchronized ItemStack displayStack(ResourceLocation id) {
+        ItemStack s = displayStacks.computeIfAbsent(id, k -> {
+            ItemStack r = ItemResolver.resolve(k, itemVariants);
+            return r == null ? ItemStack.EMPTY : r;
+        });
+        return s.isEmpty() ? null : s;
     }
 
     /** Epoch-millis registration time for a held-item variant id, or 0 if unknown. */

@@ -5,7 +5,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
@@ -100,7 +99,7 @@ final class ItemCatalog {
         }
         List<ResourceLocation> filtered = new ArrayList<>();
         for (ResourceLocation loc : items) {
-            ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+            ItemStack stack = LoadoutClientData.displayStack(loc);
             String displayName = stack == null ? "" : stack.getHoverName().getString().toLowerCase(Locale.ROOT);
             if (loc.getPath().contains(q) || displayName.contains(q)) {
                 filtered.add(loc);

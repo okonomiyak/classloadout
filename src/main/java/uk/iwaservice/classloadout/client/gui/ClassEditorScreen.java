@@ -8,7 +8,6 @@ import uk.iwaservice.classloadout.client.GuiBlurFix;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
@@ -354,7 +353,7 @@ public class ClassEditorScreen extends Screen {
         for (RowInfo row : listRows) {
             ResourceLocation icon = row.entry().icon();
             if (icon != null) {
-                ItemStack stack = ItemResolver.resolve(icon, LoadoutClientData.getItemVariants());
+                ItemStack stack = LoadoutClientData.displayStack(icon);
                 if (stack != null) {
                     graphics.renderItem(stack, l + PAD, row.y() + 1);
                 }
@@ -385,7 +384,7 @@ public class ClassEditorScreen extends Screen {
     private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, String labelKey) {
         graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
         if (loc != null) {
-            ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+            ItemStack stack = LoadoutClientData.displayStack(loc);
             if (stack != null) {
                 graphics.renderItem(stack, x + (SLOT - 16) / 2, y + (SLOT - 16) / 2);
             } else {

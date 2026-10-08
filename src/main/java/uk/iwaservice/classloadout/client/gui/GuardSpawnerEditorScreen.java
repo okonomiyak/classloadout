@@ -10,7 +10,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
 
@@ -318,7 +317,7 @@ public class GuardSpawnerEditorScreen extends Screen {
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
-            ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+            ItemStack resolved = LoadoutClientData.displayStack(loc);
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
             if (hovered) {

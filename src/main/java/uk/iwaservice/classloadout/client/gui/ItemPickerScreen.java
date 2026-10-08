@@ -12,7 +12,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.TooltipFlag;
 import uk.iwaservice.classloadout.ClassLoadoutMod;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 
@@ -443,7 +442,7 @@ public class ItemPickerScreen extends Screen {
                 }
                 continue;
             }
-            ItemStack resolved = loc == null ? null : ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+            ItemStack resolved = loc == null ? null : LoadoutClientData.displayStack(loc);
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             int iconX = x + (CELL - ICON) / 2;
             int iconY = y + (CELL - ICON) / 2;
@@ -485,7 +484,7 @@ public class ItemPickerScreen extends Screen {
                 if (hovered) {
                     graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
                 }
-                ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+                ItemStack resolved = LoadoutClientData.displayStack(loc);
                 ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
                 int iconX = x + (CELL - ICON) / 2;
                 int iconY = y + (CELL - ICON) / 2;

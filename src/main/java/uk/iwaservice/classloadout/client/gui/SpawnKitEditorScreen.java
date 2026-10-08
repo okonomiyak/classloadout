@@ -247,7 +247,7 @@ public class SpawnKitEditorScreen extends Screen {
             if (hovered) {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
-            ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+            ItemStack resolved = LoadoutClientData.displayStack(loc);
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
             if (count != null) {
