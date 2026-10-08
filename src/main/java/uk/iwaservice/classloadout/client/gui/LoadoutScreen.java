@@ -9,7 +9,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
@@ -351,7 +350,7 @@ public class LoadoutScreen extends Screen {
             }
         }
         if (loc != null) {
-            ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+            ItemStack stack = LoadoutClientData.displayStack(loc);
             if (stack != null) {
                 graphics.renderItem(stack, x + (SLOT - ICON) / 2, y + (SLOT - ICON) / 2);
             } else {
@@ -369,7 +368,7 @@ public class LoadoutScreen extends Screen {
             graphics.fill(x, y, x + ICON, y + ICON, 0x30FFFFFF);
             return;
         }
-        ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+        ItemStack resolved = LoadoutClientData.displayStack(loc);
         graphics.renderItem(resolved != null ? resolved : new ItemStack(Items.BARRIER), x, y);
     }
 

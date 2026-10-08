@@ -10,7 +10,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.TooltipFlag;
 import uk.iwaservice.classloadout.ClassLoadoutMod;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
@@ -492,7 +491,7 @@ public class WhitelistEditorScreen extends Screen {
             }
             int iconX = x + (CELL - ICON) / 2;
             int iconY = y + (CELL - ICON) / 2;
-            ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+            ItemStack resolved = LoadoutClientData.displayStack(loc);
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, iconX, iconY);
             // Drawn tight around the icon (not the whole cell) and after it, so the ban reads as a
@@ -551,7 +550,7 @@ public class WhitelistEditorScreen extends Screen {
                 }
                 int iconX = x + (CELL - ICON) / 2;
                 int iconY = y + (CELL - ICON) / 2;
-                ItemStack resolved = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+                ItemStack resolved = LoadoutClientData.displayStack(loc);
                 ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
                 graphics.renderItem(stack, iconX, iconY);
                 if (banned) {

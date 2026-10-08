@@ -7,7 +7,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 
 /**
@@ -107,7 +106,7 @@ public class VariantFolderScreen extends Screen {
         graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
         graphics.drawString(this.font, this.title, l + PAD, t + 8, 0xFFFFFF);
 
-        ItemStack stack = ItemResolver.resolve(item, LoadoutClientData.getItemVariants());
+        ItemStack stack = LoadoutClientData.displayStack(item);
         graphics.drawString(this.font, stack != null ? stack.getHoverName() : Component.literal(item.toString()),
                 l + PAD, t + HEADER_H + 2, COLOR_TEXT_DIM);
 

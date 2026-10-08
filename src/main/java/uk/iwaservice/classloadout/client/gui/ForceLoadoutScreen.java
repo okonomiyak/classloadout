@@ -8,7 +8,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.scores.PlayerTeam;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
@@ -335,7 +334,7 @@ public class ForceLoadoutScreen extends Screen {
         graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
         ResourceLocation loc = lastAssigned.get(slot);
         if (loc != null) {
-            ItemStack stack = ItemResolver.resolve(loc, LoadoutClientData.getItemVariants());
+            ItemStack stack = LoadoutClientData.displayStack(loc);
             if (stack != null) {
                 graphics.renderItem(stack, x + (SLOT - ICON) / 2, y + (SLOT - ICON) / 2);
             }

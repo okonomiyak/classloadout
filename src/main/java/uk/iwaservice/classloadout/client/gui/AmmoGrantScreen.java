@@ -8,7 +8,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import uk.iwaservice.classloadout.ItemResolver;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 
@@ -215,7 +214,7 @@ public class AmmoGrantScreen extends Screen {
         graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
         graphics.drawString(this.font, this.title, l + PAD, t + 8, COLOR_TEXT);
 
-        ItemStack itemStack = ItemResolver.resolve(item, LoadoutClientData.getItemVariants());
+        ItemStack itemStack = LoadoutClientData.displayStack(item);
         graphics.drawString(this.font, itemStack != null ? itemStack.getHoverName() : Component.literal(item.toString()),
                 l + PAD, t + HEADER_H + 2, COLOR_TEXT_DIM);
 
@@ -234,7 +233,7 @@ public class AmmoGrantScreen extends Screen {
                 graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
             }
             Map.Entry<ResourceLocation, Integer> entry = entries.get(index);
-            ItemStack resolved = ItemResolver.resolve(entry.getKey(), LoadoutClientData.getItemVariants());
+            ItemStack resolved = LoadoutClientData.displayStack(entry.getKey());
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
             Component countText = Component.literal(Integer.toString(entry.getValue()));
@@ -254,7 +253,7 @@ public class AmmoGrantScreen extends Screen {
 
         graphics.fill(pickerX, pickerY, pickerX + SLOT, pickerY + SLOT, COLOR_SLOT_BG);
         if (pendingAmmoItem != null) {
-            ItemStack ammoStack = ItemResolver.resolve(pendingAmmoItem, LoadoutClientData.getItemVariants());
+            ItemStack ammoStack = LoadoutClientData.displayStack(pendingAmmoItem);
             if (ammoStack != null) {
                 graphics.renderItem(ammoStack, pickerX + (SLOT - 16) / 2, pickerY + (SLOT - 16) / 2);
             }
