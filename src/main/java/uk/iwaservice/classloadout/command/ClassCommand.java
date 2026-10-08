@@ -58,6 +58,9 @@ public final class ClassCommand {
     /** Existing scoreboard teams only as suggestions - any name is accepted, so kits can be preconfigured for teams that don't exist yet. */
     private static final SuggestionProvider<CommandSourceStack> TEAM_NAMES = (ctx, builder) ->
             SharedSuggestionProvider.suggest(ctx.getSource().getServer().getScoreboard().getTeamNames(), builder);
+    /** Only the OP-registered held-item variants (exact item + data, e.g. a dyed helmet) - what a team kit is meant to hand out. */
+    private static final SuggestionProvider<CommandSourceStack> VARIANT_IDS = (ctx, builder) ->
+            SharedSuggestionProvider.suggestResource(LoadoutManager.get(ctx.getSource().getServer()).getItemVariants().keySet(), builder);
     private static final SuggestionProvider<CommandSourceStack> CLASS_SLOT_KEYS = (ctx, builder) ->
             SharedSuggestionProvider.suggest(
                     java.util.stream.Stream.concat(java.util.stream.Stream.of("icon"),
@@ -217,7 +220,7 @@ public final class ClassCommand {
                         .then(Commands.argument("team", StringArgumentType.word()).suggests(TEAM_NAMES)
                                 .then(Commands.literal("clear").executes(ctx -> teamKitClear(ctx)))
                                 .then(Commands.argument("slot", StringArgumentType.word()).suggests(SLOT_KEYS)
-                                .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .then(Commands.argument("item", ResourceLocationArgument.id()).suggests(VARIANT_IDS)
                                         .executes(ctx -> teamKitSet(ctx))))))
                 .then(Commands.literal("variant")
                         .requires(src -> src.hasPermission(2))
