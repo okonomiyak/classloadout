@@ -61,6 +61,10 @@ public class LoadoutManager extends SavedData {
     private final Map<UUID, List<ClassDefinition>> sharedPresets = new java.util.HashMap<>();
     /** OP-forced slots (via {@code /class forceassign}/{@code forceselect} and their all/team variants): the player can't self-service-change these until an OP frees them (assigning {@code minecraft:air} to a forced slot unlocks it - see {@code ClassCommand}). */
     private final Map<UUID, Set<LoadoutSlot>> lockedSlots = new java.util.HashMap<>();
+    /** OP-curated per-vanilla-scoreboard-team "standard kits" (see {@code /class teamkit}): team name -> slot -> item. The team need not exist yet. Applied to members as a force-assign by {@code TeamKits}. */
+    private final Map<String, Map<LoadoutSlot, ResourceLocation>> teamKits = new LinkedHashMap<>();
+    /** Per player, the team whose kit is currently applied plus what each overridden slot held before (so leaving restores it exactly) - persisted so a restart mid-match still restores correctly. */
+    private final Map<UUID, AppliedTeamKit> appliedTeamKits = new HashMap<>();
     /** Insertion order preserved for a stable whitelist-editor grid; empty (or absent) = nothing assignable yet. */
     private final Map<LoadoutSlot, Set<ResourceLocation>> whitelists = new EnumMap<>(LoadoutSlot.class);
     /** Optional per-whitelist-entry ammo grants: slot -> whitelisted item -> (ammo item -> count). A whitelist entry can grant any number of distinct ammo item types; absent/empty = that item grants no ammo. */
@@ -843,6 +847,118 @@ public class LoadoutManager extends SavedData {
         }
     }
 
+    // --- team kits (OP-curated per-scoreboard-team force-assigns, see TeamKits) ---
+
+    /** What a slot looked like before a team kit overrode it: the player's own chosen item (null = unset) and whether it was already locked (e.g. by a manual forceassign). */
+    public record PreviousSlot(@Nullable ResourceLocation item, boolean wasLocked) {}
+
+    public record AppliedTeamKit(String team, Map<LoadoutSlot, PreviousSlot> previous) {}
+
+    public Map<String, Map<LoadoutSlot, ResourceLocation>> getTeamKits() {
+        return teamKits;
+    }
+
+    /** Never null - a team with no kit returns an empty map. */
+    public Map<LoadoutSlot, ResourceLocation> getTeamKit(String team) {
+        return teamKits.getOrDefault(team, Map.of());
+    }
+
+    /** A null item removes the slot from the team's kit (and the whole entry once empty). Members are not re-synced here - see {@code TeamKits#resync}. */
+    public void setTeamKitSlot(String team, LoadoutSlot slot, @Nullable ResourceLocation item) {
+        if (item == null) {
+            Map<LoadoutSlot, ResourceLocation> kit = teamKits.get(team);
+            if (kit != null && kit.remove(slot) != null && kit.isEmpty()) {
+                teamKits.remove(team);
+            }
+        } else {
+            teamKits.computeIfAbsent(team, t -> new EnumMap<>(LoadoutSlot.class)).put(slot, item);
+        }
+        setDirty();
+    }
+
+    /** True if the team had a kit. */
+    public boolean clearTeamKit(String team) {
+        boolean removed = teamKits.remove(team) != null;
+        if (removed) {
+            setDirty();
+        }
+        return removed;
+    }
+
+    /** Null if no team kit is currently applied to the player. */
+    @Nullable
+    public String getAppliedTeamKitTeam(UUID playerId) {
+        AppliedTeamKit applied = appliedTeamKits.get(playerId);
+        return applied == null ? null : applied.team();
+    }
+
+    /**
+     * The shared core of {@code /class forceassign}: a non-null item locks the slot, null unlocks
+     * it, then the slot is set. Does not equip or notify - callers do that once after all their slots.
+     */
+    public void forceSlot(MinecraftServer server, ServerPlayer player, LoadoutSlot slot, @Nullable ResourceLocation item) {
+        // Lock/unlock before setSlot, not after - setSlot's own sync push (see sendTo)
+        // needs the updated lock state to already be in place to reach the client in the same packet.
+        if (item != null) {
+            lockSlot(player.getUUID(), slot);
+        } else {
+            unlockSlot(player.getUUID(), slot);
+        }
+        setSlot(server, player, slot, item);
+    }
+
+    /**
+     * Records the player's current item/lock state for each slot of {@code team}'s kit, then
+     * force-slots the kit over them. Caller must have reverted any earlier kit first.
+     */
+    public void applyTeamKit(MinecraftServer server, ServerPlayer player, String team) {
+        UUID id = player.getUUID();
+        PersonalLoadout current = personalLoadouts.getOrDefault(id, PersonalLoadout.EMPTY);
+        Map<LoadoutSlot, ResourceLocation> kit = getTeamKit(team);
+        Map<LoadoutSlot, PreviousSlot> previous = new EnumMap<>(LoadoutSlot.class);
+        for (LoadoutSlot slot : kit.keySet()) {
+            previous.put(slot, new PreviousSlot(current.get(slot), isLocked(id, slot)));
+        }
+        appliedTeamKits.put(id, new AppliedTeamKit(team, previous));
+        setDirty();
+        for (Map.Entry<LoadoutSlot, ResourceLocation> e : kit.entrySet()) {
+            forceSlot(server, player, e.getKey(), e.getValue());
+        }
+    }
+
+    /** Restores each overridden slot's previous item and lock state; no-op if no kit is applied. Doesn't equip. */
+    public void revertTeamKit(MinecraftServer server, ServerPlayer player) {
+        AppliedTeamKit applied = appliedTeamKits.remove(player.getUUID());
+        if (applied == null) {
+            return;
+        }
+        setDirty();
+        for (Map.Entry<LoadoutSlot, PreviousSlot> e : applied.previous().entrySet()) {
+            PreviousSlot prev = e.getValue();
+            if (prev.wasLocked()) {
+                lockSlot(player.getUUID(), e.getKey());
+            } else {
+                unlockSlot(player.getUUID(), e.getKey());
+            }
+            setSlot(server, player, e.getKey(), prev.item());
+        }
+    }
+
+    /**
+     * A manual forceassign aimed at a slot the player's team kit currently owns doesn't win while
+     * they stay on the team: it is stored as the slot's "previous" state instead (item, locked iff
+     * non-null) and takes effect when they leave. Returns true if it was deferred that way.
+     */
+    public boolean deferToTeamKit(UUID playerId, LoadoutSlot slot, @Nullable ResourceLocation item) {
+        AppliedTeamKit applied = appliedTeamKits.get(playerId);
+        if (applied == null || !applied.previous().containsKey(slot)) {
+            return false;
+        }
+        applied.previous().put(slot, new PreviousSlot(item, item != null));
+        setDirty();
+        return true;
+    }
+
     // --- sync ---
 
     private void broadcastAll(MinecraftServer server) {
@@ -955,6 +1071,37 @@ public class LoadoutManager extends SavedData {
             if (!slots.isEmpty()) {
                 manager.lockedSlots.put(playerId, slots);
             }
+        }
+        ListTag teamKitList = tag.getList("TeamKits", Tag.TAG_COMPOUND);
+        for (int i = 0; i < teamKitList.size(); i++) {
+            CompoundTag k = teamKitList.getCompound(i);
+            Map<LoadoutSlot, ResourceLocation> kit = new EnumMap<>(LoadoutSlot.class);
+            ListTag kitSlots = k.getList("Slots", Tag.TAG_COMPOUND);
+            for (int j = 0; j < kitSlots.size(); j++) {
+                CompoundTag s = kitSlots.getCompound(j);
+                LoadoutSlot slot = LoadoutSlot.byKey(s.getString("Slot"));
+                if (slot != null) {
+                    kit.put(slot, ResourceLocation.parse(s.getString("Item")));
+                }
+            }
+            if (!kit.isEmpty()) {
+                manager.teamKits.put(k.getString("Team"), kit);
+            }
+        }
+        ListTag appliedList = tag.getList("AppliedTeamKits", Tag.TAG_COMPOUND);
+        for (int i = 0; i < appliedList.size(); i++) {
+            CompoundTag a = appliedList.getCompound(i);
+            Map<LoadoutSlot, PreviousSlot> previous = new EnumMap<>(LoadoutSlot.class);
+            ListTag prevSlots = a.getList("Slots", Tag.TAG_COMPOUND);
+            for (int j = 0; j < prevSlots.size(); j++) {
+                CompoundTag s = prevSlots.getCompound(j);
+                LoadoutSlot slot = LoadoutSlot.byKey(s.getString("Slot"));
+                if (slot != null) {
+                    previous.put(slot, new PreviousSlot(
+                            s.contains("Item") ? ResourceLocation.parse(s.getString("Item")) : null, s.getBoolean("Locked")));
+                }
+            }
+            manager.appliedTeamKits.put(a.getUUID("Player"), new AppliedTeamKit(a.getString("Team"), previous));
         }
         ListTag whitelistList = tag.getList("Whitelists", Tag.TAG_COMPOUND);
         for (int i = 0; i < whitelistList.size(); i++) {
@@ -1116,6 +1263,42 @@ public class LoadoutManager extends SavedData {
             lockedSlotList.add(l);
         }
         tag.put("LockedSlots", lockedSlotList);
+
+        ListTag teamKitList = new ListTag();
+        for (Map.Entry<String, Map<LoadoutSlot, ResourceLocation>> e : teamKits.entrySet()) {
+            CompoundTag k = new CompoundTag();
+            k.putString("Team", e.getKey());
+            ListTag kitSlots = new ListTag();
+            for (Map.Entry<LoadoutSlot, ResourceLocation> s : e.getValue().entrySet()) {
+                CompoundTag st = new CompoundTag();
+                st.putString("Slot", s.getKey().key());
+                st.putString("Item", s.getValue().toString());
+                kitSlots.add(st);
+            }
+            k.put("Slots", kitSlots);
+            teamKitList.add(k);
+        }
+        tag.put("TeamKits", teamKitList);
+
+        ListTag appliedList = new ListTag();
+        for (Map.Entry<UUID, AppliedTeamKit> e : appliedTeamKits.entrySet()) {
+            CompoundTag a = new CompoundTag();
+            a.putUUID("Player", e.getKey());
+            a.putString("Team", e.getValue().team());
+            ListTag prevSlots = new ListTag();
+            for (Map.Entry<LoadoutSlot, PreviousSlot> s : e.getValue().previous().entrySet()) {
+                CompoundTag st = new CompoundTag();
+                st.putString("Slot", s.getKey().key());
+                if (s.getValue().item() != null) {
+                    st.putString("Item", s.getValue().item().toString());
+                }
+                st.putBoolean("Locked", s.getValue().wasLocked());
+                prevSlots.add(st);
+            }
+            a.put("Slots", prevSlots);
+            appliedList.add(a);
+        }
+        tag.put("AppliedTeamKits", appliedList);
 
         ListTag whitelistList = new ListTag();
         for (Map.Entry<LoadoutSlot, Set<ResourceLocation>> e : whitelists.entrySet()) {

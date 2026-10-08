@@ -189,5 +189,12 @@
   "item.classloadout.cover": "Cover",
   "item.classloadout.bandage": "Bandage",
   "classloadout.hud.thrown_health_resupplying": "Healing...",
-  "classloadout.hud.thrown_ammo_resupplying": "Resupplying ammo..."
+  "classloadout.hud.thrown_ammo_resupplying": "Resupplying ammo...",
+  "classloadout.msg.teamkit_set": "Set %1$s of team kit \"%2$s\" to %3$s.",
+  "classloadout.msg.teamkit_removed": "Removed %1$s from team kit \"%2$s\".",
+  "classloadout.msg.teamkit_cleared": "Cleared team kit \"%s\".",
+  "classloadout.msg.teamkit_none": "Team \"%s\" has no kit.",
+  "classloadout.msg.teamkit_list_empty": "No team kits configured.",
+  "classloadout.msg.teamkit_list_entry": "%1$s: %2$s",
+  "classloadout.msg.teamkit_notice": "Team kit for \"%s\" applied."
 }
