@@ -20,11 +20,11 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * OP-only GUI front end for {@code /class forceselect}/{@code forceassign}:
+ * OP-only GUI front end for {@code /class force select}/{@code force assign}:
  * fill in a target player name and/or a scoreboard team name,
- * then either click a preset's Apply button (forceselect - the whole
+ * then either click a preset's Apply button (force select - the whole
  * ten-slot loadout, not whitelist-restricted, same as the preset editor) or
- * click one of the slot icons below to force just that slot (forceassign)
+ * click one of the slot icons below to force just that slot (force assign)
  * via an {@link ItemPickerScreen} restricted to that slot's whitelist - the
  * same choices the target's own loadout screen would offer them. A
  * non-blank team name takes priority over the player name (targets every
@@ -219,7 +219,7 @@ public class ForceLoadoutScreen extends Screen {
 
     /**
      * Picker is restricted to {@code slot}'s whitelist - same choices the target's own loadout
-     * screen would offer - even though the server-side {@code forceassign} command itself
+     * screen would offer - even though the server-side {@code force assign} command itself
      * doesn't enforce it. Always opens the picker regardless of the target fields' state - see
      * {@link #forceAssignCommand} for how a blank team/player name is resolved.
      */
@@ -232,7 +232,7 @@ public class ForceLoadoutScreen extends Screen {
 
     /** A non-blank team name wins over the player name (selector {@code @a[team=...]}); with both blank, targets every online player ({@code @a}). */
     private String forceAssignCommand(LoadoutSlot slot, ResourceLocation item) {
-        return "class forceassign " + targetSelector() + " " + slot.key() + " " + item;
+        return "class force assign " + targetSelector() + " " + slot.key() + " " + item;
     }
 
     private String targetSelector() {
@@ -253,7 +253,7 @@ public class ForceLoadoutScreen extends Screen {
         putIfPresent(LoadoutSlot.CHESTPLATE, entry.chestplate());
         putIfPresent(LoadoutSlot.LEGGINGS, entry.leggings());
         putIfPresent(LoadoutSlot.BOOTS, entry.boots());
-        command("class forceselect " + targetSelector() + " " + entry.id());
+        command("class force select " + targetSelector() + " " + entry.id());
     }
 
     private void putIfPresent(LoadoutSlot slot, @Nullable ResourceLocation loc) {

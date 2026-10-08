@@ -26,7 +26,7 @@ import java.util.UUID;
  * of distinct ammo grants (e.g. two different magazine types for the same
  * gun) - the top grid lists the existing ones (click an icon to remove it),
  * and the picker below adds a new one. Mutates through the same {@code
- * /class whitelist ammo} command surface as everything else - no C2S
+ * /class ammo} command surface as everything else - no C2S
  * packets. To change an existing entry's count, remove it and re-add it;
  * there's no separate in-place count editor here (keeps this popup small).
  */
@@ -140,21 +140,21 @@ public class AmmoGrantScreen extends Screen {
         if (count <= 0) {
             return;
         }
-        command("class whitelist ammo " + slot.key() + " " + item + " " + pendingAmmoItem + " " + count);
+        command("class ammo " + slot.key() + " " + item + " " + pendingAmmoItem + " " + count);
         pendingAmmoItem = null;
         countValue = "";
     }
 
     private void removeEntry(ResourceLocation ammoItem) {
-        command("class whitelist ammo " + slot.key() + " " + item + " " + ammoItem + " 0");
+        command("class ammo " + slot.key() + " " + item + " " + ammoItem + " 0");
     }
 
     /** Registers the item currently in the OP's hand (full NBT included) as a new ammo grant entry at count 1. */
     private void registerHeldAsAmmo() {
         UUID id = UUID.randomUUID();
-        command("class whitelist register_held " + id);
+        command("class variant register " + id);
         ResourceLocation variant = new ResourceLocation("classloadout", "variant_" + id);
-        command("class whitelist ammo " + slot.key() + " " + item + " " + variant + " 1");
+        command("class ammo " + slot.key() + " " + item + " " + variant + " 1");
     }
 
     private static boolean isAir(ResourceLocation loc) {

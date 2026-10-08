@@ -58,7 +58,7 @@ public class LoadoutManager extends SavedData {
     private final Map<UUID, List<ClassDefinition>> personalPresets = new java.util.HashMap<>();
     /** Received-preset "inbox" per player (see {@link #receiveSharedPreset}), capped at {@link #MAX_SHARED_PRESETS} - separate from {@link #personalPresets} so incoming shares never compete with the player's own two. */
     private final Map<UUID, List<ClassDefinition>> sharedPresets = new java.util.HashMap<>();
-    /** OP-forced slots (via {@code /class forceassign}/{@code forceselect} and their all/team variants): the player can't self-service-change these until an OP frees them (assigning {@code minecraft:air} to a forced slot unlocks it - see {@code ClassCommand}). */
+    /** OP-forced slots (via {@code /class force assign}/{@code force select} and their all/team variants): the player can't self-service-change these until an OP frees them (assigning {@code minecraft:air} to a forced slot unlocks it - see {@code ClassCommand}). */
     private final Map<UUID, Set<LoadoutSlot>> lockedSlots = new java.util.HashMap<>();
     /** OP-curated per-vanilla-scoreboard-team "standard kits" (see {@code /class teamkit}): team name -> slot -> item. The team need not exist yet. Applied to members as a force-assign by {@code TeamKits}. */
     private final Map<String, Map<LoadoutSlot, ResourceLocation>> teamKits = new LinkedHashMap<>();
@@ -107,7 +107,7 @@ public class LoadoutManager extends SavedData {
     private boolean loadoutsEnabled = true;
     /** OP-granted currency balance per player (see {@code /class points add|set}), spent via {@code /class buy} - independent of any vanilla scoreboard. Absent = 0. */
     private final Map<UUID, Integer> points = new HashMap<>();
-    /** OP-curated: item -> point cost (see {@code /class price set}). Absent/non-positive = free - see {@link #canEquip}. Insertion order preserved for a stable shop grid. */
+    /** OP-curated: item -> point cost (see {@code /class price}). Absent/non-positive = free - see {@link #canEquip}. Insertion order preserved for a stable shop grid. */
     private final Map<ResourceLocation, Integer> itemPrices = new LinkedHashMap<>();
     /** Per-player set of priced items permanently unlocked via {@code /class buy} - see {@link #canEquip}. */
     private final Map<UUID, Set<ResourceLocation>> purchasedItems = new HashMap<>();
@@ -613,7 +613,7 @@ public class LoadoutManager extends SavedData {
         return removed;
     }
 
-    /** Overwrites a spawner block's entity/delay/items wholesale with a template's - the same three per-position maps {@code /class guardspawner config`/`add_item`/`remove_item} mutate one at a time. */
+    /** Overwrites a spawner block's entity/delay/items wholesale with a template's - the same three per-position maps {@code /class guardspawner <pos> config}/{@code item add}/{@code item remove} mutate one at a time. */
     public void applyGuardSpawnerTemplate(GlobalPos pos, GuardSpawnerTemplate template) {
         guardSpawnerEntity.put(pos, template.entityType());
         guardSpawnerDelaySeconds.put(pos, template.delaySeconds());
@@ -860,7 +860,7 @@ public class LoadoutManager extends SavedData {
 
     // --- team kits (OP-curated per-scoreboard-team force-assigns, see TeamKits) ---
 
-    /** What a slot looked like before a team kit overrode it: the player's own chosen item (null = unset) and whether it was already locked (e.g. by a manual forceassign). */
+    /** What a slot looked like before a team kit overrode it: the player's own chosen item (null = unset) and whether it was already locked (e.g. by a manual force assign). */
     public record PreviousSlot(@Nullable ResourceLocation item, boolean wasLocked) {}
 
     /** {@code hadLoadout}: whether the player had a personal loadout of their own before the kit applied. */
@@ -905,7 +905,7 @@ public class LoadoutManager extends SavedData {
     }
 
     /**
-     * The shared core of {@code /class forceassign}: a non-null item locks the slot, null unlocks
+     * The shared core of {@code /class force assign}: a non-null item locks the slot, null unlocks
      * it, then the slot is set. Does not equip or notify - callers do that once after all their slots.
      */
     public void forceSlot(MinecraftServer server, ServerPlayer player, LoadoutSlot slot, @Nullable ResourceLocation item) {

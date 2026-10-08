@@ -30,8 +30,8 @@ import java.util.function.Consumer;
  * preset editor, which is trusted with any item, and the ammo grant popup's
  * ammo picker) - and, unrestricted only, shows the same mod-category tabs as
  * {@link WhitelistEditorScreen}, plus an "Add Held Item" button (registers
- * the OP's held item as a reusable variant via {@code /class whitelist
- * register_held}, OP-only server-side, and immediately picks it - same idea
+ * the OP's held item as a reusable variant via {@code /class
+ * variant register}, OP-only server-side, and immediately picks it - same idea
  * as {@link WhitelistEditorScreen}'s and {@link AmmoGrantScreen}'s own Add
  * Held Item buttons), so a specific TACZ ammo type or an exact NBT-bearing
  * item is easy to find or add among everything else; when constructed with a
@@ -47,7 +47,7 @@ import java.util.function.Consumer;
  * "unset".
  *
  * <p>Restricted mode only: held-item variants grouped into a folder (see
- * {@code /class whitelist set_folder}) collapse into one chest-icon tile,
+ * {@code /class variant <item> folder}) collapse into one chest-icon tile,
  * same idea as {@link WhitelistEditorScreen}'s Held-items view - clicking
  * a tile pops a flyout of that folder's items (within {@code restrictTo}
  * only, not every variant in that folder server-wide) out beside it;
@@ -182,7 +182,7 @@ public class ItemPickerScreen extends Screen {
     /** Registers the OP's held item as a reusable variant and immediately picks it, same as clicking a catalog cell. */
     private void addHeldItem() {
         UUID id = UUID.randomUUID();
-        command("class whitelist register_held " + id);
+        command("class variant register " + id);
         onPick.accept(new ResourceLocation("classloadout", "variant_" + id));
         minecraft.setScreen(parent);
     }

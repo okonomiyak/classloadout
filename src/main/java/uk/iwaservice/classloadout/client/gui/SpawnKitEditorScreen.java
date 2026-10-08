@@ -118,7 +118,7 @@ public class SpawnKitEditorScreen extends Screen {
     /** Registers the OP's held item as a reusable variant and immediately adds it to the spawn kit at count 1 (fine-tune via right-click, same as any other entry). */
     private void addHeldItem() {
         UUID id = UUID.randomUUID();
-        command("class whitelist register_held " + id);
+        command("class variant register " + id);
         command("class spawnkit add classloadout:variant_" + id + " 1");
     }
 

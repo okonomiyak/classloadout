@@ -37,7 +37,7 @@ public final class LoadoutClientData {
     private static Map<LoadoutSlot, Map<ResourceLocation, Map<ResourceLocation, Integer>>> ammoGrants = Map.of();
     private static Map<ResourceLocation, CompoundTag> itemVariants = Map.of();
     private static Map<ResourceLocation, Long> variantRegisteredAt = Map.of();
-    /** Purely organizational OP-assigned folder per {@link #itemVariants} entry - see {@code /class whitelist set_folder}. Absent = uncategorized. */
+    /** Purely organizational OP-assigned folder per {@link #itemVariants} entry - see {@code /class variant <item> folder}. Absent = uncategorized. */
     private static Map<ResourceLocation, String> variantFolders = Map.of();
     private static List<ResourceLocation> protectedItems = List.of();
     private static Map<ResourceLocation, Integer> spawnKit = Map.of();
@@ -251,7 +251,7 @@ public final class LoadoutClientData {
         return whitelistEnabled;
     }
 
-    /** OP-curated shop prices - item -> point cost. Only items with an entry here are "for sale" (see {@code /class price set}). */
+    /** OP-curated shop prices - item -> point cost. Only items with an entry here are "for sale" (see {@code /class price}). */
     public static synchronized Map<ResourceLocation, Integer> getPrices() {
         return prices;
     }

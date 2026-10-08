@@ -179,7 +179,7 @@ public class PriceEditorScreen extends Screen {
                 return true;
             }
             boolean priced = LoadoutClientData.getPrices().containsKey(item);
-            command("class price set " + item + " " + (priced ? 0 : 1));
+            command("class price " + item + " " + (priced ? 0 : 1));
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);

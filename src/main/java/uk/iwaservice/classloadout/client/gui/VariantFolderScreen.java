@@ -12,7 +12,7 @@ import uk.iwaservice.classloadout.client.LoadoutClientData;
 /**
  * OP-only popup, opened by hovering a held-item cell in {@link WhitelistEditorScreen} (Held
  * items tab only) and pressing F, that assigns or clears that variant's organizational folder
- * (see {@code /class whitelist set_folder}/{@code clear_folder}). Mirrors {@link PriceCountScreen}.
+ * (see {@code /class variant <item> folder}). Mirrors {@link PriceCountScreen}.
  */
 public class VariantFolderScreen extends Screen {
 
@@ -77,12 +77,12 @@ public class VariantFolderScreen extends Screen {
             clear();
             return;
         }
-        command("class whitelist set_folder " + item + " " + folderValue);
+        command("class variant " + item + " folder " + folderValue);
         minecraft.setScreen(parent);
     }
 
     private void clear() {
-        command("class whitelist clear_folder " + item);
+        command("class variant " + item + " folder clear");
         minecraft.setScreen(parent);
     }
 

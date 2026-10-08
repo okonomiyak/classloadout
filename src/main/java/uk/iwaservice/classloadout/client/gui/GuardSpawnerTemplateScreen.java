@@ -110,7 +110,7 @@ public class GuardSpawnerTemplateScreen extends Screen {
 
     private void delete(GuardSpawnerTemplate template) {
         templates.remove(template);
-        command("class guardspawner template_delete " + template.id());
+        command("class guardspawner template " + template.id() + " delete");
         this.init(this.minecraft, this.width, this.height);
     }
 
@@ -125,10 +125,10 @@ public class GuardSpawnerTemplateScreen extends Screen {
             return;
         }
         UUID id = UUID.randomUUID();
-        command("class guardspawner template_save " + id + " " + parsed.entityType() + " " + parsed.delaySeconds()
+        command("class guardspawner template " + id + " save " + parsed.entityType() + " " + parsed.delaySeconds()
                 + " " + name);
         for (var item : parsed.items()) {
-            command("class guardspawner template_add_item " + id + " " + item);
+            command("class guardspawner template " + id + " item add " + item);
         }
         templates.add(new GuardSpawnerTemplate(id, name, parsed.entityType(), parsed.delaySeconds(),
                 new ArrayList<>(parsed.items())));
