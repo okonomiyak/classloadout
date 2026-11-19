@@ -161,7 +161,7 @@ GNU General Public License v3.0 (GPL-3.0-only)。全文は [`LICENSE`](LICENSE) 
 
 - `resupply.resupplyRadius`(既定4) — パック周囲の効果範囲(ブロック)
 - `resupply.resupplyIntervalSeconds`(既定2) — 回復/弾薬補給の間隔(秒)
-- `resupply.resupplyHealthPerTick`(既定1) — 回復パック1回あたりの回復量(ハーフハート単位)
+- `resupply.resupplyHealthPerTick`(既定3) — 回復パック1回あたりの回復量(ハーフハート単位)
 - `resupply.resupplyAmmoPerTick`(既定10) — 弾薬パック1回あたりの補充量(武器Modごとの単位は[補給パック](#補給パック)参照)
 - `resupply.killAmmoDropAmount`(既定30) — プレイヤーがプレイヤーを倒した際に落ちる弾薬ドロップの補充量(0で無効)
 - `resupply.packLifetimeSeconds`(既定20) — 設置から自然消滅までの秒数

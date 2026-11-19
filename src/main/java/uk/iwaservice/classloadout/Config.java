@@ -43,7 +43,7 @@ public final class Config {
                 .defineInRange("resupplyIntervalSeconds", 2, 1, 60);
         RESUPPLY_HEALTH_PER_TICK = b
                 .comment("Health points restored per resupply tick by a health pack (1 point = half a heart).")
-                .defineInRange("resupplyHealthPerTick", 1, 1, 20);
+                .defineInRange("resupplyHealthPerTick", 3, 1, 20);
         RESUPPLY_AMMO_PER_TICK = b
                 .comment("Ammo units restored per resupply tick by an ammo pack. Shared across weapon mods:",
                         "for TACZ this is the dummy-ammo amount added per tick; for SuperbWarfare it's the",
