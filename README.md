@@ -163,6 +163,7 @@ Two throwable items, `classloadout:thrown_health_pack` and `classloadout:thrown_
 - `resupply.resupplyIntervalSeconds` (default 2) - seconds between each heal/ammo tick
 - `resupply.resupplyHealthPerTick` (default 1) - health points (half-hearts) restored per tick by a health pack
 - `resupply.resupplyAmmoPerTick` (default 10) - ammo units restored per tick by an ammo pack (see [Resupply Packs](#resupply-packs) for what "unit" means per weapon mod)
+- `resupply.killAmmoDropAmount` (default 30) - ammo units restored by the pickup dropped when a player kills another player (0 disables)
 - `resupply.packLifetimeSeconds` (default 20) - seconds before a placed pack self-destructs
 - `resupply.maxActivePacksPerPlayer` (default 1) - active packs (health + ammo, placed + thrown, all combined) a player may have at once
 - `throwable.throwPackRadius` (default 2) - smaller than `resupplyRadius` by design

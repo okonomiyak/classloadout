@@ -20,9 +20,11 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -459,6 +461,21 @@ public final class ServerEvents {
                 return;
             }
         }
+    }
+
+    /**
+     * squadtp (optional) cancels a player's lethal-hit LivingDeathEvent to put them into a downed state;
+     * receiveCanceled makes that downing hit count as the kill here too. Its later bleed-out death uses
+     * genericKill (no attacker entity), so a kill never drops twice.
+     */
+    @SubscribeEvent(priority = EventPriority.LOW, receiveCanceled = true)
+    public static void onPlayerKilled(LivingDeathEvent event) {
+        if (Config.KILL_AMMO_DROP_AMOUNT.get() <= 0 || !(event.getEntity() instanceof ServerPlayer victim)
+                || !(event.getSource().getEntity() instanceof ServerPlayer killer)
+                || killer == victim || killer.isAlliedTo(victim)) {
+            return;
+        }
+        victim.spawnAtLocation(new ItemStack(ModRegistry.AMMO_DROP_ITEM.get()));
     }
 
     private ServerEvents() {}

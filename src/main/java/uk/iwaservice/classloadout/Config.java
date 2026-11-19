@@ -10,6 +10,7 @@ public final class Config {
     public static final ModConfigSpec.IntValue RESUPPLY_INTERVAL_SECONDS;
     public static final ModConfigSpec.IntValue RESUPPLY_HEALTH_PER_TICK;
     public static final ModConfigSpec.IntValue RESUPPLY_AMMO_PER_TICK;
+    public static final ModConfigSpec.IntValue KILL_AMMO_DROP_AMOUNT;
     public static final ModConfigSpec.IntValue PACK_LIFETIME_SECONDS;
     public static final ModConfigSpec.IntValue MAX_ACTIVE_PACKS_PER_PLAYER;
 
@@ -48,6 +49,10 @@ public final class Config {
                         "for TACZ this is the dummy-ammo amount added per tick; for SuperbWarfare it's the",
                         "amount added to each of the 5 ammo pools per tick.")
                 .defineInRange("resupplyAmmoPerTick", 10, 1, 1000);
+        KILL_AMMO_DROP_AMOUNT = b
+                .comment("Ammo units restored by picking up the pickup dropped when a player kills another player",
+                        "(same units as resupplyAmmoPerTick). 0 disables the drop.")
+                .defineInRange("killAmmoDropAmount", 30, 0, 1000);
         PACK_LIFETIME_SECONDS = b
                 .comment("Seconds a placed resupply pack lasts before it self-destructs.")
                 .defineInRange("packLifetimeSeconds", 20, 5, 3600);

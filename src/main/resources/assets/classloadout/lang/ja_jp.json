@@ -186,6 +186,7 @@
   "classloadout.gui.loadout_title_deferred": "ロードアウト(次のリスポーンで反映)",
   "item.classloadout.health_pack": "回復パック",
   "item.classloadout.ammo_pack": "弾薬パック",
+  "item.classloadout.ammo_drop": "弾薬ドロップ",
   "item.classloadout.thrown_health_pack": "投擲回復パック",
   "item.classloadout.thrown_ammo_pack": "投擲弾薬パック",
   "item.classloadout.cover": "遮蔽物",
