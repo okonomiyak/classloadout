@@ -19,9 +19,11 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import javax.annotation.Nullable;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.level.BlockEvent;
@@ -38,6 +40,7 @@ import uk.iwaservice.classloadout.loadout.TeamKits;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** Forge-bus event handlers: command registration, respawn equip, login sync, hammer AOE breaking. */
 public final class ServerEvents {
@@ -51,7 +54,7 @@ public final class ServerEvents {
      */
     private static final TagKey<Item> HAMMER_TAG = ItemTags.create(new ResourceLocation("forge", "tools/hammer"));
 
-    /** How far a guard spawner looks for its own tagged entity before assuming it's gone and starting the respawn countdown. */
+    /** How far a guard spawner scans for a tagged entity it doesn't own yet - only to adopt guards spawned before ownership was tracked; owned guards are looked up by UUID at any distance. */
     private static final double GUARD_SPAWNER_SCAN_RADIUS = 48.0;
 
     @SubscribeEvent
@@ -84,10 +87,15 @@ public final class ServerEvents {
     }
 
     /**
-     * For each configured guard spawner: if its tagged entity is present nearby, clear the
-     * missing-timer; if it's been missing for at least the configured delay, respawn it on top
-     * of the block. A fresh server start simply re-observes each spawner's state on the next
-     * tick - the missing-timer itself isn't persisted, unlike the config.
+     * For each configured guard spawner: while it owns a guard (persisted UUID) nothing is ever
+     * respawned, however far the guard wanders or whether its chunk is unloaded - the loaded
+     * guard is just re-provisioned. Ownership is cleared only when the guard dies
+     * ({@link #onEntityLeaveLevel}); the next tick then starts the configured delay and respawns
+     * it on top of the block, recording the new guard. A spawner owning nothing first scans
+     * {@link #GUARD_SPAWNER_SCAN_RADIUS} for a tagged guard to adopt (spawned before ownership
+     * was tracked) so updating doesn't duplicate it. The missing-timer isn't persisted.
+     * ponytail: if the server crashes after a guard dies but before the world saves, the spawner
+     * keeps the stale UUID and stops respawning; {@code /class guardspawner clear} resets it.
      */
     private static void tickGuardSpawners(MinecraftServer server) {
         LoadoutManager manager = LoadoutManager.get(server);
@@ -100,10 +108,19 @@ public final class ServerEvents {
             if (entityTypeId == null || level == null || !level.isLoaded(gpos.pos())) {
                 continue;
             }
+            UUID owned = manager.getGuardSpawnerGuard(gpos);
+            if (owned != null) {
+                Entity guard = level.getEntity(owned);
+                if (guard != null) {
+                    provisionGuardItems(guard, manager.getGuardSpawnerItems(gpos), manager);
+                }
+                continue;
+            }
             String tag = guardSpawnerTag(gpos.pos());
             List<Entity> found = level.getEntities((Entity) null, new AABB(gpos.pos()).inflate(GUARD_SPAWNER_SCAN_RADIUS),
                     e -> e.getTags().contains(tag));
             if (!found.isEmpty()) {
+                manager.setGuardSpawnerGuard(gpos, found.get(0).getUUID());
                 manager.setGuardSpawnerMissingSince(gpos, -1);
                 List<ResourceLocation> items = manager.getGuardSpawnerItems(gpos);
                 for (Entity guard : found) {
@@ -117,8 +134,34 @@ public final class ServerEvents {
                 continue;
             }
             if (server.getTickCount() - missingSince >= manager.getGuardSpawnerDelaySeconds(gpos) * 20L) {
-                spawnGuard(level, gpos.pos(), entityTypeId, tag, manager.getGuardSpawnerItems(gpos), manager);
+                Entity spawned = spawnGuard(level, gpos.pos(), entityTypeId, tag, manager.getGuardSpawnerItems(gpos), manager);
+                if (spawned != null) {
+                    manager.setGuardSpawnerGuard(gpos, spawned.getUUID());
+                }
                 manager.setGuardSpawnerMissingSince(gpos, -1);
+            }
+        }
+    }
+
+    /** A guard that is actually destroyed (killed/discarded - not chunk unload or dimension change) releases its spawner so the next tick starts the respawn delay. */
+    @SubscribeEvent
+    public static void onEntityLeaveLevel(EntityLeaveLevelEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        Entity entity = event.getEntity();
+        Entity.RemovalReason reason = entity.getRemovalReason();
+        if (reason == null || !reason.shouldDestroy()) {
+            return;
+        }
+        for (String t : entity.getTags()) {
+            if (t.startsWith(GUARD_SPAWNER_TAG_PREFIX)) {
+                GlobalPos gpos = GlobalPos.of(level.dimension(), BlockPos.of(Long.parseLong(t.substring(GUARD_SPAWNER_TAG_PREFIX.length()))));
+                LoadoutManager manager = LoadoutManager.get(level.getServer());
+                if (entity.getUUID().equals(manager.getGuardSpawnerGuard(gpos))) {
+                    manager.setGuardSpawnerGuard(gpos, null);
+                }
+                return;
             }
         }
     }
@@ -129,7 +172,7 @@ public final class ServerEvents {
         return GUARD_SPAWNER_TAG_PREFIX + pos.asLong();
     }
 
-    /** Discards every currently-loaded entity any guard spawner has ever spawned (see {@code /class guardspawner clear}), across every dimension. Doesn't touch spawner config or pause state - a paused spawner won't replace what's cleared here until resumed. */
+    /** Discards every currently-loaded entity any guard spawner has ever spawned (see {@code /class guardspawner clear}), across every dimension, and resets every spawner's guard ownership so one stuck on a stale UUID recovers; spawners then respawn after their delay (a living guard in an unloaded chunk isn't discarded and may end up duplicated). Doesn't touch spawner config or pause state - a paused spawner won't replace what's cleared here until resumed. */
     public static int clearGuardSpawnerEntities(MinecraftServer server) {
         int count = 0;
         for (ServerLevel level : server.getAllLevels()) {
@@ -140,19 +183,21 @@ public final class ServerEvents {
                 }
             }
         }
+        LoadoutManager.get(server).clearGuardSpawnerGuards();
         return count;
     }
 
     /** Spawns on top of the block, tags it so the next tick recognizes it as this spawner's guard, and fills any item-handler capability it exposes (e.g. a SuperbWarfare vehicle's battery/ammo slots) with the configured items. */
-    private static void spawnGuard(ServerLevel level, BlockPos pos, ResourceLocation entityTypeId, String tag,
+    @Nullable
+    private static Entity spawnGuard(ServerLevel level, BlockPos pos, ResourceLocation entityTypeId, String tag,
             List<ResourceLocation> items, LoadoutManager manager) {
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(entityTypeId);
         if (type == null) {
-            return;
+            return null;
         }
         Entity entity = type.create(level);
         if (entity == null) {
-            return;
+            return null;
         }
         entity.moveTo(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 0, 0);
         entity.addTag(tag);
@@ -161,6 +206,7 @@ public final class ServerEvents {
         level.getServer().getPlayerList().broadcastSystemMessage(Component.translatable(
                 "classloadout.msg.guardspawner_respawned", entityTypeId.toString(), pos.getX(), pos.getY(), pos.getZ()),
                 false);
+        return entity;
     }
 
     /**
