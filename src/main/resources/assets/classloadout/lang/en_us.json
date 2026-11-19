@@ -199,5 +199,9 @@
   "classloadout.msg.teamkit_none": "Team \"%s\" has no kit.",
   "classloadout.msg.teamkit_list_empty": "No team kits configured.",
   "classloadout.msg.teamkit_list_entry": "%1$s: %2$s",
-  "classloadout.msg.teamkit_notice": "Team kit for \"%s\" applied."
+  "classloadout.msg.teamkit_notice": "Team kit for \"%s\" applied.",
+  "classloadout.msg.trial_range_only": "You can only try weapons in the training range.",
+  "classloadout.msg.trial_given": "Trial: %s",
+  "classloadout.msg.trial_removed": "Trial items were removed.",
+  "classloadout.gui.shop_trial_hint": "Right-click: try it out (training range only)"
 }

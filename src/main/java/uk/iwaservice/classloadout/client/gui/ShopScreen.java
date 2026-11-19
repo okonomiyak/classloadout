@@ -1,5 +1,6 @@
 package uk.iwaservice.classloadout.client.gui;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -16,6 +17,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Player-facing screen (everyone, no permission check - like {@link LoadoutScreen}): shows the
@@ -182,6 +184,10 @@ public class ShopScreen extends Screen {
         int index = cellIndexAt(mouseX, mouseY);
         if (index >= 0) {
             ResourceLocation item = shopItems.get(index);
+            if (button == 1 && !LoadoutClientData.isPurchased(item)) {
+                command("class trial " + item);
+                return true;
+            }
             if (!LoadoutClientData.isPurchased(item)
                     && LoadoutClientData.getPoints() >= LoadoutClientData.getPrices().getOrDefault(item, 0)) {
                 command("class buy " + item);
@@ -280,7 +286,12 @@ public class ShopScreen extends Screen {
             Component name = hoveredStack.getHoverName().copy().append(LoadoutClientData.isPurchased(hoveredItem)
                     ? Component.translatable("classloadout.gui.shop_owned_tooltip")
                     : Component.translatable("classloadout.gui.shop_price_tooltip", price));
-            graphics.renderTooltip(this.font, name, hoveredX, hoveredY);
+            List<Component> lines = new ArrayList<>();
+            lines.add(name);
+            if (!LoadoutClientData.isPurchased(hoveredItem)) {
+                lines.add(Component.translatable("classloadout.gui.shop_trial_hint").withStyle(ChatFormatting.GRAY));
+            }
+            graphics.renderTooltip(this.font, lines, Optional.empty(), hoveredX, hoveredY);
         }
 
         if (maxScroll > 0) {

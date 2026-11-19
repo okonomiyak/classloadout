@@ -56,6 +56,7 @@ GNU General Public License v3.0 (GPL-3.0-only). Full text in [`LICENSE`](LICENSE
 | `/class points add <player> <amount>` | Add `amount` points to an online player's balance (negative to deduct); floored at 0 | OP (level 2+) |
 | `/class points set <player> <amount>` | Set an online player's point balance exactly | OP (level 2+) |
 | `/class buy <item>` | Spend points to permanently unlock a priced shop item for yourself (sent by the Shop screen, or typed by hand) | - |
+| `/class trial <item>` | While on a `shop.trialTeams` team (e.g. the training range), get a free trial copy of an unpurchased shop item plus its ammo grants; removed once you leave the team (sent by right-clicking in the Shop screen) | - |
 
 Item arguments accept any registered item id; `minecraft:air` is the "unset" sentinel.
 
@@ -177,6 +178,7 @@ Two throwable items, `classloadout:thrown_health_pack` and `classloadout:thrown_
 - `cover.maxActiveCoversPerPlayer` (default 2) - active covers a player may have at once
 - `cover.coverMaxHealth` (default 1000, capped at 1024) - health of a newly-placed cover; changing it doesn't retroactively affect already-placed covers
 - `hammer.hammerAoeRadius` (default 1) - cube radius around a hammer-broken whitelisted block that also breaks; 0 disables the area effect. See [Hammer Area-of-Effect](#hammer-area-of-effect)
+- `shop.trialTeams` (default `["conquest_range"]`) - vanilla scoreboard team names whose members may right-click an unpurchased shop item to get a trial copy (+ that slot's ammo grants); trial items are removed once the player leaves those teams. Empty list disables trials
 
 ## Design Notes
 

@@ -29,6 +29,7 @@ import uk.iwaservice.classloadout.loadout.GuardSpawnerTemplate;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
+import uk.iwaservice.classloadout.loadout.ShopTrials;
 import uk.iwaservice.classloadout.loadout.TeamKits;
 import uk.iwaservice.classloadout.network.NetworkHandler;
 
@@ -215,6 +216,9 @@ public final class ClassCommand {
                 .then(Commands.literal("buy")
                         .then(Commands.argument("item", ResourceLocationArgument.id())
                                 .executes(ctx -> buy(ctx))))
+                .then(Commands.literal("trial")
+                        .then(Commands.argument("item", ResourceLocationArgument.id())
+                                .executes(ctx -> trial(ctx))))
                 .then(Commands.literal("guardspawner")
                         .requires(src -> src.hasPermission(2))
                         .then(Commands.literal("pause").executes(ctx -> guardSpawnerPause(ctx)))
@@ -705,6 +709,34 @@ public final class ClassCommand {
             case INSUFFICIENT_FUNDS -> fail(ctx, "classloadout.msg.insufficient_funds",
                     manager.getPrice(item), manager.getPoints(player.getUUID()));
         };
+    }
+
+    /**
+     * Player self-service: a free, marked copy of an unpurchased shop item (plus that slot's ammo
+     * grants) while on one of {@code shop.trialTeams}; {@link ShopTrials#sweep} takes it back later.
+     */
+    private static int trial(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        if (!ShopTrials.canTrial(player)) {
+            return fail(ctx, "classloadout.msg.trial_range_only");
+        }
+        ResourceLocation item = ResourceLocationArgument.getId(ctx, "item");
+        LoadoutManager manager = LoadoutManager.get(ctx.getSource().getServer());
+        if (manager.getPrice(item) <= 0) {
+            return fail(ctx, "classloadout.msg.not_for_sale", item.toString());
+        }
+        ServerEvents.giveItem(player, item, 1, manager, false, true);
+        for (LoadoutSlot slot : LoadoutSlot.values()) {
+            var grants = manager.getAmmoGrants(slot, item);
+            if (!grants.isEmpty()) {
+                for (var grant : grants.entrySet()) {
+                    ServerEvents.giveItem(player, grant.getKey(), grant.getValue(), manager, false, true);
+                }
+                break;
+            }
+        }
+        ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.trial_given", item.toString()), false);
+        return 1;
     }
 
     private static int guardSpawnerConfig(CommandContext<CommandSourceStack> ctx) {

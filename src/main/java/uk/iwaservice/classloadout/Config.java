@@ -31,6 +31,8 @@ public final class Config {
 
     public static final ModConfigSpec.IntValue HAMMER_AOE_RADIUS;
 
+    public static final ModConfigSpec.ConfigValue<java.util.List<? extends String>> SHOP_TRIAL_TEAMS;
+
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
 
@@ -127,6 +129,14 @@ public final class Config {
                         "The broken block itself must also be on that list, or no bonus blocks break at all.",
                         "0 disables the area effect entirely (still a normal single-block break).")
                 .defineInRange("hammerAoeRadius", 1, 0, 4);
+        b.pop();
+
+        b.push("shop");
+        SHOP_TRIAL_TEAMS = b
+                .comment("Vanilla scoreboard team names whose members may right-click an unpurchased shop item",
+                        "to get a trial copy (plus that slot's ammo grants). Trial items are removed once the",
+                        "player leaves those teams. An empty list disables trials.")
+                .defineListAllowEmpty("trialTeams", java.util.List.of("conquest_range"), o -> o instanceof String);
         b.pop();
 
         SPEC = b.build();
