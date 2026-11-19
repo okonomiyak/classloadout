@@ -13,6 +13,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.core.registries.BuiltInRegistries;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
+import uk.iwaservice.classloadout.compat.ItemZoomerCompat;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -263,6 +264,7 @@ public class HammerBlocksEditorScreen extends Screen {
         }
         graphics.disableScissor();
 
+        ItemZoomerCompat.hover(this, hoveredStack, panelLeft, panelTop, panelWidth, panelHeight);
         if (hoveredStack != null) {
             Component name = hoveredStack.getHoverName().copy().append(hoveredIncluded
                     ? Component.translatable("classloadout.gui.hammerblocks_on")

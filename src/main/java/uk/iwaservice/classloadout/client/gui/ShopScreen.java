@@ -10,6 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
+import uk.iwaservice.classloadout.compat.ItemZoomerCompat;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -273,6 +274,7 @@ public class ShopScreen extends Screen {
         }
         graphics.disableScissor();
 
+        ItemZoomerCompat.hover(this, hoveredStack, panelLeft, panelTop, panelWidth, panelHeight);
         if (hoveredStack != null) {
             int price = prices.getOrDefault(hoveredItem, 0);
             Component name = hoveredStack.getHoverName().copy().append(LoadoutClientData.isPurchased(hoveredItem)

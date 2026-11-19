@@ -15,6 +15,7 @@ import uk.iwaservice.classloadout.ClassLoadoutMod;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
+import uk.iwaservice.classloadout.compat.ItemZoomerCompat;
 import org.lwjgl.glfw.GLFW;
 
 import javax.annotation.Nullable;
@@ -588,6 +589,7 @@ public class WhitelistEditorScreen extends Screen {
 
         this.hoveredItem = hoveredLoc;
 
+        ItemZoomerCompat.hover(this, hoveredStack != null && hoveredStack.getItem() != Items.BARRIER ? hoveredStack : null, panelLeft, panelTop, panelWidth, panelHeight);
         if (hoveredFolder != null) {
             List<Component> lines = new ArrayList<>();
             lines.add(Component.literal(hoveredFolder));

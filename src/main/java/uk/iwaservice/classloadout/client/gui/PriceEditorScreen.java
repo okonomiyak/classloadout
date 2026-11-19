@@ -11,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
+import uk.iwaservice.classloadout.compat.ItemZoomerCompat;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -279,6 +280,7 @@ public class PriceEditorScreen extends Screen {
         }
         graphics.disableScissor();
 
+        ItemZoomerCompat.hover(this, hoveredStack, panelLeft, panelTop, panelWidth, panelHeight);
         if (hoveredStack != null) {
             Component name = hoveredStack.getHoverName().copy().append(hoveredPrice != null
                     ? Component.translatable("classloadout.gui.price_on", hoveredPrice)
