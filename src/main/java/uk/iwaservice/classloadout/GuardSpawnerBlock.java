@@ -19,7 +19,7 @@ import uk.iwaservice.classloadout.network.NetworkHandler;
  * block's current config, sent fresh from the server every time (config
  * isn't broadcast globally like the whitelist/spawn kit - only the editing
  * OP ever needs one block's data). While configured, the block owns one guard
- * (tracked by UUID) and respawns it on top of itself after the configured delay
+ * (tracked by UUID) and respawns it at the first air block above itself after the configured delay
  * once that guard actually dies - not merely when it wanders away or its chunk
  * unloads - see {@code ServerEvents#tickGuardSpawners}.
  */
