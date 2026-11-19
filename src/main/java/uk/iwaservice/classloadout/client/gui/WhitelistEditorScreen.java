@@ -33,7 +33,7 @@ import java.util.Optional;
  * allowed to self-assign via {@link LoadoutScreen}. Opened exclusively via
  * {@link uk.iwaservice.classloadout.network.OpenWhitelistEditorPacket} that
  * follows a successful {@code /class whitelist} command. Unlike
- * {@link ItemPickerScreen}, clicking a cell here toggles membership rather
+ * {@link ItemPickerScreen}, clicking a cell here toggles membership (or, with the folder button on, opens a held-item variant's folder editor like the F key) rather
  * than picking-and-closing, so the screen stays open for repeated edits.
  * Also doubles as the ban editor: hovering a cell and pressing B toggles
  * that item's global ban (see {@code /class ban}), independent of slot -
@@ -78,6 +78,8 @@ public class WhitelistEditorScreen extends Screen {
     private static final int COLOR_HOVER = 0x60FFFFFF;
 
     private LoadoutSlot selectedSlot = LoadoutSlot.MAIN;
+    /** Toggled by the folder button: while on, left-clicking a held-item variant opens its folder editor (same as the F key) instead of toggling whitelist membership. */
+    private boolean folderMode;
     @Nullable
     private ItemCatalog.Category selectedCategory = null;
     private List<ResourceLocation> allItems = List.of();
@@ -182,13 +184,20 @@ public class WhitelistEditorScreen extends Screen {
         gridTop = catY + CAT_H + 6 + SEARCH_H + 6;
         gridHeight = panelTop + panelHeight - PAD - 24 - gridTop;
 
-        int closeWidth = (panelWidth - 2 * PAD - 4) * 2 / 3;
-        int addHeldWidth = panelWidth - 2 * PAD - 4 - closeWidth;
+        int btnW = (panelWidth - 2 * PAD - 8) / 3;
+        int btnY = panelTop + panelHeight - PAD - 20;
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
-                .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, closeWidth, 20).build());
+                .bounds(panelLeft + PAD, btnY, btnW, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_add_held"),
                         b -> command("class whitelist add " + selectedSlot.key() + " held"))
-                .bounds(panelLeft + PAD + closeWidth + 4, panelTop + panelHeight - PAD - 20, addHeldWidth, 20).build());
+                .bounds(panelLeft + PAD + btnW + 4, btnY, btnW, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable(folderMode
+                                ? "classloadout.gui.folder_mode_on" : "classloadout.gui.folder_mode_off"),
+                        b -> {
+                            folderMode = !folderMode;
+                            this.init(this.minecraft, this.width, this.height);
+                        })
+                .bounds(panelLeft + PAD + (btnW + 4) * 2, btnY, panelWidth - 2 * PAD - (btnW + 4) * 2, 20).build());
 
         updateShown();
     }
@@ -355,8 +364,14 @@ public class WhitelistEditorScreen extends Screen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
-    /** Left-click toggles whitelist membership, shift+left deletes a held-item variant, right-click opens the ammo-grant popup (whitelisting first if needed). Shared by the main grid and the folder flyout. */
+    /** Left-click toggles whitelist membership (or opens the folder editor while the folder button is on), shift+left deletes a held-item variant, right-click opens the ammo-grant popup (whitelisting first if needed). Shared by the main grid and the folder flyout. */
     private boolean handleItemClick(ResourceLocation item, int button) {
+        if (folderMode && button == 0) {
+            if (LoadoutClientData.getItemVariants().containsKey(item)) {
+                minecraft.setScreen(new VariantFolderScreen(this, item));
+            }
+            return true;
+        }
         if (button == 0 && hasShiftDown() && LoadoutClientData.getItemVariants().containsKey(item)) {
             command("class variant " + item + " delete");
             return true;
