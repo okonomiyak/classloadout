@@ -42,7 +42,7 @@ public final class ModRegistry {
     public static final RegistryObject<Block> LOADOUT_STATION = BLOCKS.register("loadout_station",
             () -> new LoadoutStationBlock(BlockBehaviour.Properties.of()
                     .mapColor(MapColor.WOOD)
-                    .strength(2.5F)
+                    .strength(50.0F, 1200.0F)
                     .sound(SoundType.WOOD)
                     .noOcclusion()));
     public static final RegistryObject<Item> LOADOUT_STATION_ITEM = ITEMS.register("loadout_station",
@@ -56,7 +56,7 @@ public final class ModRegistry {
     public static final RegistryObject<Block> LOADOUT_LOCKER = BLOCKS.register("loadout_locker",
             () -> new LoadoutLockerBlock(BlockBehaviour.Properties.of()
                     .mapColor(MapColor.METAL)
-                    .strength(2.5F)
+                    .strength(50.0F, 1200.0F)
                     .sound(SoundType.METAL)
                     .noOcclusion()));
     public static final RegistryObject<Item> LOADOUT_LOCKER_ITEM = ITEMS.register("loadout_locker",
