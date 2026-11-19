@@ -1,14 +1,14 @@
 package uk.iwaservice.classloadout.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
@@ -22,41 +22,51 @@ import java.util.UUID;
 /**
  * Player-facing loadout screen, reachable only from the death screen's
  * "Loadout" button (see {@link uk.iwaservice.classloadout.ClientEvents}).
- * Two independent things: "My Loadout" - ten slots the player assigns
- * directly by clicking an {@link ItemPickerScreen} - and "Presets", a
- * read-only list of admin-defined classes each of which can be applied as a
- * starting point for the player's own loadout (still freely editable after).
+ * A bottom-anchored bar: a left column with the preset lists (tabs + text rows) and,
+ * to its right, six weapon cards and four armor cards the player assigns directly by
+ * clicking an {@link ItemPickerScreen}. Presets are applied as a starting point
+ * (still freely editable after).
  */
 public class LoadoutScreen extends Screen {
 
-    private static final int PAD = 12;
-    private static final int HEADER_H = 24;
-    private static final int SLOT = 32;
-    private static final int PRESET_ROW_H = 40;
+    private static final int MARGIN = 8;
+    private static final int PAD = 6;
+    private static final int BAR_H = 130;
+    private static final int GAP = 4;
     private static final int ICON = 16;
+    private static final int CARD_H = 70;
+    private static final int ARMOR = 32;
+    private static final int ROW_H = 13;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_TEXT = 0xFFFFFF;
-    private static final int COLOR_TEXT_DIM = 0xA0A8C0;
-    private static final int COLOR_SLOT_BG = 0x60000000;
-    private static final int COLOR_SEPARATOR = 0x28FFFFFF;
-    private static final int COLOR_LOCKED_OUTLINE = 0xFFFF5555;
+    private static final int COLOR_TEXT = FlatButton.COLOR_TEXT;
+    private static final int COLOR_TEXT_DIM = FlatButton.COLOR_TEXT_DIM;
+    private static final int COLOR_CARD_LINE = FlatButton.COLOR_CARD_LINE;
+    private static final int COLOR_ROW_HOVER = 0x30FFFFFF;
+    private static final int COLOR_LOCKED = 0xFFFF5555;
 
-    private record PresetRow(LoadoutSyncPacket.Entry entry, int y) {}
-
-    /** Which of the three preset lists is currently showing - only one at a time, switched via the tab bar. */
+    /** Which of the three preset lists is currently showing - only one at a time. */
     private enum Tab { PRESETS, MY_PRESETS, SHARED }
+
+    /** Clickable rectangle; {@code action} runs on left click. */
+    private record Hit(int x, int y, int w, int h, Runnable action) {
+        boolean contains(double mx, double my) {
+            return mx >= x && mx < x + w && my >= y && my < y + h;
+        }
+    }
+
+    private record Card(LoadoutSlot slot, String labelKey, int x, int y, int w, int h) {}
+
+    /** One text row of the left column; {@code code}/{@code delete} may be null (no "#"/"x" targets). */
+    private record Row(Component label, int y, Runnable apply, @Nullable Runnable code, @Nullable Runnable delete) {}
 
     private final Screen returnTo;
     /** True (the regular loadout station / death screen): changes equip into the hotbar right away. False (the deferred loadout locker): only the saved data changes, taking effect on the next respawn. */
     private final boolean immediate;
-    private final List<PresetRow> presetRows = new ArrayList<>();
-    /** Same row shape as {@link PresetRow}, but for the player's own {@code /class mypreset} entries. */
-    private final List<PresetRow> personalPresetRows = new ArrayList<>();
-    /** Same row shape as {@link PresetRow}, but for the player's received-preset "inbox", see {@code LoadoutClientData#getSharedPresets}. */
-    private final List<PresetRow> sharedPresetRows = new ArrayList<>();
+    private final List<Card> cards = new ArrayList<>();
+    private final List<Hit> tabHits = new ArrayList<>();
+    /** Cards + list rows (the small "#"/"x" targets come first so they win over a row's apply hit). */
+    private final List<Hit> hits = new ArrayList<>();
+    private final List<Row> rows = new ArrayList<>();
     private Tab selectedTab = Tab.PRESETS;
 
     private int panelWidth;
@@ -64,13 +74,10 @@ public class LoadoutScreen extends Screen {
     private int panelTop;
     private int panelHeight;
     private int dataRevision = -1;
-    /** Y where the active tab's row list begins, set in {@link #init()} - reused by {@link #render} for the "no presets" placeholder. */
-    private int contentTop;
-
-    private final int[] slotX = new int[6];
-    private int slotY;
-    private final int[] armorX = new int[4];
-    private int armorY;
+    private int listLeft;
+    private int listW;
+    private int listTop;
+    private int listBottom;
 
     /** Immediate mode (regular loadout station / death screen). */
     public LoadoutScreen(Screen returnTo) {
@@ -85,116 +92,117 @@ public class LoadoutScreen extends Screen {
 
     @Override
     protected void init() {
-        List<LoadoutSyncPacket.Entry> classes = LoadoutClientData.getClasses();
-        List<LoadoutSyncPacket.Entry> myPresets = LoadoutClientData.getPersonalPresets();
-        List<LoadoutSyncPacket.Entry> sharedEntries = LoadoutClientData.getSharedPresets();
-
-        int tabContentH = 14 + switch (selectedTab) {
-            case PRESETS -> classes.size() * PRESET_ROW_H;
-            case MY_PRESETS -> myPresets.size() * PRESET_ROW_H + 30;
-            case SHARED -> sharedEntries.size() * PRESET_ROW_H + 30;
-        };
-        panelWidth = Math.min(360, this.width - 16);
-        panelHeight = Math.min(HEADER_H + PAD * 2 + 20 + 2 * SLOT + 8 + 34 + 16 + 30 + tabContentH + 30,
-                this.height - 32);
-        panelLeft = (this.width - panelWidth) / 2;
-        panelTop = (this.height - panelHeight) / 2;
+        // Left of the bar is left free for Item Zoomer's zoomed item (see FlatButton#zoomMargin).
+        panelLeft = FlatButton.zoomMargin(this.width, 406);
+        panelWidth = this.width - panelLeft - MARGIN;
+        panelHeight = BAR_H;
+        panelTop = this.height - MARGIN - BAR_H;
         dataRevision = LoadoutClientData.getRevision();
+        cards.clear();
+        hits.clear();
+        rows.clear();
+        tabHits.clear();
 
-        int y = panelTop + HEADER_H + PAD + 14;
-        int startX = panelLeft + PAD;
-        for (int i = 0; i < slotX.length; i++) {
-            slotX[i] = startX + i * (SLOT + 8);
+        // Left column shrinks (90..130) so six cards of at least 46px still fit.
+        int inner = panelWidth - 2 * PAD;
+        int leftW = Math.max(90, Math.min(130, inner - 8 - (6 * 46 + 5 * GAP)));
+        listLeft = panelLeft + PAD;
+        listW = leftW;
+        int cx = listLeft + leftW + 8;
+        int cardsW = panelLeft + panelWidth - PAD - cx;
+        int cardW = Math.max(46, Math.min(90, (cardsW - 5 * GAP) / 6));
+        int cy = panelTop + 16;
+
+        LoadoutSlot[] weapons = {LoadoutSlot.MAIN, LoadoutSlot.SIDEARM, LoadoutSlot.THROWABLE,
+                LoadoutSlot.GADGET, LoadoutSlot.GADGET2, LoadoutSlot.MELEE};
+        String[] weaponKeys = {"main", "sidearm", "throwable", "gadget", "gadget2", "melee"};
+        for (int i = 0; i < 6; i++) {
+            cards.add(new Card(weapons[i], "classloadout.gui.slot_" + weaponKeys[i], cx + i * (cardW + GAP), cy, cardW, CARD_H));
         }
-        slotY = y;
-        addRenderableWidget(slotButton(slotX[0], slotY, LoadoutSlot.MAIN));
-        addRenderableWidget(slotButton(slotX[1], slotY, LoadoutSlot.SIDEARM));
-        addRenderableWidget(slotButton(slotX[2], slotY, LoadoutSlot.THROWABLE));
-        addRenderableWidget(slotButton(slotX[3], slotY, LoadoutSlot.GADGET));
-        addRenderableWidget(slotButton(slotX[4], slotY, LoadoutSlot.GADGET2));
-        addRenderableWidget(slotButton(slotX[5], slotY, LoadoutSlot.MELEE));
-        y += SLOT + 8;
-
-        for (int i = 0; i < armorX.length; i++) {
-            armorX[i] = startX + i * (SLOT + 8);
+        int ay = cy + CARD_H + 6;
+        LoadoutSlot[] armor = {LoadoutSlot.HELMET, LoadoutSlot.CHESTPLATE, LoadoutSlot.LEGGINGS, LoadoutSlot.BOOTS};
+        String[] armorKeys = {"helmet", "chestplate", "leggings", "boots"};
+        for (int i = 0; i < 4; i++) {
+            cards.add(new Card(armor[i], "classloadout.gui.slot_" + armorKeys[i], cx + i * (ARMOR + GAP), ay, ARMOR, ARMOR));
         }
-        armorY = y;
-        addRenderableWidget(slotButton(armorX[0], armorY, LoadoutSlot.HELMET));
-        addRenderableWidget(slotButton(armorX[1], armorY, LoadoutSlot.CHESTPLATE));
-        addRenderableWidget(slotButton(armorX[2], armorY, LoadoutSlot.LEGGINGS));
-        addRenderableWidget(slotButton(armorX[3], armorY, LoadoutSlot.BOOTS));
-        y += SLOT + 34;
+        // Picker is unrestricted (full catalog, purchase gate included) while an OP has temporarily disabled whitelist enforcement - see LoadoutManager#isWhitelistEnabled.
+        for (Card c : cards) {
+            hits.add(new Hit(c.x(), c.y(), c.w(), c.h(), () -> minecraft.setScreen(new ItemPickerScreen(this,
+                    loc -> command("class assign " + c.slot().key() + " " + loc),
+                    LoadoutClientData.isWhitelistEnabled() ? purchasable(LoadoutClientData.getWhitelist(c.slot())) : null))));
+        }
 
-        int tabW = (panelWidth - 2 * PAD - 8) / 3;
-        addRenderableWidget(tabButton("classloadout.gui.presets_section", Tab.PRESETS,
-                panelLeft + PAD, y, tabW));
-        addRenderableWidget(tabButton("classloadout.gui.mypresets_section", Tab.MY_PRESETS,
-                panelLeft + PAD + tabW + 4, y, tabW));
-        addRenderableWidget(tabButton("classloadout.gui.sharedpreset_section", Tab.SHARED,
-                panelLeft + PAD + (tabW + 4) * 2, y, tabW));
-        y += 20 + 10 + 14;
-        contentTop = y;
+        // Shop / Unselect / Close, right of the armor row.
+        int btnLeft = cx + 4 * (ARMOR + GAP) + 4;
+        int btnW = Math.max(36, Math.min(60, (cx + cardsW - btnLeft - 2 * GAP) / 3));
+        int btnX = cx + cardsW - 3 * btnW - 2 * GAP;
+        int btnY = ay + (ARMOR - 20) / 2;
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.shop_button"),
+                b -> minecraft.setScreen(new ShopScreen(this)), btnX, btnY, btnW, 20));
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.class_unselect"),
+                b -> command("class clear"), btnX + btnW + GAP, btnY, btnW, 20));
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.close"),
+                b -> minecraft.setScreen(returnTo), btnX + 2 * (btnW + GAP), btnY, btnW, 20));
 
-        presetRows.clear();
-        personalPresetRows.clear();
-        sharedPresetRows.clear();
+        // Tabs, one per line.
+        int ty = panelTop + 16;
+        for (Tab tab : Tab.values()) {
+            int w = this.font.width(tabLabel(tab));
+            tabHits.add(new Hit(listLeft, ty, w, 10, () -> {
+                selectedTab = tab;
+                this.init(this.minecraft, this.width, this.height);
+            }));
+            ty += 11;
+        }
+
+        listTop = ty + 5;
+        listBottom = panelTop + panelHeight - PAD;
+        int y = listTop;
         switch (selectedTab) {
             case PRESETS -> {
-                for (LoadoutSyncPacket.Entry entry : classes) {
-                    presetRows.add(new PresetRow(entry, y));
-                    addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                                    b -> command("class select " + entry.id()))
-                            .bounds(panelLeft + panelWidth - PAD - 56, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
-                    y += PRESET_ROW_H;
+                for (LoadoutSyncPacket.Entry e : LoadoutClientData.getClasses()) {
+                    rows.add(new Row(Component.literal(e.name()), y, () -> command("class select " + e.id()), null, null));
+                    y += ROW_H;
                 }
             }
             case MY_PRESETS -> {
-                for (LoadoutSyncPacket.Entry entry : myPresets) {
-                    personalPresetRows.add(new PresetRow(entry, y));
-                    addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                                    b -> command("class mypreset select " + entry.id()))
-                            .bounds(panelLeft + panelWidth - PAD - 88, y + (PRESET_ROW_H - 20) / 2, 44, 20).build());
-                    addRenderableWidget(Button.builder(Component.literal("#"), b -> showCode(entry.id()))
-                            .bounds(panelLeft + panelWidth - PAD - 42, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
-                    addRenderableWidget(Button.builder(Component.literal("x"),
-                                    b -> rawCommand("class mypreset delete " + entry.id()))
-                            .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
-                    y += PRESET_ROW_H;
+                for (LoadoutSyncPacket.Entry e : LoadoutClientData.getPersonalPresets()) {
+                    rows.add(new Row(Component.literal(e.name()), y, () -> command("class mypreset select " + e.id()),
+                            () -> showCode(e.id()), () -> rawCommand("class mypreset delete " + e.id())));
+                    y += ROW_H;
                 }
-                addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_save"),
-                                b -> minecraft.setScreen(new PersonalPresetNameScreen(this)))
-                        .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
-                y += 20 + 10;
+                rows.add(new Row(Component.literal("+ ").append(Component.translatable("classloadout.gui.mypreset_save")), y,
+                        () -> minecraft.setScreen(new PersonalPresetNameScreen(this)), null, null));
             }
             case SHARED -> {
-                for (LoadoutSyncPacket.Entry entry : sharedEntries) {
-                    sharedPresetRows.add(new PresetRow(entry, y));
-                    addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                                    b -> command("class mypreset shared " + entry.id() + " select"))
-                            .bounds(panelLeft + panelWidth - PAD - 78, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
-                    addRenderableWidget(Button.builder(Component.literal("x"),
-                                    b -> rawCommand("class mypreset shared " + entry.id() + " clear"))
-                            .bounds(panelLeft + panelWidth - PAD - 20, y + (PRESET_ROW_H - 20) / 2, 20, 20).build());
-                    y += PRESET_ROW_H;
+                for (LoadoutSyncPacket.Entry e : LoadoutClientData.getSharedPresets()) {
+                    rows.add(new Row(Component.literal(e.name()), y, () -> command("class mypreset shared " + e.id() + " select"),
+                            null, () -> rawCommand("class mypreset shared " + e.id() + " clear")));
+                    y += ROW_H;
                 }
-                addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.mypreset_receive_button"),
-                                b -> minecraft.setScreen(new ReceiveSharedPresetScreen(this)))
-                        .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
-                y += 20 + 10;
+                rows.add(new Row(Component.translatable("classloadout.gui.mypreset_receive_button"), y,
+                        () -> minecraft.setScreen(new ReceiveSharedPresetScreen(this)), null, null));
             }
         }
+        for (Row r : rows) {
+            if (r.delete() != null) {
+                hits.add(0, new Hit(listLeft + listW - 10, r.y(), 10, ROW_H, r.delete()));
+            }
+            if (r.code() != null) {
+                hits.add(0, new Hit(listLeft + listW - 20, r.y(), 10, ROW_H, r.code()));
+            }
+        }
+        for (Row r : rows) {
+            hits.add(new Hit(listLeft, r.y(), listW, ROW_H, r.apply()));
+        }
+    }
 
-        int bottomY = panelTop + panelHeight - PAD - 20;
-        int third = (panelWidth - 2 * PAD - 8) / 3;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.shop_button"),
-                        b -> minecraft.setScreen(new ShopScreen(this)))
-                .bounds(panelLeft + PAD, bottomY, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.class_unselect"),
-                        b -> command("class clear"))
-                .bounds(panelLeft + PAD + third + 4, bottomY, third, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"),
-                        b -> minecraft.setScreen(returnTo))
-                .bounds(panelLeft + PAD + (third + 4) * 2, bottomY, third, 20).build());
+    private Component tabLabel(Tab tab) {
+        return Component.translatable(switch (tab) {
+            case PRESETS -> "classloadout.gui.presets_section";
+            case MY_PRESETS -> "classloadout.gui.mypresets_section";
+            case SHARED -> "classloadout.gui.sharedpreset_section";
+        });
     }
 
     @Override
@@ -204,25 +212,34 @@ public class LoadoutScreen extends Screen {
         }
     }
 
-    /** Switches which of the three preset lists is showing; the active tab's label is prefixed to stand out since {@link Button} has no separate "pressed" style to lean on here. */
-    private Button tabButton(String labelKey, Tab tab, int x, int y, int width) {
-        Component label = Component.translatable(labelKey);
-        if (tab == selectedTab) {
-            label = Component.literal("» ").append(label);
+    @Override
+    public boolean mouseClicked(double mx, double my, int button) {
+        if (super.mouseClicked(mx, my, button)) {
+            return true;
         }
-        return Button.builder(label, b -> {
-                    selectedTab = tab;
-                    this.init(this.minecraft, this.width, this.height);
-                })
-                .bounds(x, y, width, 20).build();
+        if (button != 0) {
+            return false;
+        }
+        for (Hit h : tabHits) {
+            if (h.contains(mx, my)) {
+                return fire(h);
+            }
+        }
+        boolean inList = my >= listTop && my < listBottom;
+        for (Hit h : hits) {
+            // Left-column hits are clipped to the visible list area.
+            boolean listHit = h.x() >= listLeft && h.x() < listLeft + listW + 1;
+            if (h.contains(mx, my) && (!listHit || inList)) {
+                return fire(h);
+            }
+        }
+        return false;
     }
 
-    /** Picker is unrestricted (full catalog, purchase gate included) while an OP has temporarily disabled whitelist enforcement - see {@code LoadoutManager#isWhitelistEnabled}. */
-    private Button slotButton(int x, int y, LoadoutSlot slot) {
-        return Button.builder(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this,
-                        loc -> command("class assign " + slot.key() + " " + loc),
-                        LoadoutClientData.isWhitelistEnabled() ? purchasable(LoadoutClientData.getWhitelist(slot)) : null)))
-                .bounds(x, y, SLOT, SLOT).build();
+    private boolean fire(Hit h) {
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+        h.action().run();
+        return true;
     }
 
     /** Drops priced items the player hasn't bought yet (see {@code /class buy}) - picking one would just silently fail to equip server-side anyway (see {@code LoadoutManager#canEquip}), so don't offer it as a choice at all. */
@@ -273,64 +290,74 @@ public class LoadoutScreen extends Screen {
         this.iconMouseX = mouseX;
         this.iconMouseY = mouseY;
         this.hoveredIcon = null;
-        renderBackground(graphics);
+        // No full-screen dim: the world stays visible, only a gradient behind the bar.
+        graphics.fillGradient(0, panelTop - 30, this.width, this.height, 0x00000000, 0xC0000000);
 
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
         int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, COLOR_TEXT);
+        graphics.drawString(this.font, this.title, l + PAD, t + 4, COLOR_TEXT_DIM, false);
+        FlatButton.drawBrackets(graphics, l, t, panelWidth, panelHeight);
 
-        graphics.drawString(this.font, Component.translatable("classloadout.gui.my_loadout"),
-                l + PAD, t + HEADER_H + PAD, COLOR_TEXT_DIM);
+        Tab[] tabs = Tab.values();
+        for (int i = 0; i < tabs.length; i++) {
+            Hit h = tabHits.get(i);
+            boolean active = tabs[i] == selectedTab;
+            graphics.drawString(this.font, tabLabel(tabs[i]), h.x(), h.y(), active ? COLOR_TEXT : COLOR_TEXT_DIM, false);
+            if (active) {
+                graphics.fill(h.x(), h.y() + 10, h.x() + h.w(), h.y() + 11, COLOR_TEXT);
+            }
+        }
 
-        LoadoutSyncPacket.PersonalData personal = LoadoutClientData.getPersonal();
-        drawSlotIcon(graphics, slotX[0], slotY, personal.main(), LoadoutSlot.MAIN, "classloadout.gui.slot_main");
-        drawSlotIcon(graphics, slotX[1], slotY, personal.sidearm(), LoadoutSlot.SIDEARM, "classloadout.gui.slot_sidearm");
-        drawSlotIcon(graphics, slotX[2], slotY, personal.throwable(), LoadoutSlot.THROWABLE, "classloadout.gui.slot_throwable");
-        drawSlotIcon(graphics, slotX[3], slotY, personal.gadget(), LoadoutSlot.GADGET, "classloadout.gui.slot_gadget");
-        drawSlotIcon(graphics, slotX[4], slotY, personal.gadget2(), LoadoutSlot.GADGET2, "classloadout.gui.slot_gadget2");
-        drawSlotIcon(graphics, slotX[5], slotY, personal.melee(), LoadoutSlot.MELEE, "classloadout.gui.slot_melee");
-        drawSlotIcon(graphics, armorX[0], armorY, personal.helmet(), LoadoutSlot.HELMET, "classloadout.gui.slot_helmet");
-        drawSlotIcon(graphics, armorX[1], armorY, personal.chestplate(), LoadoutSlot.CHESTPLATE, "classloadout.gui.slot_chestplate");
-        drawSlotIcon(graphics, armorX[2], armorY, personal.leggings(), LoadoutSlot.LEGGINGS, "classloadout.gui.slot_leggings");
-        drawSlotIcon(graphics, armorX[3], armorY, personal.boots(), LoadoutSlot.BOOTS, "classloadout.gui.slot_boots");
-
-        int sepY = armorY + SLOT + 20;
-        graphics.fill(l + PAD, sepY, r - PAD, sepY + 1, COLOR_SEPARATOR);
-
-        if (selectedTab == Tab.PRESETS && presetRows.isEmpty()) {
+        graphics.fill(listLeft, listTop - 3, listLeft + listW, listTop - 2, COLOR_CARD_LINE);
+        graphics.enableScissor(listLeft, listTop, listLeft + listW, listBottom);
+        if (selectedTab == Tab.PRESETS && rows.isEmpty()) {
             graphics.drawString(this.font, Component.translatable("classloadout.gui.class_none_defined"),
-                    l + PAD, contentTop, COLOR_TEXT_DIM);
+                    listLeft, listTop, COLOR_TEXT_DIM, false);
         }
-        for (PresetRow row : presetRows) {
-            drawPresetRow(graphics, row);
+        for (Row row : rows) {
+            boolean hover = mouseX >= listLeft && mouseX < listLeft + listW
+                    && mouseY >= Math.max(row.y(), listTop) && mouseY < Math.min(row.y() + ROW_H, listBottom);
+            if (hover) {
+                graphics.fill(listLeft, row.y(), listLeft + listW, row.y() + ROW_H, COLOR_ROW_HOVER);
+            }
+            int reserve = hover ? (row.code() != null ? 22 : row.delete() != null ? 12 : 0) : 0;
+            String text = this.font.plainSubstrByWidth(row.label().getString(), listW - 4 - reserve);
+            graphics.drawString(this.font, text, listLeft + 2, row.y() + 2, COLOR_TEXT, false);
+            if (hover && row.delete() != null) {
+                graphics.drawString(this.font, "x", listLeft + listW - 8, row.y() + 2, COLOR_LOCKED, false);
+            }
+            if (hover && row.code() != null) {
+                graphics.drawString(this.font, "#", listLeft + listW - 18, row.y() + 2, 0xFF55FFFF, false);
+            }
         }
-        for (PresetRow row : personalPresetRows) {
-            drawPresetRow(graphics, row);
-        }
-        for (PresetRow row : sharedPresetRows) {
-            drawPresetRow(graphics, row);
+        graphics.disableScissor();
+
+        LoadoutSyncPacket.PersonalData p = LoadoutClientData.getPersonal();
+        for (Card c : cards) {
+            drawCard(graphics, c, locFor(p, c.slot()), mouseX, mouseY);
         }
 
         ItemZoomerCompat.hover(this, hoveredIcon, panelLeft, panelTop, panelWidth, panelHeight);
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
-    private void drawPresetRow(GuiGraphics graphics, PresetRow row) {
-        graphics.drawString(this.font, row.entry().name(), panelLeft + PAD, row.y(), COLOR_TEXT);
-        ResourceLocation[] slots = {row.entry().main(), row.entry().sidearm(), row.entry().throwable(),
-                row.entry().gadget(), row.entry().gadget2(), row.entry().melee(),
-                row.entry().helmet(), row.entry().chestplate(), row.entry().leggings(), row.entry().boots()};
-        for (int i = 0; i < slots.length; i++) {
-            int x = panelLeft + PAD + i * (ICON + 4);
-            int y = row.y() + 14;
-            drawSmallIcon(graphics, x, y, slots[i]);
-        }
+    @Nullable
+    private static ResourceLocation locFor(LoadoutSyncPacket.PersonalData p, LoadoutSlot slot) {
+        return switch (slot) {
+            case MAIN -> p.main();
+            case SIDEARM -> p.sidearm();
+            case THROWABLE -> p.throwable();
+            case GADGET -> p.gadget();
+            case GADGET2 -> p.gadget2();
+            case MELEE -> p.melee();
+            case HELMET -> p.helmet();
+            case CHESTPLATE -> p.chestplate();
+            case LEGGINGS -> p.leggings();
+            case BOOTS -> p.boots();
+            default -> null;
+        };
     }
 
     /** First icon under the mouse this frame (for Item Zoomer); reset at the top of render(). */
@@ -345,18 +372,23 @@ public class LoadoutScreen extends Screen {
     }
 
     /**
-     * A saved item no longer on {@code slot}'s whitelist (an OP edit or a deleted variant, since
+     * A saved item no longer on the slot's whitelist (an OP edit or a deleted variant, since
      * the assignment) - or a priced item the player hasn't bought via the {@link ShopScreen} (see
      * {@code LoadoutManager#canEquip}) - renders as empty here too, matching {@code
      * ServerEvents#equipLoadout}: it won't actually be equipped, so showing its icon here would be
      * misleading. Both checks are skipped for a locked slot (OP force-assigned, bypasses both by
-     * design - see {@code LoadoutManager#lockSlot}), which instead gets a red outline so the
-     * player can see at a glance which slots they can't self-service-change.
+     * design - see {@code LoadoutManager#lockSlot}), which instead gets a red dot.
      */
-    private void drawSlotIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc, LoadoutSlot slot,
-            String labelKey) {
+    private void drawCard(GuiGraphics graphics, Card c, @Nullable ResourceLocation loc, int mouseX, int mouseY) {
+        LoadoutSlot slot = c.slot();
+        int x = c.x();
+        int y = c.y();
+        int w = c.w();
+        int h = c.h();
+        boolean weapon = h == CARD_H;
+        boolean hover = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + h;
         boolean locked = LoadoutClientData.isLocked(slot);
-        graphics.fill(x, y, x + SLOT, y + SLOT, COLOR_SLOT_BG);
+        FlatButton.drawCardFrame(graphics, x, y, w, h, hover);
         if (loc != null && !locked) {
             boolean whitelisted = !LoadoutClientData.isWhitelistEnabled() || LoadoutClientData.getWhitelist(slot).contains(loc);
             int price = LoadoutClientData.getPrices().getOrDefault(loc, 0);
@@ -365,30 +397,36 @@ public class LoadoutScreen extends Screen {
                 loc = null;
             }
         }
-        if (loc != null) {
-            ItemStack stack = LoadoutClientData.displayStack(loc);
-            if (stack != null) {
-                graphics.renderItem(stack, x + (SLOT - ICON) / 2, y + (SLOT - ICON) / 2);
-                noteHover(stack, x, y, SLOT);
+        ItemStack stack = loc != null ? LoadoutClientData.displayStack(loc) : null;
+        int size = weapon ? 2 * ICON : ICON;
+        int ix = x + (w - size) / 2;
+        int iy = weapon ? y + 6 : y + (h - ICON) / 2;
+        if (stack != null) {
+            if (weapon) {
+                graphics.pose().pushPose();
+                graphics.pose().translate(ix, iy, 0);
+                graphics.pose().scale(2, 2, 1);
+                graphics.renderItem(stack, 0, 0);
+                graphics.pose().popPose();
             } else {
-                graphics.drawCenteredString(this.font, "?", x + SLOT / 2, y + SLOT / 2 - 4, 0xFFFF5555);
+                graphics.renderItem(stack, ix, iy);
             }
+            noteHover(stack, ix, iy, size);
+        } else if (loc != null) {
+            graphics.drawCenteredString(this.font, "?", x + w / 2, iy + size / 2 - 4, 0xFFFF5555);
         }
         if (locked) {
-            graphics.renderOutline(x - 1, y - 1, SLOT + 2, SLOT + 2, COLOR_LOCKED_OUTLINE);
+            graphics.fill(x + w - 7, y + 3, x + w - 3, y + 7, COLOR_LOCKED);
         }
-        graphics.drawCenteredString(this.font, Component.translatable(labelKey), x + SLOT / 2, y + SLOT + 3, COLOR_TEXT_DIM);
-    }
-
-    private void drawSmallIcon(GuiGraphics graphics, int x, int y, @Nullable ResourceLocation loc) {
-        if (loc == null) {
-            graphics.fill(x, y, x + ICON, y + ICON, 0x30FFFFFF);
-            return;
-        }
-        ItemStack resolved = LoadoutClientData.displayStack(loc);
-        graphics.renderItem(resolved != null ? resolved : new ItemStack(Items.BARRIER), x, y);
-        if (resolved != null) {
-            noteHover(resolved, x, y, ICON);
+        if (weapon) {
+            int tw = w - 8;
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(Component.translatable(c.labelKey()).getString(), tw),
+                    x + 4, y + h - 21, COLOR_TEXT, false);
+            String name = stack != null ? stack.getHoverName().getString() : "-";
+            if (this.font.width(name) > tw) {
+                name = this.font.plainSubstrByWidth(name, tw - this.font.width("…")) + "…";
+            }
+            graphics.drawString(this.font, name, x + 4, y + h - 11, stack != null ? COLOR_TEXT_DIM : 0xFF5A5F66, false);
         }
     }
 

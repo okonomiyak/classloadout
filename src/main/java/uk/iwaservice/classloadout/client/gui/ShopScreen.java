@@ -2,7 +2,6 @@ package uk.iwaservice.classloadout.client.gui;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -28,31 +27,37 @@ import java.util.Optional;
  * an obviously-doomed click). Buying doesn't equip anything - go to {@link LoadoutScreen}
  * afterward to assign the now-unlocked item to a whitelisted slot.
  *
- * <p>Browsable by loadout slot (Main/Sidearm/.../Boots, two rows of tabs, plus "All") rather than
- * mod namespace - what matters when shopping is which slot an item can go into, and a priced item
+ * <p>Styled like {@link ItemPickerScreen}: a bottom-anchored bar (no full-screen dim) with the
+ * title and balance on top, a row of filter chips, and a scrollable grid of cards (item plus
+ * price line). Browsable by loadout slot (Main/Sidearm/.../Boots, plus "All") rather than mod
+ * namespace - what matters when shopping is which slot an item can go into, and a priced item
  * shows under every slot it's whitelisted for. Unlike {@link PriceEditorScreen}'s mod-category
  * tabs (which mirror {@link WhitelistEditorScreen}'s pool-browsing concern), this is a different
  * axis entirely, so it isn't reused here.
  */
 public class ShopScreen extends Screen {
 
-    private static final int PAD = 10;
-    private static final int HEADER_H = 24;
-    private static final int TAB_H = 20;
-    private static final int CELL = 24;
-    private static final int COLS = 8;
-    private static final int ICON = 16;
-    /** Tab row 1: "All" plus the six gear slots. Row 2: the four armor slots, left-aligned under the first four columns of row 1. */
-    private static final int ROW1_TABS = LoadoutSlot.values().length / 2 + 2;
+    private static final int MARGIN = 8;
+    private static final int PAD = 6;
+    private static final int CARD_W = 28;
+    private static final int CARD_H = 34;
+    private static final int GAP = 2;
+    private static final int PITCH_X = CARD_W + GAP;
+    private static final int PITCH_Y = CARD_H + GAP;
+    private static final int CHIP_H = 16;
+    private static final int BTN_H = 24;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_HOVER = 0x60FFFFFF;
+    private static final int COLOR_TEXT = FlatButton.COLOR_TEXT;
+    private static final int COLOR_TEXT_DIM = FlatButton.COLOR_TEXT_DIM;
+    private static final int COLOR_CARD_LINE = FlatButton.COLOR_CARD_LINE;
     private static final int COLOR_OWNED = 0xFF55FF55;
     private static final int COLOR_UNAFFORDABLE = 0xFFFF5555;
 
+    /** One filter chip; {@code x}/{@code w} are laid out in init(). */
+    private record Chip(Component label, boolean active, Runnable action, int x, int y, int w) {}
+
     private final Screen returnTo;
+    private final List<Chip> chips = new ArrayList<>();
 
     @Nullable
     private LoadoutSlot selectedSlot = null;
@@ -63,9 +68,14 @@ public class ShopScreen extends Screen {
     private int panelLeft;
     private int panelTop;
     private int panelHeight;
+    private int chipY;
+    /** Bottom edge of the (two-row) chip area. */
+    private int chipBottom;
     private int gridLeft;
     private int gridTop;
+    private int gridWidth;
     private int gridHeight;
+    private int cols = 1;
     private int scrollOffset;
     private int maxScroll;
     private int dataRevision = -1;
@@ -82,46 +92,50 @@ public class ShopScreen extends Screen {
 
     @Override
     protected void init() {
-        panelWidth = Math.min(Math.max(PAD * 2 + COLS * CELL, 400), this.width - 16);
-        panelHeight = Math.min(310, this.height - 32);
-        panelLeft = (this.width - panelWidth) / 2;
-        panelTop = (this.height - panelHeight) / 2;
+        // Left of the bar is left free for Item Zoomer's zoomed item (see FlatButton#zoomMargin).
+        panelLeft = FlatButton.zoomMargin(this.width, 300);
+        panelWidth = this.width - panelLeft - MARGIN;
+        panelHeight = Math.max(150, this.height * 6 / 10);
+        panelHeight = Math.min(panelHeight, this.height - 2 * MARGIN);
+        panelTop = this.height - MARGIN - panelHeight;
+        int right = panelLeft + panelWidth;
         dataRevision = LoadoutClientData.getRevision();
 
         allShopItems = new ArrayList<>(LoadoutClientData.getPrices().keySet());
 
-        int tabWidth = (panelWidth - 2 * PAD) / ROW1_TABS;
-        int row1Y = panelTop + HEADER_H + PAD + 4;
-        int row2Y = row1Y + TAB_H + 4;
-        int tx = panelLeft + PAD;
-        Button allBtn = Button.builder(Component.translatable("classloadout.gui.category_all"), btn -> selectSlot(null))
-                .bounds(tx, row1Y, tabWidth, TAB_H).build();
-        allBtn.active = selectedSlot != null;
-        addRenderableWidget(allBtn);
-        tx += tabWidth;
-        LoadoutSlot[] slots = LoadoutSlot.values();
-        for (int i = 0; i < slots.length; i++) {
-            LoadoutSlot slot = slots[i];
-            boolean secondRow = i >= ROW1_TABS - 1;
-            if (i == ROW1_TABS - 1) {
-                tx = panelLeft + PAD;
+        chips.clear();
+        chipY = panelTop + 20;
+        int cx = panelLeft + PAD;
+        int cy = chipY;
+        cx = addChip(cx, cy, Component.translatable("classloadout.gui.category_all"), selectedSlot == null, () -> selectSlot(null));
+        for (LoadoutSlot slot : LoadoutSlot.values()) {
+            if (slot == LoadoutSlot.HELMET) { // armor chips wrap to a second row
+                cx = panelLeft + PAD;
+                cy += CHIP_H + 2;
             }
-            Button b = Button.builder(Component.translatable("classloadout.gui.slot_" + slot.key()),
-                            btn -> selectSlot(slot))
-                    .bounds(tx, secondRow ? row2Y : row1Y, tabWidth, TAB_H).build();
-            b.active = selectedSlot != slot;
-            addRenderableWidget(b);
-            tx += tabWidth;
+            cx = addChip(cx, cy, Component.translatable("classloadout.gui.slot_" + slot.key()), selectedSlot == slot, () -> selectSlot(slot));
         }
+        chipBottom = cy + CHIP_H;
 
+        int sepY = chipBottom + 4;
+        int btnY = panelTop + panelHeight - PAD - BTN_H;
         gridLeft = panelLeft + PAD;
-        gridTop = row2Y + TAB_H + 8;
-        gridHeight = panelTop + panelHeight - PAD - 24 - gridTop;
+        gridTop = sepY + 4;
+        gridWidth = panelWidth - 2 * PAD - 6;
+        gridHeight = btnY - 4 - gridTop;
+        cols = Math.max(1, (gridWidth + GAP) / PITCH_X);
 
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
-                .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, panelWidth - 2 * PAD, 20).build());
+        int btnW = Math.max(120, (panelWidth - 2 * PAD) / 3);
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.close"),
+                b -> onClose(), right - PAD - btnW, btnY, btnW, BTN_H));
 
         updateShown();
+    }
+
+    private int addChip(int x, int y, Component label, boolean active, Runnable action) {
+        int w = this.font.width(label) + 12;
+        chips.add(new Chip(label, active, action, x, y, w));
+        return x + w + 3;
     }
 
     @Override
@@ -151,23 +165,43 @@ public class ShopScreen extends Screen {
             }
             shopItems = filtered;
         }
-        int rows = (shopItems.size() + COLS - 1) / COLS;
-        maxScroll = Math.max(0, rows * CELL - gridHeight);
+        int rows = (shopItems.size() + cols - 1) / cols;
+        maxScroll = Math.max(0, rows * PITCH_Y - GAP - gridHeight);
         scrollOffset = Math.min(scrollOffset, maxScroll);
     }
 
     private int cellIndexAt(double mouseX, double mouseY) {
-        if (mouseX < gridLeft || mouseX >= gridLeft + COLS * CELL || mouseY < gridTop || mouseY >= gridTop + gridHeight) {
+        if (mouseX < gridLeft || mouseX >= gridLeft + cols * PITCH_X || mouseY < gridTop || mouseY >= gridTop + gridHeight) {
             return -1;
         }
-        int col = (int) ((mouseX - gridLeft) / CELL);
-        int row = (int) ((mouseY - gridTop + scrollOffset) / CELL);
-        int index = row * COLS + col;
+        int dx = (int) (mouseX - gridLeft);
+        int dy = (int) (mouseY - gridTop + scrollOffset);
+        if (dx % PITCH_X >= CARD_W || dy % PITCH_Y >= CARD_H) {
+            return -1;
+        }
+        int index = (dy / PITCH_Y) * cols + dx / PITCH_X;
         return index < shopItems.size() ? index : -1;
+    }
+
+    private boolean chipsHit(double mouseX, double mouseY) {
+        int clipRight = panelLeft + panelWidth - PAD;
+        if (mouseX >= clipRight) {
+            return false;
+        }
+        for (Chip c : chips) {
+            if (mouseX >= c.x() && mouseX < c.x() + c.w() && mouseY >= c.y() && mouseY < c.y() + CHIP_H) {
+                c.action().run();
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && chipsHit(mouseX, mouseY)) {
+            return true;
+        }
         int index = cellIndexAt(mouseX, mouseY);
         if (index >= 0) {
             ResourceLocation item = shopItems.get(index);
@@ -187,7 +221,7 @@ public class ShopScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (maxScroll > 0) {
-            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (delta * CELL)));
+            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) (delta * PITCH_Y)));
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
@@ -203,60 +237,64 @@ public class ShopScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        // No full-screen dim: the world stays visible, only a gradient behind the bar.
+        graphics.fillGradient(0, panelTop - 30, this.width, this.height, 0x00000000, 0xC0000000);
 
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
-        int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, 0xFFFFFF);
+        graphics.drawString(this.font, this.title, l + PAD, t + 6, COLOR_TEXT_DIM, false);
+        FlatButton.drawBrackets(graphics, l, t, panelWidth, panelHeight);
 
         Component balance = Component.translatable("classloadout.gui.shop_balance", LoadoutClientData.getPoints());
-        graphics.drawString(this.font, balance, r - PAD - this.font.width(balance), t + 8, 0xFFFFD700);
+        graphics.drawString(this.font, balance, r - PAD - this.font.width(balance), t + 6, 0xFFFFD700, false);
+
+        // Filter chips, clipped to the bar's inner width.
+        graphics.enableScissor(l + PAD, chipY, r - PAD, chipBottom);
+        for (Chip c : chips) {
+            boolean hover = mouseX >= c.x() && mouseX < c.x() + c.w() && mouseY >= c.y() && mouseY < c.y() + CHIP_H;
+            graphics.fill(c.x(), c.y(), c.x() + c.w(), c.y() + CHIP_H, FlatButton.COLOR_CARD_BG);
+            graphics.renderOutline(c.x(), c.y(), c.w(), CHIP_H, c.active() || hover ? COLOR_TEXT : COLOR_CARD_LINE);
+            graphics.drawString(this.font, c.label(), c.x() + 6, c.y() + 4, c.active() ? COLOR_TEXT : COLOR_TEXT_DIM, false);
+        }
+        graphics.disableScissor();
+        graphics.fill(l + PAD, chipBottom + 3, r - PAD, chipBottom + 4, COLOR_CARD_LINE);
 
         if (allShopItems.isEmpty()) {
             graphics.drawString(this.font, Component.translatable("classloadout.gui.shop_empty"),
-                    l + PAD, gridTop, 0xA0A8C0);
+                    l + PAD, gridTop, COLOR_TEXT_DIM, false);
         }
 
         Map<ResourceLocation, Integer> prices = LoadoutClientData.getPrices();
         int points = LoadoutClientData.getPoints();
 
-        graphics.enableScissor(gridLeft, gridTop, gridLeft + COLS * CELL, gridTop + gridHeight);
+        graphics.enableScissor(gridLeft, gridTop, gridLeft + gridWidth, gridTop + gridHeight);
         ItemStack hoveredStack = null;
         int hoveredX = 0;
         int hoveredY = 0;
         ResourceLocation hoveredItem = null;
         for (int index = 0; index < shopItems.size(); index++) {
-            int col = index % COLS;
-            int row = index / COLS;
-            int x = gridLeft + col * CELL;
-            int y = gridTop + row * CELL - scrollOffset;
-            if (y + CELL <= gridTop || y >= gridTop + gridHeight) {
+            int x = gridLeft + (index % cols) * PITCH_X;
+            int y = gridTop + (index / cols) * PITCH_Y - scrollOffset;
+            if (y + CARD_H <= gridTop || y >= gridTop + gridHeight) {
                 continue;
             }
             ResourceLocation loc = shopItems.get(index);
             int price = prices.getOrDefault(loc, 0);
             boolean owned = LoadoutClientData.isPurchased(loc);
             boolean affordable = points >= price;
-            boolean hovered = mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL
+            boolean hovered = mouseX >= x && mouseX < x + CARD_W && mouseY >= y && mouseY < y + CARD_H
                     && mouseY >= gridTop && mouseY < gridTop + gridHeight;
-            int outline = owned ? COLOR_OWNED : (affordable ? COLOR_OUTLINE : COLOR_UNAFFORDABLE);
-            graphics.renderOutline(x, y, CELL, CELL, outline);
-            if (hovered) {
-                graphics.fill(x, y, x + CELL, y + CELL, COLOR_HOVER);
-            }
+            int outline = hovered ? COLOR_TEXT : owned ? COLOR_OWNED : affordable ? COLOR_CARD_LINE : COLOR_UNAFFORDABLE;
+            graphics.fill(x, y, x + CARD_W, y + CARD_H, FlatButton.COLOR_CARD_BG);
+            graphics.renderOutline(x, y, CARD_W, CARD_H, outline);
             ItemStack resolved = LoadoutClientData.displayStack(loc);
             ItemStack stack = resolved != null ? resolved : new ItemStack(Items.BARRIER);
-            graphics.renderItem(stack, x + (CELL - ICON) / 2, y + 2);
+            graphics.renderItem(stack, x + (CARD_W - 16) / 2, y + 3);
             Component priceText = owned ? Component.translatable("classloadout.gui.shop_owned")
                     : Component.literal(Integer.toString(price));
-            int priceColor = owned ? COLOR_OWNED : (affordable ? 0xFFFFFFFF : COLOR_UNAFFORDABLE);
-            graphics.drawString(this.font, priceText, x + (CELL - this.font.width(priceText)) / 2, y + CELL - 9,
+            int priceColor = owned ? COLOR_OWNED : (affordable ? COLOR_TEXT : COLOR_UNAFFORDABLE);
+            graphics.drawString(this.font, priceText, x + (CARD_W - this.font.width(priceText)) / 2, y + CARD_H - 11,
                     priceColor, true);
             if (hovered) {
                 hoveredStack = stack;
@@ -266,6 +304,16 @@ public class ShopScreen extends Screen {
             }
         }
         graphics.disableScissor();
+
+        if (maxScroll > 0) {
+            int trackX = gridLeft + gridWidth + 3;
+            graphics.fill(trackX, gridTop, trackX + 2, gridTop + gridHeight, COLOR_CARD_LINE);
+            int thumbHeight = Math.max(10, gridHeight * gridHeight / Math.max(1, gridHeight + maxScroll));
+            int thumbY = gridTop + (gridHeight - thumbHeight) * scrollOffset / Math.max(1, maxScroll);
+            graphics.fill(trackX, thumbY, trackX + 2, thumbY + thumbHeight, COLOR_TEXT);
+        }
+
+        super.render(graphics, mouseX, mouseY, partialTick);
 
         ItemZoomerCompat.hover(this, hoveredStack, panelLeft, panelTop, panelWidth, panelHeight);
         if (hoveredStack != null) {
@@ -280,16 +328,6 @@ public class ShopScreen extends Screen {
             }
             graphics.renderTooltip(this.font, lines, Optional.empty(), hoveredX, hoveredY);
         }
-
-        if (maxScroll > 0) {
-            int trackX = gridLeft + COLS * CELL + 4;
-            graphics.fill(trackX, gridTop, trackX + 2, gridTop + gridHeight, 0x40FFFFFF);
-            int thumbHeight = Math.max(10, gridHeight * gridHeight / Math.max(1, gridHeight + maxScroll));
-            int thumbY = gridTop + (gridHeight - thumbHeight) * scrollOffset / Math.max(1, maxScroll);
-            graphics.fill(trackX, thumbY, trackX + 2, thumbY + thumbHeight, 0xB0FFFFFF);
-        }
-
-        super.render(graphics, mouseX, mouseY, partialTick);
     }
 
     @Override
