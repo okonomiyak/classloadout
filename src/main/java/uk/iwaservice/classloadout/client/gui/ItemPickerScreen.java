@@ -12,6 +12,7 @@ import net.minecraft.world.item.TooltipFlag;
 import uk.iwaservice.classloadout.ClassLoadoutMod;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.compat.TaczCompat;
+import uk.iwaservice.classloadout.compat.ItemZoomerCompat;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -488,6 +489,7 @@ public class ItemPickerScreen extends Screen {
             }
         }
 
+        ItemZoomerCompat.hover(this, hoveredStack != null && hoveredStack.getItem() != Items.BARRIER ? hoveredStack : null, panelLeft, panelTop, panelWidth, panelHeight);
         if (hoveredFolder != null) {
             List<Component> lines = new ArrayList<>();
             lines.add(Component.literal(hoveredFolder));

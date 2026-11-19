@@ -12,6 +12,7 @@ import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.network.LoadoutSyncPacket;
+import uk.iwaservice.classloadout.compat.ItemZoomerCompat;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -269,6 +270,9 @@ public class LoadoutScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        this.iconMouseX = mouseX;
+        this.iconMouseY = mouseY;
+        this.hoveredIcon = null;
         renderBackground(graphics);
 
         int l = panelLeft;
@@ -313,6 +317,7 @@ public class LoadoutScreen extends Screen {
             drawPresetRow(graphics, row);
         }
 
+        ItemZoomerCompat.hover(this, hoveredIcon, panelLeft, panelTop, panelWidth, panelHeight);
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
@@ -325,6 +330,17 @@ public class LoadoutScreen extends Screen {
             int x = panelLeft + PAD + i * (ICON + 4);
             int y = row.y() + 14;
             drawSmallIcon(graphics, x, y, slots[i]);
+        }
+    }
+
+    /** First icon under the mouse this frame (for Item Zoomer); reset at the top of render(). */
+    @Nullable private ItemStack hoveredIcon;
+    private int iconMouseX;
+    private int iconMouseY;
+
+    private void noteHover(ItemStack stack, int x, int y, int size) {
+        if (hoveredIcon == null && iconMouseX >= x && iconMouseX < x + size && iconMouseY >= y && iconMouseY < y + size) {
+            hoveredIcon = stack;
         }
     }
 
@@ -353,6 +369,7 @@ public class LoadoutScreen extends Screen {
             ItemStack stack = LoadoutClientData.displayStack(loc);
             if (stack != null) {
                 graphics.renderItem(stack, x + (SLOT - ICON) / 2, y + (SLOT - ICON) / 2);
+                noteHover(stack, x, y, SLOT);
             } else {
                 graphics.drawCenteredString(this.font, "?", x + SLOT / 2, y + SLOT / 2 - 4, 0xFFFF5555);
             }
@@ -370,6 +387,9 @@ public class LoadoutScreen extends Screen {
         }
         ItemStack resolved = LoadoutClientData.displayStack(loc);
         graphics.renderItem(resolved != null ? resolved : new ItemStack(Items.BARRIER), x, y);
+        if (resolved != null) {
+            noteHover(resolved, x, y, ICON);
+        }
     }
 
     @Override

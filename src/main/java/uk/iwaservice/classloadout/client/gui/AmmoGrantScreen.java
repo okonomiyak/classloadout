@@ -10,6 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import uk.iwaservice.classloadout.client.LoadoutClientData;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
+import uk.iwaservice.classloadout.compat.ItemZoomerCompat;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -261,6 +262,7 @@ public class AmmoGrantScreen extends Screen {
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
+        ItemZoomerCompat.hover(this, hoveredStack, panelLeft, panelTop, panelWidth, panelHeight);
         if (hoveredStack != null) {
             Component name = hoveredStack.getHoverName().copy()
                     .append(Component.translatable("classloadout.gui.ammo_grant_remove", hoveredCount));
