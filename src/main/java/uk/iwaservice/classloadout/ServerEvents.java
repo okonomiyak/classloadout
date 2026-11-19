@@ -22,8 +22,10 @@ import net.minecraft.world.phys.AABB;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.level.BlockEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.server.ServerLifecycleHooks;
@@ -460,6 +462,21 @@ public final class ServerEvents {
                 return;
             }
         }
+    }
+
+    /**
+     * squadtp (optional) cancels a player's lethal-hit LivingDeathEvent to put them into a downed state;
+     * receiveCanceled makes that downing hit count as the kill here too. Its later bleed-out death uses
+     * genericKill (no attacker entity), so a kill never drops twice.
+     */
+    @SubscribeEvent(priority = EventPriority.LOW, receiveCanceled = true)
+    public static void onPlayerKilled(LivingDeathEvent event) {
+        if (Config.KILL_AMMO_DROP_AMOUNT.get() <= 0 || !(event.getEntity() instanceof ServerPlayer victim)
+                || !(event.getSource().getEntity() instanceof ServerPlayer killer)
+                || killer == victim || killer.isAlliedTo(victim)) {
+            return;
+        }
+        victim.spawnAtLocation(new ItemStack(ModRegistry.AMMO_DROP_ITEM.get()));
     }
 
     private ServerEvents() {}

@@ -19,6 +19,7 @@ import uk.iwaservice.classloadout.block.entity.LoadoutLockerBlockEntity;
 import uk.iwaservice.classloadout.block.entity.LoadoutStationBlockEntity;
 import uk.iwaservice.classloadout.cover.CoverEntity;
 import uk.iwaservice.classloadout.cover.CoverPlacerItem;
+import uk.iwaservice.classloadout.resupply.AmmoDropItem;
 import uk.iwaservice.classloadout.resupply.AmmoPackEntity;
 import uk.iwaservice.classloadout.resupply.BandageItem;
 import uk.iwaservice.classloadout.resupply.HealthPackEntity;
@@ -97,6 +98,8 @@ public final class ModRegistry {
                     .build("ammo_pack"));
     public static final RegistryObject<Item> AMMO_PACK_ITEM = ITEMS.register("ammo_pack",
             () -> new ResupplyPackPlacerItem(new Item.Properties(), AMMO_PACK));
+    public static final RegistryObject<Item> AMMO_DROP_ITEM = ITEMS.register("ammo_drop",
+            () -> new AmmoDropItem(new Item.Properties()));
 
     // --- thrown resupply packs (snowball-style, weaker - see AbstractThrownResupplyEntity) ---
 
