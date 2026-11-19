@@ -35,6 +35,7 @@ import uk.iwaservice.classloadout.command.ClassCommand;
 import uk.iwaservice.classloadout.loadout.LoadoutManager;
 import uk.iwaservice.classloadout.loadout.LoadoutSlot;
 import uk.iwaservice.classloadout.loadout.PersonalLoadout;
+import uk.iwaservice.classloadout.loadout.ShopTrials;
 import uk.iwaservice.classloadout.loadout.TeamKits;
 
 import java.util.ArrayList;
@@ -83,6 +84,7 @@ public final class ServerEvents {
         tickGuardSpawners(server);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             TeamKits.sync(server, player, null);
+            ShopTrials.sweep(player);
         }
     }
 
@@ -458,9 +460,17 @@ public final class ServerEvents {
      * of the way in the main inventory instead, so it doesn't cover up the loadout's hotbar gear.
      */
     private static void giveItem(ServerPlayer player, ResourceLocation itemId, int count, LoadoutManager manager, boolean preferHotbar) {
+        giveItem(player, itemId, count, manager, preferHotbar, false);
+    }
+
+    /** {@code trial} marks the given stacks as shop trial items (see {@link ShopTrials}). */
+    public static void giveItem(ServerPlayer player, ResourceLocation itemId, int count, LoadoutManager manager, boolean preferHotbar, boolean trial) {
         ItemStack template = ItemResolver.resolve(itemId, manager.getItemVariants());
         if (template == null || template.isEmpty()) {
             return;
+        }
+        if (trial) {
+            ShopTrials.mark(template);
         }
         int maxStack = template.getMaxStackSize();
         if (maxStack <= 1) {

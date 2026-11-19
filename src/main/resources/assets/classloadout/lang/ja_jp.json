@@ -199,5 +199,9 @@
   "classloadout.msg.teamkit_none": "チーム「%s」にキットはありません。",
   "classloadout.msg.teamkit_list_empty": "チームキットは設定されていません。",
   "classloadout.msg.teamkit_list_entry": "%1$s: %2$s",
-  "classloadout.msg.teamkit_notice": "チーム「%s」のキットを適用しました。"
+  "classloadout.msg.teamkit_notice": "チーム「%s」のキットを適用しました。",
+  "classloadout.msg.trial_range_only": "試し打ちは射撃場でのみ可能です",
+  "classloadout.msg.trial_given": "試し打ち: %s",
+  "classloadout.msg.trial_removed": "試し打ちアイテムを回収しました",
+  "classloadout.gui.shop_trial_hint": "右クリック: 試し打ち（射撃場のみ）"
 }

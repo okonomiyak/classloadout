@@ -56,6 +56,7 @@ GNU General Public License v3.0 (GPL-3.0-only)。全文は [`LICENSE`](LICENSE) 
 | `/class points add <player> <amount>` | オンライン中のプレイヤーのポイント残高に`amount`を加算(負の値で減算可能)。0未満にはならない | OP (レベル2+) |
 | `/class points set <player> <amount>` | オンライン中のプレイヤーのポイント残高を指定値に設定 | OP (レベル2+) |
 | `/class buy <item>` | ポイントを消費して販売中のショップアイテムを自分用に永久解除(ショップ画面が送信、または手打ちも可) | - |
+| `/class trial <item>` | `shop.trialTeams`のチーム(射撃場など)に所属中、未購入のショップアイテムの試用コピーと弾薬を無料で受け取る。チームを抜けると回収される(ショップ画面の右クリックが送信) | - |
 
 アイテム引数は登録済みアイテムIDを受け付ける。`minecraft:air` が「未設定」のセンチネル。
 
@@ -177,6 +178,7 @@ GNU General Public License v3.0 (GPL-3.0-only)。全文は [`LICENSE`](LICENSE) 
 - `cover.maxActiveCoversPerPlayer`(既定2) — 1人が同時に持てる遮蔽物の上限
 - `cover.coverMaxHealth`(既定1000、上限1024) — 新しく設置する遮蔽物のHP。変更しても既に設置済みの遮蔽物には遡って反映されない
 - `hammer.hammerAoeRadius`(既定1) — ハンマーでホワイトリスト登録ブロックを破壊した際、一緒に破壊される立方体半径。0で範囲効果を無効化。詳細は[ハンマー範囲破壊](#ハンマー範囲破壊)参照
+- `shop.trialTeams`(既定`["conquest_range"]`) — 未購入のショップアイテムを右クリックして試用コピー(+そのスロットの弾薬)を受け取れるバニラのスコアボードチーム名。プレイヤーがそのチームを抜けると試用アイテムは回収される。空リストで無効化
 
 ## 設計メモ
 
