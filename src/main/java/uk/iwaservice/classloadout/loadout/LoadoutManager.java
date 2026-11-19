@@ -333,6 +333,10 @@ public class LoadoutManager extends SavedData {
         }
     }
 
+    public java.util.Set<String> getVariantFolderNames() {
+        return new java.util.TreeSet<>(variantFolders.values());
+    }
+
     /** Purely organizational grouping for the whitelist editor's Held-items tab. Blank clears it (back to uncategorized). No-op if {@code variantId} was never registered. */
     public void setVariantFolder(MinecraftServer server, ResourceLocation variantId, String folder) {
         if (!itemVariants.containsKey(variantId)) {

@@ -50,13 +50,11 @@ public class ForceLoadoutScreen extends Screen {
     private static final int TEAM_BTN_GAP = 4;
     private static final int TEAM_BTN_MAX_ROWS = 2;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_TEXT = 0xFFFFFF;
-    private static final int COLOR_TEXT_DIM = 0xA0A8C0;
-    private static final int COLOR_SLOT_BG = 0x60000000;
-    private static final int COLOR_SEPARATOR = 0x28FFFFFF;
+    private static final int COLOR_OUTLINE = FlatButton.COLOR_CARD_LINE;
+    private static final int COLOR_TEXT = FlatButton.COLOR_TEXT;
+    private static final int COLOR_TEXT_DIM = FlatButton.COLOR_TEXT_DIM;
+    private static final int COLOR_SLOT_BG = FlatButton.COLOR_CARD_BG;
+    private static final int COLOR_SEPARATOR = FlatButton.COLOR_CARD_LINE;
 
     private record PresetRow(LoadoutSyncPacket.Entry entry, int y) {}
 
@@ -162,16 +160,12 @@ public class ForceLoadoutScreen extends Screen {
         for (int i = 0; i < presetShown; i++) {
             LoadoutSyncPacket.Entry entry = classes.get(i);
             presetRows.add(new PresetRow(entry, y));
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.apply"),
-                            b -> forceSelect(entry))
-                    .bounds(panelLeft + panelWidth - PAD - 56, y + (PRESET_ROW_H - 20) / 2, 56, 20).build());
+            addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.apply"), b -> forceSelect(entry), panelLeft + panelWidth - PAD - 56, y + (PRESET_ROW_H - 20) / 2, 56, 20));
             y += PRESET_ROW_H;
         }
 
         int bottomY = panelTop + panelHeight - PAD - 20;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"),
-                        b -> onClose())
-                .bounds(panelLeft + PAD, bottomY, panelWidth - 2 * PAD, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.close"), b -> onClose(), panelLeft + PAD, bottomY, panelWidth - 2 * PAD, 20));
     }
 
     /** Adds one small button per existing scoreboard team (client-side, already synced via vanilla), wrapping into rows; clicking fills the team-name box. Returns the y just past the last row used. */
@@ -198,8 +192,7 @@ public class ForceLoadoutScreen extends Screen {
             if (y >= maxY) {
                 break;
             }
-            addRenderableWidget(Button.builder(Component.literal(name), b -> selectTeam(name))
-                    .bounds(x, y, w, TEAM_BTN_H).build());
+            addRenderableWidget(new FlatButton(Component.literal(name), b -> selectTeam(name), x, y, w, TEAM_BTN_H));
             x += w + TEAM_BTN_GAP;
         }
         return names.isEmpty() ? y0 : y + TEAM_BTN_H;
@@ -224,10 +217,7 @@ public class ForceLoadoutScreen extends Screen {
      * {@link #forceAssignCommand} for how a blank team/player name is resolved.
      */
     private Button slotButton(int x, int y, LoadoutSlot slot) {
-        return Button.builder(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this, loc -> {
-            lastAssigned.put(slot, loc);
-            command(forceAssignCommand(slot, loc));
-        }, LoadoutClientData.getWhitelist(slot)))).bounds(x, y, SLOT, SLOT).build();
+        return new FlatButton(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this, loc -> { lastAssigned.put(slot, loc); command(forceAssignCommand(slot, loc)); }, LoadoutClientData.getWhitelist(slot))), x, y, SLOT, SLOT);
     }
 
     /** A non-blank team name wins over the player name (selector {@code @a[team=...]}); with both blank, targets every online player ({@code @a}). */
@@ -289,17 +279,13 @@ public class ForceLoadoutScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
         int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, COLOR_TEXT);
+        FlatButton.drawPanel(graphics, l, t, panelWidth, panelHeight);
+        graphics.fill(l, t + HEADER_H, r, t + HEADER_H + 1, FlatButton.COLOR_CARD_LINE);
+        graphics.drawString(this.font, this.title, l + PAD, t + 8, FlatButton.COLOR_TEXT_DIM);
 
         drawSlotIcon(graphics, slotX[0], slotY, LoadoutSlot.MAIN, "classloadout.gui.slot_main");
         drawSlotIcon(graphics, slotX[1], slotY, LoadoutSlot.SIDEARM, "classloadout.gui.slot_sidearm");

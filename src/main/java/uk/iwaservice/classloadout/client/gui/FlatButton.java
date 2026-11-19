@@ -1,9 +1,12 @@
 package uk.iwaservice.classloadout.client.gui;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
+
+import java.util.function.BooleanSupplier;
 
 /** Vanilla Button logic with the card look (dark fill, thin outline, white when hovered) instead of the stone texture; also holds the style shared by the bar-style screens. */
 final class FlatButton extends Button {
@@ -12,15 +15,46 @@ final class FlatButton extends Button {
     static final int COLOR_CARD_BG = 0xB0101418;
     static final int COLOR_CARD_LINE = 0x50FFFFFF;
 
+    /** Non-null = frameless tab: underlined when selected. */
+    private final BooleanSupplier selected;
+
     FlatButton(Component label, OnPress onPress, int x, int y, int w, int h) {
+        this(label, onPress, x, y, w, h, null);
+    }
+
+    private FlatButton(Component label, OnPress onPress, int x, int y, int w, int h, BooleanSupplier selected) {
         super(x, y, w, h, label, onPress, DEFAULT_NARRATION);
+        this.selected = selected;
+    }
+
+    static FlatButton tab(Component label, OnPress onPress, int x, int y, int w, int h, BooleanSupplier selected) {
+        return new FlatButton(label, onPress, x, y, w, h, selected);
     }
 
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        drawCardFrame(graphics, getX(), getY(), width, height, isHoveredOrFocused());
-        graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(), getX() + width / 2,
-                getY() + (height - 8) / 2, COLOR_TEXT);
+        Font font = Minecraft.getInstance().font;
+        int textY = getY() + (height - 8) / 2;
+        if (selected != null) {
+            boolean sel = selected.getAsBoolean();
+            graphics.drawCenteredString(font, getMessage(), getX() + width / 2, textY,
+                    sel || isHoveredOrFocused() ? COLOR_TEXT : COLOR_TEXT_DIM);
+            if (sel) {
+                int tw = font.width(getMessage());
+                int ux = getX() + (width - tw) / 2;
+                graphics.fill(ux, textY + 10, ux + tw, textY + 11, COLOR_TEXT);
+            }
+            return;
+        }
+        boolean hover = active && isHoveredOrFocused();
+        drawCardFrame(graphics, getX(), getY(), width, height, hover);
+        graphics.drawCenteredString(font, getMessage(), getX() + width / 2, textY, active ? COLOR_TEXT : COLOR_TEXT_DIM);
+    }
+
+    /** Panel fill with corner brackets. */
+    static void drawPanel(GuiGraphics g, int x, int y, int w, int h) {
+        g.fill(x, y, x + w, y + h, 0xC0101418);
+        drawBrackets(g, x, y, w, h);
     }
 
     /** Dark translucent fill with a 1px outline, white when {@code hover}. */

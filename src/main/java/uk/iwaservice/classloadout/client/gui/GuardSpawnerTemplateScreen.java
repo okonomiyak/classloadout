@@ -1,7 +1,6 @@
 package uk.iwaservice.classloadout.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -27,11 +26,9 @@ public class GuardSpawnerTemplateScreen extends Screen {
     private static final int ROW_H = 22;
     private static final int MAX_ROWS = 6;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_TEXT = 0xFFFFFFFF;
-    private static final int COLOR_TEXT_DIM = 0xFFA0A8C0;
+    private static final int COLOR_OUTLINE = FlatButton.COLOR_CARD_LINE;
+    private static final int COLOR_TEXT = FlatButton.COLOR_TEXT;
+    private static final int COLOR_TEXT_DIM = FlatButton.COLOR_TEXT_DIM;
 
     private record Row(GuardSpawnerTemplate template, int y) {}
 
@@ -72,12 +69,8 @@ public class GuardSpawnerTemplateScreen extends Screen {
             GuardSpawnerTemplate template = templates.get(i);
             rows.add(new Row(template, y));
             int bx = panelLeft + panelWidth - PAD - 2 * btnW;
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.guardspawner_template_apply"),
-                            b -> apply(template))
-                    .bounds(bx, y, btnW, 18).build());
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.delete"),
-                            b -> delete(template))
-                    .bounds(bx + btnW, y, btnW, 18).build());
+            addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.guardspawner_template_apply"), b -> apply(template), bx, y, btnW, 18));
+            addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.delete"), b -> delete(template), bx + btnW, y, btnW, 18));
             y += ROW_H;
         }
         if (shown == 0) {
@@ -94,13 +87,10 @@ public class GuardSpawnerTemplateScreen extends Screen {
         addRenderableWidget(nameBox);
         y += 18 + 4;
 
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.guardspawner_template_save_as"),
-                        b -> saveAsNew())
-                .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.guardspawner_template_save_as"), b -> saveAsNew(), panelLeft + PAD, y, panelWidth - 2 * PAD, 20));
         y += 20 + 4;
 
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
-                .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.close"), b -> onClose(), panelLeft + PAD, y, panelWidth - 2 * PAD, 20));
     }
 
     private void apply(GuardSpawnerTemplate template) {
@@ -146,17 +136,13 @@ public class GuardSpawnerTemplateScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
         int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, COLOR_TEXT);
+        FlatButton.drawPanel(graphics, l, t, panelWidth, panelHeight);
+        graphics.fill(l, t + HEADER_H, r, t + HEADER_H + 1, FlatButton.COLOR_CARD_LINE);
+        graphics.drawString(this.font, this.title, l + PAD, t + 8, FlatButton.COLOR_TEXT_DIM);
 
         if (rows.isEmpty()) {
             graphics.drawString(this.font, Component.translatable("classloadout.gui.guardspawner_template_none"),

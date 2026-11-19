@@ -1,7 +1,6 @@
 package uk.iwaservice.classloadout.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -40,13 +39,11 @@ public class AmmoGrantScreen extends Screen {
     private static final int ICON = 16;
     private static final int GRID_COLS = 8;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_TEXT = 0xFFFFFF;
-    private static final int COLOR_TEXT_DIM = 0xA0A8C0;
-    private static final int COLOR_SLOT_BG = 0x60000000;
-    private static final int COLOR_HOVER = 0x60FFFFFF;
+    private static final int COLOR_OUTLINE = FlatButton.COLOR_CARD_LINE;
+    private static final int COLOR_TEXT = FlatButton.COLOR_TEXT;
+    private static final int COLOR_TEXT_DIM = FlatButton.COLOR_TEXT_DIM;
+    private static final int COLOR_SLOT_BG = FlatButton.COLOR_CARD_BG;
+    private static final int COLOR_HOVER = 0x20FFFFFF;
 
     private final Screen parent;
     private final LoadoutSlot slot;
@@ -104,12 +101,7 @@ public class AmmoGrantScreen extends Screen {
 
         pickerX = panelLeft + PAD;
         pickerY = y;
-        addRenderableWidget(Button.builder(Component.empty(),
-                        b -> minecraft.setScreen(new ItemPickerScreen(this, loc -> {
-                            pendingAmmoItem = isAir(loc) ? null : loc;
-                            minecraft.setScreen(this);
-                        })))
-                .bounds(pickerX, pickerY, SLOT, SLOT).build());
+        addRenderableWidget(new FlatButton(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this, loc -> { pendingAmmoItem = isAir(loc) ? null : loc; minecraft.setScreen(this); })), pickerX, pickerY, SLOT, SLOT));
 
         countBox = new EditBox(this.font, pickerX + SLOT + 8, pickerY + 4,
                 panelWidth - 2 * PAD - SLOT - 8, 18, Component.translatable("classloadout.gui.ammo_grant_count"));
@@ -120,16 +112,12 @@ public class AmmoGrantScreen extends Screen {
         addRenderableWidget(countBox);
         y += SLOT + 6;
 
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.ammo_grant_add"), b -> addEntry())
-                .bounds(panelLeft + PAD, y, panelWidth - 2 * PAD, 18).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.ammo_grant_add"), b -> addEntry(), panelLeft + PAD, y, panelWidth - 2 * PAD, 18));
         y += 18 + 6;
 
         int half = (panelWidth - 2 * PAD - 4) / 2;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_add_held"),
-                        b -> registerHeldAsAmmo())
-                .bounds(panelLeft + PAD, y, half, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
-                .bounds(panelLeft + PAD + half + 4, y, half, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.whitelist_add_held"), b -> registerHeldAsAmmo(), panelLeft + PAD, y, half, 20));
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.close"), b -> onClose(), panelLeft + PAD + half + 4, y, half, 20));
     }
 
     /** Sends the currently-picked item + count as a new (or updated) ammo grant entry; the grid picks it up once the server's sync echo arrives (see {@link #tick()}). */
@@ -203,17 +191,13 @@ public class AmmoGrantScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
         int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, COLOR_TEXT);
+        FlatButton.drawPanel(graphics, l, t, panelWidth, panelHeight);
+        graphics.fill(l, t + HEADER_H, r, t + HEADER_H + 1, FlatButton.COLOR_CARD_LINE);
+        graphics.drawString(this.font, this.title, l + PAD, t + 8, FlatButton.COLOR_TEXT_DIM);
 
         ItemStack itemStack = LoadoutClientData.displayStack(item);
         graphics.drawString(this.font, itemStack != null ? itemStack.getHoverName() : Component.literal(item.toString()),
@@ -239,7 +223,7 @@ public class AmmoGrantScreen extends Screen {
             graphics.renderItem(stack, x + (CELL - ICON) / 2, y + (CELL - ICON) / 2);
             Component countText = Component.literal(Integer.toString(entry.getValue()));
             graphics.drawString(this.font, countText, x + CELL - this.font.width(countText) - 1, y + CELL - 8,
-                    0xFFFFFF, true);
+                    FlatButton.COLOR_TEXT, true);
             if (hovered) {
                 hoveredStack = stack;
                 hoveredX = mouseX;

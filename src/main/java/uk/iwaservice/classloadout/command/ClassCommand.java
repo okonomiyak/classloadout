@@ -65,6 +65,8 @@ public final class ClassCommand {
     private static final SuggestionProvider<CommandSourceStack> TEAM_NAMES = (ctx, builder) ->
             SharedSuggestionProvider.suggest(ctx.getSource().getServer().getScoreboard().getTeamNames(), builder);
     /** Only the OP-registered held-item variants (exact item + data, e.g. a dyed helmet) - what a team kit is meant to hand out. */
+    private static final SuggestionProvider<CommandSourceStack> VARIANT_FOLDERS = (ctx, builder) ->
+            SharedSuggestionProvider.suggest(LoadoutManager.get(ctx.getSource().getServer()).getVariantFolderNames(), builder);
     private static final SuggestionProvider<CommandSourceStack> VARIANT_IDS = (ctx, builder) ->
             SharedSuggestionProvider.suggestResource(LoadoutManager.get(ctx.getSource().getServer()).getItemVariants().keySet(), builder);
     private static final SuggestionProvider<CommandSourceStack> CLASS_SLOT_KEYS = (ctx, builder) ->
@@ -303,7 +305,7 @@ public final class ClassCommand {
                                 .then(Commands.literal("delete").executes(ctx -> whitelistDeleteVariant(ctx)))
                                 .then(Commands.literal("folder")
                                         .then(Commands.literal("clear").executes(ctx -> whitelistClearFolder(ctx)))
-                                        .then(Commands.argument("folder", StringArgumentType.greedyString())
+                                        .then(Commands.argument("folder", StringArgumentType.greedyString()).suggests(VARIANT_FOLDERS)
                                                 .executes(ctx -> whitelistSetFolder(ctx))))))
                 .then(Commands.literal("ammo")
                         .requires(src -> src.hasPermission(2))

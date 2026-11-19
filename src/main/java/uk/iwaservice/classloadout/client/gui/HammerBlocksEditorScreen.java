@@ -1,7 +1,6 @@
 package uk.iwaservice.classloadout.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -34,10 +33,8 @@ public class HammerBlocksEditorScreen extends Screen {
     private static final int COLS = 9;
     private static final int ICON = 16;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_HOVER = 0x60FFFFFF;
+    private static final int COLOR_OUTLINE = FlatButton.COLOR_CARD_LINE;
+    private static final int COLOR_HOVER = 0x20FFFFFF;
 
     private List<ResourceLocation> allBlocks = List.of();
     private List<ResourceLocation> shown = List.of();
@@ -100,11 +97,8 @@ public class HammerBlocksEditorScreen extends Screen {
 
         int closeWidth = (panelWidth - 2 * PAD - 4) * 2 / 3;
         int addHeldWidth = panelWidth - 2 * PAD - 4 - closeWidth;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
-                .bounds(panelLeft + PAD, panelTop + panelHeight - PAD - 20, closeWidth, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_add_held"),
-                        b -> addHeldBlock())
-                .bounds(panelLeft + PAD + closeWidth + 4, panelTop + panelHeight - PAD - 20, addHeldWidth, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.close"), b -> onClose(), panelLeft + PAD, panelTop + panelHeight - PAD - 20, closeWidth, 20));
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.whitelist_add_held"), b -> addHeldBlock(), panelLeft + PAD + closeWidth + 4, panelTop + panelHeight - PAD - 20, addHeldWidth, 20));
 
         updateShown();
     }
@@ -200,17 +194,13 @@ public class HammerBlocksEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
         int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, 0xFFFFFF);
+        FlatButton.drawPanel(graphics, l, t, panelWidth, panelHeight);
+        graphics.fill(l, t + HEADER_H, r, t + HEADER_H + 1, FlatButton.COLOR_CARD_LINE);
+        graphics.drawString(this.font, this.title, l + PAD, t + 8, FlatButton.COLOR_TEXT_DIM);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 

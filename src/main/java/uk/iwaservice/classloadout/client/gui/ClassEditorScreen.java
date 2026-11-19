@@ -34,12 +34,10 @@ public class ClassEditorScreen extends Screen {
     private static final int MAX_ROWS = 8;
     private static final int SLOT = 36;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_TEXT = 0xFFFFFF;
-    private static final int COLOR_TEXT_DIM = 0xA0A8C0;
-    private static final int COLOR_SLOT_BG = 0x60000000;
+    private static final int COLOR_OUTLINE = FlatButton.COLOR_CARD_LINE;
+    private static final int COLOR_TEXT = FlatButton.COLOR_TEXT;
+    private static final int COLOR_TEXT_DIM = FlatButton.COLOR_TEXT_DIM;
+    private static final int COLOR_SLOT_BG = FlatButton.COLOR_CARD_BG;
 
     private record RowInfo(LoadoutSyncPacket.Entry entry, int y) {}
 
@@ -108,29 +106,17 @@ public class ClassEditorScreen extends Screen {
         int navRow2Y = navRow1Y + 20 + navGap;
         contentTop = navRow2Y + 20 + PAD;
         int nx = panelLeft + PAD;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.protect_button"),
-                        b -> minecraft.setScreen(new ProtectedItemsEditorScreen(this)))
-                .bounds(nx, navRow1Y, navW, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.protect_button"), b -> minecraft.setScreen(new ProtectedItemsEditorScreen(this)), nx, navRow1Y, navW, 20));
         nx += navW + navGap;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_button"),
-                        b -> minecraft.setScreen(new WhitelistEditorScreen(this)))
-                .bounds(nx, navRow1Y, navW, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.whitelist_button"), b -> minecraft.setScreen(new WhitelistEditorScreen(this)), nx, navRow1Y, navW, 20));
         nx += navW + navGap;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.spawnkit_button"),
-                        b -> minecraft.setScreen(new SpawnKitEditorScreen(this)))
-                .bounds(nx, navRow1Y, navW, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.spawnkit_button"), b -> minecraft.setScreen(new SpawnKitEditorScreen(this)), nx, navRow1Y, navW, 20));
         nx = panelLeft + PAD;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.hammerblocks_button"),
-                        b -> minecraft.setScreen(new HammerBlocksEditorScreen(this)))
-                .bounds(nx, navRow2Y, navW, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.hammerblocks_button"), b -> minecraft.setScreen(new HammerBlocksEditorScreen(this)), nx, navRow2Y, navW, 20));
         nx += navW + navGap;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.force_button"),
-                        b -> minecraft.setScreen(new ForceLoadoutScreen(this)))
-                .bounds(nx, navRow2Y, navW, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.force_button"), b -> minecraft.setScreen(new ForceLoadoutScreen(this)), nx, navRow2Y, navW, 20));
         nx += navW + navGap;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.price_button"),
-                        b -> minecraft.setScreen(new PriceEditorScreen(this)))
-                .bounds(nx, navRow2Y, navW, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.price_button"), b -> minecraft.setScreen(new PriceEditorScreen(this)), nx, navRow2Y, navW, 20));
 
         buildLeftColumn();
         if (editing) {
@@ -154,17 +140,12 @@ public class ClassEditorScreen extends Screen {
             LoadoutSyncPacket.Entry entry = classes.get(i);
             listRows.add(new RowInfo(entry, y));
             int bx = panelLeft + LEFT_W - 2 * 40;
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.edit"),
-                            b -> startEdit(entry))
-                    .bounds(bx, y, 40, 18).build());
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.delete"),
-                            b -> deleteClass(entry.id()))
-                    .bounds(bx + 40, y, 40, 18).build());
+            addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.edit"), b -> startEdit(entry), bx, y, 40, 18));
+            addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.delete"), b -> deleteClass(entry.id()), bx + 40, y, 40, 18));
             y += ROW_H;
         }
         y += 6;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.class_new"), b -> startNew())
-                .bounds(panelLeft + PAD, y, LEFT_W - PAD, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.class_new"), b -> startNew(), panelLeft + PAD, y, LEFT_W - PAD, 20));
     }
 
     private void startNew() {
@@ -290,24 +271,18 @@ public class ClassEditorScreen extends Screen {
 
         int bw = (rightWidth - 8) / (editingExisting ? 3 : 2);
         int bx = rightX;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.save"), b -> save())
-                .bounds(bx, y, bw, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.save"), b -> save(), bx, y, bw, 20));
         bx += bw + 4;
         if (editingExisting) {
-            addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.delete"),
-                            b -> deleteClass(pendingId))
-                    .bounds(bx, y, bw, 20).build());
+            addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.delete"), b -> deleteClass(pendingId), bx, y, bw, 20));
             bx += bw + 4;
         }
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.cancel"), b -> cancelEdit())
-                .bounds(bx, y, bw, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.cancel"), b -> cancelEdit(), bx, y, bw, 20));
     }
 
     /** {@code restrictTo} null means unrestricted (only used for the icon slot, which isn't a real loadout slot); the ten gear/armor slots pass that slot's whitelist so a preset can't be built from items players couldn't otherwise be assigned. */
     private Button slotButton(int x, int y, Consumer<ResourceLocation> setter, @Nullable List<ResourceLocation> restrictTo) {
-        return Button.builder(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this,
-                        loc -> setter.accept(isAir(loc) ? null : loc), restrictTo)))
-                .bounds(x, y, SLOT, SLOT).build();
+        return new FlatButton(Component.empty(), b -> minecraft.setScreen(new ItemPickerScreen(this, loc -> setter.accept(isAir(loc) ? null : loc), restrictTo)), x, y, SLOT, SLOT);
     }
 
     private static boolean isAir(ResourceLocation loc) {
@@ -324,18 +299,14 @@ public class ClassEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
         int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
+        FlatButton.drawPanel(graphics, l, t, panelWidth, panelHeight);
+        graphics.fill(l, t + HEADER_H, r, t + HEADER_H + 1, FlatButton.COLOR_CARD_LINE);
         graphics.fill(l + LEFT_W, contentTop - PAD, l + LEFT_W + 1, b, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, COLOR_TEXT);
+        graphics.drawString(this.font, this.title, l + PAD, t + 8, FlatButton.COLOR_TEXT_DIM);
 
         for (RowInfo row : listRows) {
             ResourceLocation icon = row.entry().icon();

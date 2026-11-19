@@ -1,7 +1,6 @@
 package uk.iwaservice.classloadout.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -20,10 +19,6 @@ public class PriceCountScreen extends Screen {
     private static final int PAD = 10;
     private static final int HEADER_H = 24;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_TEXT_DIM = 0xA0A8C0;
 
     private final Screen parent;
     private final ResourceLocation item;
@@ -63,15 +58,11 @@ public class PriceCountScreen extends Screen {
 
         int bw = (panelWidth - 2 * PAD - 8) / 3;
         int bx = panelLeft + PAD;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.save"), b -> save())
-                .bounds(bx, y, bw, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.save"), b -> save(), bx, y, bw, 20));
         bx += bw + 4;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.clear"), b -> clear())
-                .bounds(bx, y, bw, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.clear"), b -> clear(), bx, y, bw, 20));
         bx += bw + 4;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.cancel"),
-                        b -> minecraft.setScreen(parent))
-                .bounds(bx, y, bw, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.cancel"), b -> minecraft.setScreen(parent), bx, y, bw, 20));
     }
 
     private void save() {
@@ -96,21 +87,17 @@ public class PriceCountScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
         int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, 0xFFFFFF);
+        FlatButton.drawPanel(graphics, l, t, panelWidth, panelHeight);
+        graphics.fill(l, t + HEADER_H, r, t + HEADER_H + 1, FlatButton.COLOR_CARD_LINE);
+        graphics.drawString(this.font, this.title, l + PAD, t + 8, FlatButton.COLOR_TEXT_DIM);
 
         ItemStack stack = LoadoutClientData.displayStack(item);
         graphics.drawString(this.font, stack != null ? stack.getHoverName() : Component.literal(item.toString()),
-                l + PAD, t + HEADER_H + 2, COLOR_TEXT_DIM);
+                l + PAD, t + HEADER_H + 2, FlatButton.COLOR_TEXT_DIM);
 
         super.render(graphics, mouseX, mouseY, partialTick);
     }

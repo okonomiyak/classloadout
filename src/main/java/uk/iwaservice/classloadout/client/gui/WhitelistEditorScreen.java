@@ -1,7 +1,6 @@
 package uk.iwaservice.classloadout.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -59,10 +58,8 @@ public class WhitelistEditorScreen extends Screen {
     /** No scrolling in the flyout (kept simple) - a folder past this size just shows its first items. */
     private static final int FLYOUT_MAX_ITEMS = 16;
 
-    private static final int COLOR_PANEL_BG = 0xF4222222;
-    private static final int COLOR_HEADER_BG = 0xFF1F2333;
-    private static final int COLOR_OUTLINE = 0xFF454A66;
-    private static final int COLOR_HOVER = 0x60FFFFFF;
+    private static final int COLOR_OUTLINE = FlatButton.COLOR_CARD_LINE;
+    private static final int COLOR_HOVER = 0x20FFFFFF;
 
     private LoadoutSlot selectedSlot = LoadoutSlot.MAIN;
     /** Toggled by the folder button: while on, left-clicking a held-item variant opens its folder editor (same as the F key) instead of toggling whitelist membership. */
@@ -131,11 +128,7 @@ public class WhitelistEditorScreen extends Screen {
         int x = panelLeft + PAD;
         for (LoadoutSlot slot : LoadoutSlot.values()) {
             LoadoutSlot captured = slot;
-            Button b = Button.builder(Component.translatable("classloadout.gui.slot_" + slot.key()),
-                            btn -> selectSlot(captured))
-                    .bounds(x, tabY, tabWidth, TAB_H).build();
-            b.active = slot != selectedSlot;
-            addRenderableWidget(b);
+            addRenderableWidget(FlatButton.tab(Component.translatable("classloadout.gui.slot_" + slot.key()), btn -> selectSlot(captured), x, tabY, tabWidth, TAB_H, () -> selectedSlot == captured));
             x += tabWidth;
         }
 
@@ -143,18 +136,11 @@ public class WhitelistEditorScreen extends Screen {
         int catCount = ItemCatalog.Category.values().length + 1; // +1 for the "all" tab
         int catWidth = (panelWidth - 2 * PAD) / catCount;
         int cx = panelLeft + PAD;
-        Button allBtn = Button.builder(Component.translatable("classloadout.gui.category_all"), btn -> selectCategory(null))
-                .bounds(cx, catY, catWidth, CAT_H).build();
-        allBtn.active = selectedCategory != null;
-        addRenderableWidget(allBtn);
+        addRenderableWidget(FlatButton.tab(Component.translatable("classloadout.gui.category_all"), btn -> selectCategory(null), cx, catY, catWidth, CAT_H, () -> selectedCategory == null));
         cx += catWidth;
         for (ItemCatalog.Category category : ItemCatalog.Category.values()) {
             ItemCatalog.Category captured = category;
-            Button b = Button.builder(Component.translatable("classloadout.gui.category_" + category.name().toLowerCase(Locale.ROOT)),
-                            btn -> selectCategory(captured))
-                    .bounds(cx, catY, catWidth, CAT_H).build();
-            b.active = selectedCategory != category;
-            addRenderableWidget(b);
+            addRenderableWidget(FlatButton.tab(Component.translatable("classloadout.gui.category_" + category.name().toLowerCase(Locale.ROOT)), btn -> selectCategory(captured), cx, catY, catWidth, CAT_H, () -> selectedCategory == captured));
             cx += catWidth;
         }
 
@@ -172,18 +158,9 @@ public class WhitelistEditorScreen extends Screen {
 
         int btnW = (panelWidth - 2 * PAD - 8) / 3;
         int btnY = panelTop + panelHeight - PAD - 20;
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.close"), b -> onClose())
-                .bounds(panelLeft + PAD, btnY, btnW, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("classloadout.gui.whitelist_add_held"),
-                        b -> command("class whitelist add " + selectedSlot.key() + " held"))
-                .bounds(panelLeft + PAD + btnW + 4, btnY, btnW, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable(folderMode
-                                ? "classloadout.gui.folder_mode_on" : "classloadout.gui.folder_mode_off"),
-                        b -> {
-                            folderMode = !folderMode;
-                            this.init(this.minecraft, this.width, this.height);
-                        })
-                .bounds(panelLeft + PAD + (btnW + 4) * 2, btnY, panelWidth - 2 * PAD - (btnW + 4) * 2, 20).build());
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.close"), b -> onClose(), panelLeft + PAD, btnY, btnW, 20));
+        addRenderableWidget(new FlatButton(Component.translatable("classloadout.gui.whitelist_add_held"), b -> command("class whitelist add " + selectedSlot.key() + " held"), panelLeft + PAD + btnW + 4, btnY, btnW, 20));
+        addRenderableWidget(new FlatButton(Component.translatable(folderMode ? "classloadout.gui.folder_mode_on" : "classloadout.gui.folder_mode_off"), b -> { folderMode = !folderMode; this.init(this.minecraft, this.width, this.height); }, panelLeft + PAD + (btnW + 4) * 2, btnY, panelWidth - 2 * PAD - (btnW + 4) * 2, 20));
 
         updateShown();
     }
@@ -432,17 +409,13 @@ public class WhitelistEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-
         int l = panelLeft;
         int t = panelTop;
         int r = l + panelWidth;
         int b = t + panelHeight;
-        graphics.fill(l - 1, t - 1, r + 1, b + 1, 0x90000000);
-        graphics.fill(l, t, r, b, COLOR_PANEL_BG);
-        graphics.fill(l, t, r, t + HEADER_H, COLOR_HEADER_BG);
-        graphics.renderOutline(l - 1, t - 1, panelWidth + 2, panelHeight + 2, COLOR_OUTLINE);
-        graphics.drawString(this.font, this.title, l + PAD, t + 8, 0xFFFFFF);
+        FlatButton.drawPanel(graphics, l, t, panelWidth, panelHeight);
+        graphics.fill(l, t + HEADER_H, r, t + HEADER_H + 1, FlatButton.COLOR_CARD_LINE);
+        graphics.drawString(this.font, this.title, l + PAD, t + 8, FlatButton.COLOR_TEXT_DIM);
 
         super.render(graphics, mouseX, mouseY, partialTick);
 
@@ -545,7 +518,7 @@ public class WhitelistEditorScreen extends Screen {
             int rows = (expandedFolderItems.size() + FLYOUT_COLS - 1) / FLYOUT_COLS;
             int fw = FLYOUT_COLS * CELL;
             int fh = rows * CELL;
-            graphics.fill(fx - 2, fy - 2, fx + fw + 2, fy + fh + 2, 0xF0222222);
+            graphics.fill(fx - 2, fy - 2, fx + fw + 2, fy + fh + 2, 0xF0101418);
             graphics.renderOutline(fx - 2, fy - 2, fw + 4, fh + 4, 0xFF55AAFF);
             for (int index = 0; index < expandedFolderItems.size(); index++) {
                 int col = index % FLYOUT_COLS;
