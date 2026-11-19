@@ -88,6 +88,8 @@
   "classloadout.gui.price_editor_title": "ショップ価格",
   "classloadout.gui.price_title": "アイテム価格",
   "classloadout.gui.price_count": "価格(ポイント)",
+  "classloadout.gui.folder_mode_on": "フォルダ分け: ON",
+  "classloadout.gui.folder_mode_off": "フォルダ分け: OFF",
   "classloadout.gui.variant_folder_title": "フォルダ分け",
   "classloadout.gui.variant_folder_name": "フォルダ名",
   "classloadout.gui.variant_folder_hint": " (Fキーでフォルダ設定)",

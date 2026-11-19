@@ -88,6 +88,8 @@
   "classloadout.gui.price_editor_title": "Shop Prices",
   "classloadout.gui.price_title": "Item Price",
   "classloadout.gui.price_count": "Price (points)",
+  "classloadout.gui.folder_mode_on": "Folders: ON",
+  "classloadout.gui.folder_mode_off": "Folders: OFF",
   "classloadout.gui.variant_folder_title": "Variant Folder",
   "classloadout.gui.variant_folder_name": "Folder name",
   "classloadout.gui.variant_folder_hint": " (press F to set folder)",
