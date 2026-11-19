@@ -98,6 +98,8 @@ public class LoadoutManager extends SavedData {
     private final Map<GlobalPos, List<ResourceLocation>> guardSpawnerItems = new LinkedHashMap<>();
     /** Tick the guarded entity was last observed missing; not persisted (a fresh server start just re-observes on its own). -1 = currently present (or never checked). */
     private final Map<GlobalPos, Long> guardSpawnerMissingSince = new HashMap<>();
+    /** UUID of the guard each spawner currently owns; persisted so a guard that wanders off or whose chunk unloads is never mistaken for a dead one. Cleared only when that guard dies (see {@code ServerEvents}). */
+    private final Map<GlobalPos, UUID> guardSpawnerGuard = new HashMap<>();
     /** Global OP kill-switch for every guard spawner's watch/respawn tick (see {@code /class guardspawner pause|resume}) - individual block config is untouched, just not acted on while true. */
     private boolean guardSpawningPaused = false;
     /** Named, reusable guard spawner configs an OP can apply to any spawner block - see {@link GuardSpawnerTemplate}. Not tied to any position, unlike the per-block maps above. Insertion order preserved for a stable list. */
@@ -533,6 +535,25 @@ public class LoadoutManager extends SavedData {
         }
     }
 
+    @Nullable
+    public UUID getGuardSpawnerGuard(GlobalPos pos) {
+        return guardSpawnerGuard.get(pos);
+    }
+
+    public void setGuardSpawnerGuard(GlobalPos pos, @Nullable UUID guard) {
+        if (guard == null) {
+            guardSpawnerGuard.remove(pos);
+        } else {
+            guardSpawnerGuard.put(pos, guard);
+        }
+        setDirty();
+    }
+
+    public void clearGuardSpawnerGuards() {
+        guardSpawnerGuard.clear();
+        setDirty();
+    }
+
     public void setGuardSpawnerConfig(GlobalPos pos, ResourceLocation entityType, int delaySeconds) {
         guardSpawnerEntity.put(pos, entityType);
         guardSpawnerDelaySeconds.put(pos, Math.max(1, delaySeconds));
@@ -561,6 +582,7 @@ public class LoadoutManager extends SavedData {
         guardSpawnerDelaySeconds.remove(pos);
         guardSpawnerItems.remove(pos);
         guardSpawnerMissingSince.remove(pos);
+        guardSpawnerGuard.remove(pos);
         setDirty();
     }
 
@@ -1195,6 +1217,9 @@ public class LoadoutManager extends SavedData {
                 items.add(ResourceLocation.parse(t.getAsString()));
             }
             manager.guardSpawnerItems.put(pos, items);
+            if (g.hasUUID("Guard")) {
+                manager.guardSpawnerGuard.put(pos, g.getUUID("Guard"));
+            }
         }
         manager.guardSpawningPaused = tag.getBoolean("GuardSpawningPaused");
         manager.whitelistEnabled = !tag.contains("WhitelistEnabled") || tag.getBoolean("WhitelistEnabled");
@@ -1408,6 +1433,10 @@ public class LoadoutManager extends SavedData {
                 itemsList.add(net.minecraft.nbt.StringTag.valueOf(item.toString()));
             }
             g.put("Items", itemsList);
+            UUID guard = guardSpawnerGuard.get(pos);
+            if (guard != null) {
+                g.putUUID("Guard", guard);
+            }
             guardSpawnerList.add(g);
         }
         tag.put("GuardSpawners", guardSpawnerList);

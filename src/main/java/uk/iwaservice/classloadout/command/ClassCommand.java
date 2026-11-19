@@ -749,7 +749,7 @@ public final class ClassCommand {
         return 1;
     }
 
-    /** Despawns every entity any guard spawner has ever spawned (identified by its tag), everywhere. Doesn't pause or otherwise change spawner config - pair with {@code /class guardspawner pause} first if they shouldn't just come back. */
+    /** Despawns every loaded entity any guard spawner has ever spawned (identified by its tag), everywhere, and resets guard ownership so spawners respawn after their delay (a living guard in an unloaded chunk isn't discarded and may end up duplicated). Doesn't pause or otherwise change spawner config - pair with {@code /class guardspawner pause} first if they shouldn't just come back. */
     private static int guardSpawnerClear(CommandContext<CommandSourceStack> ctx) {
         int removed = ServerEvents.clearGuardSpawnerEntities(ctx.getSource().getServer());
         ctx.getSource().sendSuccess(() -> Component.translatable("classloadout.msg.guardspawner_cleared", removed), true);
