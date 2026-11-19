@@ -56,6 +56,7 @@ neoForge {
 }
 
 repositories {
+    maven { url = 'https://api.modrinth.com/maven'; content { includeGroup 'maven.modrinth' } }
     // Dev-runtime-only test mods for the item picker (TACZ/SuperbWarfare namespaces).
     maven {
         name = 'CurseMaven'
@@ -70,6 +71,10 @@ repositories {
 }
 
 dependencies {
+    // Dev-runtime-only: Item Zoomer (+ its required deps) to check the ItemZoomerCompat zoom in the GUIs.
+    runtimeOnly 'maven.modrinth:itemzoomer:mNnFYWRV'
+    runtimeOnly 'maven.modrinth:architectury-api:xGfBrBzj'
+    runtimeOnly 'maven.modrinth:cloth-config:izKINKFg'
     // The item picker itself never compiles against TACZ/SuperbWarfare classes - it only matches
     // ResourceLocation namespaces at runtime. These are dev-runtime-only conveniences so it has
     // real tacz:/superbwarfare: items to show while testing.
