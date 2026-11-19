@@ -91,7 +91,7 @@ public final class ServerEvents {
      * respawned, however far the guard wanders or whether its chunk is unloaded - the loaded
      * guard is just re-provisioned. Ownership is cleared only when the guard dies
      * ({@link #onEntityLeaveLevel}); the next tick then starts the configured delay and respawns
-     * it on top of the block, recording the new guard. A spawner owning nothing first scans
+     * it at the first air block above it, recording the new guard. A spawner owning nothing first scans
      * {@link #GUARD_SPAWNER_SCAN_RADIUS} for a tagged guard to adopt (spawned before ownership
      * was tracked) so updating doesn't duplicate it. The missing-timer isn't persisted.
      * ponytail: if the server crashes after a guard dies but before the world saves, the spawner
@@ -187,7 +187,7 @@ public final class ServerEvents {
         return count;
     }
 
-    /** Spawns on top of the block, tags it so the next tick recognizes it as this spawner's guard, and fills any item-handler capability it exposes (e.g. a SuperbWarfare vehicle's battery/ammo slots) with the configured items. */
+    /** Spawns at the first air block above the spawner (null if none below build height), tags it so the next tick recognizes it as this spawner's guard, and fills any item-handler capability it exposes (e.g. a SuperbWarfare vehicle's battery/ammo slots) with the configured items. */
     @Nullable
     private static Entity spawnGuard(ServerLevel level, BlockPos pos, ResourceLocation entityTypeId, String tag,
             List<ResourceLocation> items, LoadoutManager manager) {
@@ -195,11 +195,18 @@ public final class ServerEvents {
         if (type == null) {
             return null;
         }
+        BlockPos spawn = pos.above();
+        while (!level.getBlockState(spawn).isAir()) {
+            spawn = spawn.above();
+            if (spawn.getY() >= level.getMaxBuildHeight()) {
+                return null;
+            }
+        }
         Entity entity = type.create(level);
         if (entity == null) {
             return null;
         }
-        entity.moveTo(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 0, 0);
+        entity.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
         entity.addTag(tag);
         provisionGuardItems(entity, items, manager);
         level.addFreshEntity(entity);
